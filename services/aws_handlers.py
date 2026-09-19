@@ -276,6 +276,22 @@ def api_handler(event, context):
     # `off` mode (default) keeps the legacy credential-free behavior.
     from services.api import authz as _authz
     if _authz.mode() != "off" and not _authz.is_public(method, raw_path):
+        # T41c DEBUG: log the authorizer context ONCE per request so claim-shape
+        # questions are answered from evidence, not hypothesis. Remove after the
+        # auth loop is closed.
+        import os as _dbgOS
+        if _dbgOS.environ.get("PP_AUTH_DEBUG"):
+            _ctx = (event.get("requestContext") or {}).get("authorizer") or {}
+            import json as _dbgjson
+            print("AUTHDEBUG", _dbgjson.dumps({
+                "mode": _authz.mode(), "path": raw_path, "method": method,
+                "authz_keys": sorted(_ctx.keys()),
+                "jwt_claims_keys": sorted((_ctx.get("jwt") or {}).get("claims", {}).keys()),
+                "claims_keys": sorted(_ctx.get("claims", {}).keys()),
+                "groups_raw": _dbgjson.dumps((_ctx.get("jwt") or {}).get("claims", {}).get("cognito:groups")
+                                           if _ctx.get("jwt") else _ctx.get("claims", {}).get("cognito:groups")),
+                "pp_user_pool": _dbgOS.environ.get("PP_USER_POOL_ID", ""),
+            })[:1000])
         identity = _authz.claims_from_event(event)
         if not identity:
             try:

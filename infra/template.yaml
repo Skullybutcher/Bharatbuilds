@@ -52,6 +52,7 @@ Globals:
         PROCESSPATCH_MODEL_FALLBACK: 1
         MODEL_ID: !Ref ModelId
         LOG_LEVEL: INFO
+        PP_AUTH_DEBUG: '1'  # T41c: AUTHDEBUG log line in ApiFn; remove once the auth loop closes
 
 Resources:
   # ---------------- Storage ----------------
