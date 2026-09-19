@@ -26,3 +26,11 @@ State); every behavioral count drills to witnesses; every witness drills to
 persona, traces, governing rule, source clause, node, patch op, replay.
 Before/after table is shown only after validation. Multi-workflow propagation
 follows typed IMPLEMENTS_RULE edges, not generic graph connectivity.
+
+## Counting discipline
+
+Behavioral counts (wrong_rejections, unnecessary_burdens, …) count
+**representative verified witnesses** — one per failure mode — not affected
+people. Never present "1 wrong rejection" as "only one person affected".
+Population-scale impact belongs to the cohort section, and even that cohort is
+synthetic: broader impact must come from explicitly supplied real data.

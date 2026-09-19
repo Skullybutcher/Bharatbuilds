@@ -4,6 +4,9 @@
 
 AWS CLI + SAM CLI + an AWS account. Region default `ap-south-1`
 (override via `--region` / `infra/deploy.ps1 -Region`).
+The GitHub repo **must be public** for the First Commit submission — and for
+Amplify hosting you need a GitHub token in `AMPLIFY_TOKEN` (used once as the
+`AmplifyAccessToken` CloudFormation parameter, `NoEcho`; never committed).
 
 ## What deploys
 
@@ -28,7 +31,10 @@ STACK=processpatch-demo REGION=ap-south-1 bash infra/deploy.sh
 ```
 
 Parameters live in `infra/parameters.json` (EnvName, GitHubRepo, ModelId,
-AmplifyBranch). Model calls are restricted to extraction (Bedrock InvokeModel
+AmplifyBranch) plus the `AmplifyAccessToken` secret passed via
+`$AMPLIFY_TOKEN` — `sam deploy --parameter-overrides` takes explicit
+`ParameterKey=…,ParameterValue=…` pairs (not `file://…`), which the deploy
+scripts expand with stdlib python. Model calls are restricted to extraction (Bedrock InvokeModel
 scoped to `ModelId`, default `amazon.nova-micro-v1:0`).
 
 ## Validate without credentials

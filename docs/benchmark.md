@@ -1,5 +1,27 @@
 # ProcessPatchBench (57C) — v0.1.0, 26 scenarios (13 dev / 13 eval)
 
+## Methodology (read before citing numbers)
+
+ProcessPatchBench separately evaluates **policy extraction** and the
+**deterministic repair pipeline**:
+
+```text
+POLICY TEXT → deterministic extractor → extraction score (per-field)
+```
+
+```text
+GOLD RULE IR → compiler → witness → localizer → repair → regression
+```
+
+Downstream compiler/repair evaluation deliberately uses hand-authored gold Rule
+IR so extraction errors do not contaminate repair metrics. Do NOT claim "raw
+natural-language policies achieve 100% end-to-end repair" — that is not what
+this benchmark demonstrates.
+
+The 13-case eval split is a **held-out authored (frozen) evaluation split**,
+authored by the same process as dev — not an independent external dataset of
+unseen real-world policies. Later, external policies can become a stronger test.
+
 Families: threshold relax/tighten, requirement add/remove, conditional,
 exception add/remove, ordering, prerequisite, deadline extend/tighten,
 paraphrase/renumber/irrelevant no-ops, ambiguity, contradiction, compound.

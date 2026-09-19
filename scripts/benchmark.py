@@ -30,7 +30,13 @@ def report_md(run_id: str, manifest: dict, results: list, m: dict) -> str:
         if r["status"] not in ("AUTO_REPAIRED", "CORRECTLY_NO_OP", "CORRECTLY_ESCALATED"):
             extra = f" — {r.get('error', '')} {r.get('witness', '')} {r.get('localization', '')} {r.get('repair', '')}"[:400]
         lines.append(f"- {r['case_id']} [{r.get('family')}/{r.get('split')}] {r['status']}{extra}")
-    lines += ["", "Honest summary: failures above are real gaps, not hidden. See 57C.11."]
+    lines += ["", "Honest summary: failures above are real gaps, not hidden. See 57C.11.",
+              "",
+              "Methodology: extraction is scored against POLICY TEXT; downstream",
+              "compiler/repair stages run on hand-authored GOLD RULE IR so extraction",
+              "errors do not contaminate repair metrics. Do not cite these numbers as",
+              "'raw-NL end-to-end repair'. Eval split is held-out authored, not",
+              "independent real-world data."]
     return "\n".join(lines)
 
 

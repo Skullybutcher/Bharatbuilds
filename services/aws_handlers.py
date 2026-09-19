@@ -19,11 +19,11 @@ def _out(event, obj, code: int = 200) -> dict:
 
 def extractor_handler(event, context):
     """INGEST/EXTRACT_TEXT/EXTRACT_RULES: policy text -> candidate Rule IR."""
-    from services.extractor.extractor import extract
+    from services.extractor.model_fallback import extract_with_fallback
     from services.normalizer.normalizer import normalize
     text = (event.get("policy_text") or "")
-    out = extract(text, event.get("policy_version_id", "POLICY-VX"),
-                  event.get("effective_from", "2026-09-18"))
+    out = extract_with_fallback(text, event.get("policy_version_id", "POLICY-VX"),
+                                event.get("effective_from", "2026-09-18"))
     ok, bad = normalize(out["rules"])
     out["schema_valid"] = not bad
     out["schema_errors"] = bad
@@ -86,12 +86,15 @@ def validator_handler(event, context):
     if not out["patch_valid"]:
         emit_metric("PatchValidationFailures", 1)
     if out["patch_valid"] and event.get("with_certificate"):
+        changed = (event.get("semantic_delta") or {}).get("affected_rule_ids", [])
+        rules_by_id = {r.get("rule_id"): r for r in event.get("new_rules", [])}
+        sources = [rules_by_id[r].get("provenance", {}) for r in changed if r in rules_by_id]
         out["certificate"] = build_certificate(
             build_id=event.get("build_id", "BUILD-?"),
             policy_version=event.get("policy_version_id", "?"),
             procedure_before=event["procedure"], procedure_after=event["patched_workflow"],
-            changed_rules=(event.get("semantic_delta") or {}).get("affected_rule_ids", []),
-            sources=[], semantic_delta=event.get("semantic_delta", {}),
+            changed_rules=changed, sources=sources,
+            semantic_delta=event.get("semantic_delta", {}),
             witnesses=event.get("witnesses", [])[:4], impact=event.get("impact", {}),
             tests_before={"failed": len(event.get("witnesses", []))},
             tests_after={"passed": validation["passed"], "total": validation["total"]})
@@ -119,8 +122,36 @@ def govern_handler(event, context):
     """Rule-review and approval gates (server-side guardrails + hash binding)."""
     from services.governance.store import (open_rule_reviews, review_rule, decide_patch,
                                            request_patch_review, approval_guardrails, activate_procedure,
-                                           approvals_for)
+                                           approvals_for, save_callback)
     op = event.get("op")
+    if op == "load_context":
+        # INGEST tail: materialize S3 text + registry versions into build context.
+        import os as _os
+        import boto3  # lazy: Lambda only
+        bucket = _os.environ.get("SOURCE_BUCKET", "")
+        text = boto3.client("s3").get_object(
+            Bucket=bucket, Key=event["policy_s3_key"])["Body"].read().decode()
+        from services.registry.store import list_procedure_versions
+        proc = next((v for v in list_procedure_versions(event.get("workflow_id"))
+                     if v.get("procedure_version_id") == event.get("procedure_version_id")),
+                    None) if event.get("procedure_version_id") else None
+        if proc is None:
+            from services.registry.store import get_active_procedure
+            proc = get_active_procedure(event.get("workflow_id", "WF-RESEARCH-GRANT"))
+        from services.storage import _load
+        pvers = sorted([v for v in _load("policy_versions.json", [])
+                        if v.get("workspace_id") == event.get("workspace_id")],
+                       key=lambda v: v.get("created_at", 0))
+        old_rules = pvers[-1].get("rules", []) if pvers else []
+        return _out(event, {"policy_text": text, "procedure": (proc or {}).get("graph_json", {}),
+                            "old_rules": old_rules,
+                            "policy_version_id": event.get("policy_version_id", "POLICY-VX")})
+    if op == "find_by_key":
+        from services.registry.store import compile_key, find_build_by_key
+        key = compile_key(event.get("new_rules", []), event.get("procedure", {}))
+        hit = find_build_by_key(key)
+        return _out(event, {"compile_key": key, "idempotent_reuse": bool(hit),
+                            "build": hit})
     if op == "hash":
         from services.registry.store import sha
         return _out(event, {"sha256": sha({"policy_text": event.get("policy_text", ""),
@@ -130,6 +161,8 @@ def govern_handler(event, context):
         return _out(event, {"procedure_version": save_procedure_version(
             event.get("patched_workflow", {}), status="candidate")})
     if op == "open_reviews":
+        if event.get("taskToken"):
+            save_callback(event["build_id"], "rule_review", event.get("taskToken"))
         return _out(event, {"reviews": open_rule_reviews(event["build_id"], event["rules"])})
     if op == "review_rule":
         return _out(event, review_rule(event["build_id"], event["rule_id"], event["decision"],
@@ -138,6 +171,8 @@ def govern_handler(event, context):
     if op == "guardrails":
         return _out(event, approval_guardrails(event["build"]))
     if op == "request_review":
+        if event.get("taskToken"):
+            save_callback(event["build_id"], "patch_approval", event.get("taskToken"))
         return _out(event, request_patch_review(event["build_id"], event.get("opened_hash")))
     if op == "decide_patch":
         try:
@@ -158,15 +193,99 @@ def govern_handler(event, context):
 
 
 def api_handler(event, context):
-    """API Gateway proxy: minimal dispatch for demo reads."""
-    route = event.get("routeKey", "")
-    if "health" in route or route.endswith("/"):
-        return _out(event, {"service": "processpatch-api", "status": "ok"})
-    if event.get("op") == "resume" or "resume" in route:
-        # Human-gate callback: frontend POSTs the stored taskToken after a
-        # review decision; Step Functions resumes via SendTaskSuccess.
-        import boto3  # lazy
-        boto3.client("stepfunctions").send_task_success(
-            taskToken=event["taskToken"], taskOutput=event.get("taskOutput", "{}"))
-        return _out(event, {"resumed": True})
-    return _out(event, {"note": "Use the full REST surface via the documented routes.", "route": route})
+    """API Gateway proxy over services.api.actions — the SAME implementation
+    as the local server, so both surfaces stay identical."""
+    from services.api import actions as A
+    if event.get("op") == "resume" and event.get("taskToken"):
+        # Step Functions human-gate wait: persist the token server-side; the
+        # human resumes via POST /builds/{id}/resume (never holds the token).
+        from services.governance.store import save_callback
+        gate = {"activation": "activation"}.get(event.get("kind", ""), "patch_approval")
+        save_callback(event.get("build_id", ""), gate, event.get("taskToken"))
+        return _out(event, {"waiting": True, "gate": gate})
+    route = event.get("routeKey", "") or f"{event.get('method', event.get('httpMethod', 'GET'))} {event.get('path', event.get('rawPath', '/'))}"
+    parts = route.split(" ", 1)
+    method = parts[0] if len(parts) > 1 else "GET"
+    raw_path = parts[1] if len(parts) > 1 else "/"
+    # substitute {proxy+} / {id} templates with actuals when present
+    params = event.get("pathParameters") or {}
+    for k, v in params.items():
+        raw_path = raw_path.replace("{" + k + "}", v or "")
+    qs = event.get("queryStringParameters") or {}
+    qs = {k: [v] for k, v in qs.items()}
+    body = event.get("body") or "{}"
+    if event.get("isBase64Encoded"):
+        import base64
+        body = base64.b64decode(body).decode()
+    try:
+        import json as _json
+        body = _json.loads(body) if isinstance(body, str) else body
+    except Exception:
+        body = {}
+
+    def call(fn, *a):
+        try:
+            return _out(event, fn(*a))
+        except KeyError as e:
+            return _out(event, {"error": f"unknown: {e}"}, 404)
+        except ValueError as e:
+            return _out(event, {"error": str(e)}, 409)
+
+    if method == "GET" and raw_path in ("/", "/health"):
+        return _out(event, A.health())
+    if method == "GET" and raw_path == "/demo/canonical":
+        return _out(event, A.canonical((qs.get("domain") or ["research_grant"])[0]))
+    if method == "GET" and raw_path == "/builds":
+        return _out(event, A.list_builds())
+    if method == "POST" and raw_path == "/builds":
+        return _out(event, A.create_build(body))
+    if method == "GET" and raw_path == "/benchmarks":
+        return _out(event, A.bench_manifest())
+    if method == "GET" and raw_path.startswith("/benchmark-runs/"):
+        seg = raw_path.split("/")
+        if len(seg) == 3:
+            return call(A.bench_run, seg[2]) if A.bench_run(seg[2]) else _out(event, {"error": "unknown run"}, 404)
+        return _out(event, {"error": "use the local API for nested benchmark drill-downs"}, 400)
+    if method == "GET" and raw_path.startswith("/procedures") and not raw_path.endswith("/activate"):
+        return _out(event, A.procedure_versions((qs.get("workflow_id") or [None])[0]))
+    if method == "GET" and raw_path.startswith("/portal"):
+        return _out(event, A.portal({k: v[0] for k, v in qs.items()}))
+    seg = raw_path.split("/")
+    if len(seg) >= 3 and seg[1] == "builds":
+        bid, tail = seg[2], "/".join(seg[3:])
+        simple = {"": A.get_build_view, "diff": A.diff, "patch": A.patch,
+                  "certificate": A.certificate, "impact": A.impact,
+                  "witnesses": A.witnesses, "rule-reviews": A.rule_reviews,
+                  "approvals": A.approvals, "guardrails": A.guardrails, "audit": A.audit}
+        if method == "GET" and tail in ("impact/witnesses",):
+            return call(A.witnesses, bid)
+        if method == "GET" and tail == "impact/artifacts":
+            return call(A.impact_artifacts, bid)
+        if method == "GET" and tail in simple:
+            return call(simple[tail], bid)
+        if method == "POST" and tail.startswith("rules/"):
+            rid, verb = tail.split("/")[1], tail.split("/")[2]
+            if verb in ("accept", "edit", "reject", "escalate"):
+                return call(A.review_action, bid, rid, verb, body)
+        posts = {"patch/validate": A.validate_patch, "patch/review-request": A.patch_review_request,
+                 "patch/approve": A.approve, "patch/reject": A.reject,
+                 "patch/request-revision": A.request_revision}
+        if method == "POST" and tail in posts:
+            fn = posts[tail]
+            if tail == "patch/validate":
+                return call(fn, bid)
+            return call(fn, bid, body)
+        if method == "POST" and tail.startswith("witnesses/") and tail.endswith("/replay"):
+            return call(A.replay, bid, tail.split("/")[1])
+        if method == "POST" and tail == "resume":
+            try:
+                from services.governance.store import resume_callback
+                return _out(event, resume_callback(bid, body.get("gate", "patch_approval"), body))
+            except (KeyError, ValueError) as e:
+                return _out(event, {"error": str(e)}, 404 if isinstance(e, KeyError) else 409)
+        return _out(event, {"error": "not found", "path": raw_path}, 404)
+    if method == "POST" and raw_path.startswith("/procedures/") and raw_path.endswith("/activate"):
+        return call(A.activate, raw_path.split("/")[2], body)
+    if "resume" in raw_path:
+        return _out(event, {"error": "POST /builds/{id}/resume with {gate, decision, reviewer, reason}"}, 400)
+    return _out(event, {"note": "unknown route", "route": route}, 404)

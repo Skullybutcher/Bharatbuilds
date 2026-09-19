@@ -83,6 +83,14 @@ def main() -> int:
     check("Semantic no-op", "conflict blocked", extract("Applicants must have CGPA >= 7.5.\nApplicants must have CGPA >= 8.0.")["status"] == "CONFLICT")
     check("Semantic no-op", "v2 extraction 3 rules", len(extract((ROOT / "demo/research_grant/policy_v2.md").read_text(), "POLICY-V2")["rules"]) == 3)
     check("Semantic no-op", "conditional line not a conflict", extract((ROOT / "demo/research_grant/policy_v2.md").read_text(), "POLICY-V2")["status"] == "EXTRACTED")
+    from services.extractor.model_fallback import extract_with_fallback, model_extract
+    fb = extract_with_fallback("Applicants must have CGPA >= 7.5.", "PV")
+    check("Semantic no-op", "parser is the fast path", fb["backend"] == "deterministic-parser/0.1.0" and len(fb["rules"]) == 1)
+    mu = model_extract("Applicants must have CGPA >= 7.5.", "PV")
+    check("Semantic no-op", "model fallback honest contract",
+          mu["backend"].startswith("bedrock:") and mu["status"] in ("EXTRACTED", "NEEDS_REVIEW", "EXTRACTION_UNAVAILABLE")
+          and all(r["extraction"]["review_state"] == "pending_review" for r in mu["rules"]),
+          mu["status"])
 
     # ---- Witness generation ----
     ws = find_witnesses(m, proc)
@@ -144,6 +152,7 @@ def main() -> int:
     check("Patch validation", "reimb order fixed", rb["patched_workflow"] and __import__("services.workflow.interpreter", fromlist=["execute"]).execute(rb["patched_workflow"], {"amount": 1}, rm.ordering)["order_ok"])
     check("Patch validation", "reimb deadline gate added", _has_dl_gate(rb["patched_workflow"]))
     check("Patch validation", "metamorphic relaxation holds", any(r["suite"] == "metamorphic" and r["pass"] for r in b["validation"]["results"]))
+    check("Patch validation", "review gate pending by default", b["review_state"] == "REVIEW_PENDING", b["review_state"])
 
     # ---- Provenance ----
     cov = coverage(b["patched_workflow"]["nodes"])
@@ -183,11 +192,29 @@ def main() -> int:
                        {"reviewer_id": "USR-001", "display_name": "Verify"}, "ok", "PROCEDURE_OWNER")
     check("Governance", "approval recorded", rec["approval_type"] == "PATCH_REVIEW")
     check("Governance", "approval binds hashes", rec["artifacts"]["patch_hash"] == __import__("services.registry.store", fromlist=["sha"]).sha(b["patch"]["operations"]))
+    check("Governance", "approve mints candidate id", bool(rec.get("candidate_version_id")), str(rec.get("candidate_version_id")))
+    from services.registry.store import list_procedure_versions as _lpv
+    check("Governance", "candidate findable by id",
+          any(v["procedure_version_id"] == rec.get("candidate_version_id") for v in _lpv()),
+          str([v["procedure_version_id"] for v in _lpv()][:5]))
     out = activate_procedure(b["build_id"], b, {"reviewer_id": "USR-001"}, "go")
     check("Governance", "activation creates version", out["procedure_version"]["status"] == "active")
     check("Governance", "audit timeline grows", len(audit_for(b["build_id"])) >= 5, str(len(audit_for(b["build_id"]))))
     check("Governance", "reject flow blocks activation", _reject_blocks())
     check("Governance", "stale hash invalidates", _stale_hash(b))
+    from services.governance.store import save_callback, resume_callback
+    from services.registry.store import save_build
+    save_build(b)  # API layer persists builds; resume loads from the registry
+    save_callback(b["build_id"], "patch_approval", None)
+    resumed = resume_callback(b["build_id"], "patch_approval",
+                              {"decision": "APPROVE_CANDIDATE",
+                               "reviewer": {"reviewer_id": "USR-001"}, "reason": "verify",
+                               "role": "PROCEDURE_OWNER"})
+    check("Governance", "server-side resume decides", resumed.get("decision") == "APPROVE_CANDIDATE", str(resumed.get("decision")))
+    check("Governance", "resume mints candidate", bool(resumed.get("candidate_version_id")))
+    from services.aws_handlers import api_handler
+    _h = api_handler({"routeKey": "GET /", "body": "{}"}, None)
+    check("Governance", "lambda health parity", _h.get("statusCode") == 200, str(_h)[:120])
 
     # ---- Benchmark ----
     from services.bench.runner import run_all
@@ -209,8 +236,12 @@ def main() -> int:
     check("Infra", "7 lambdas", sum(1 for v in tpl["Resources"].values() if v.get("Type") == "AWS::Serverless::Function") == 7)
     check("Infra", "single-table registry", "RegistryTable" in tpl["Resources"])
     sm = json.loads((ROOT / "infra/statemachine.asl.json").read_text())
-    check("Infra", "31 pipeline states", len(sm["States"]) == 31, str(len(sm["States"])))
+    check("Infra", "37 pipeline states", len(sm["States"]) == 37, str(len(sm["States"])))
     check("Infra", "3 task-token gates", sum("waitForTaskToken" in json.dumps(s) for s in sm["States"].values()) == 3)
+    order = list(sm["States"])
+    check("Infra", "context loads before extract", order.index("LOAD_BUILD_CONTEXT") < order.index("EXTRACT_RULES"))
+    check("Infra", "impact after validation", order.index("COMPUTE_IMPACT") > order.index("CHECK_VALIDATION"))
+    check("Infra", "idempotent cached terminal", "READY_CACHED" in sm["States"])
     dash = json.loads((ROOT / "infra/cloudwatch-dashboard.json").read_text())
     check("Infra", "dashboard widgets", len(dash["widgets"]) >= 5)
 

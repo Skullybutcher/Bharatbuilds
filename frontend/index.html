@@ -43,7 +43,7 @@ small{color:#9ca3af}
 <div class="tabs" id="tabs"></div>
 <main id="view"></main>
 <script>
-let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], drilled=null;
+let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], drilled=null, CANDIDATE=null;
 const TABS=['Overview','Impact','Policy Diff','Witnesses','Procedure','Patch','Tests','Evidence','Approval','Benchmarks','Build History'];
 let active='Overview';
 const api=()=>document.getElementById('apiBase').value.replace(/\/$/,'');
@@ -52,7 +52,7 @@ async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Co
 async function runBuild(){
   const d=document.getElementById('domain').value;
   setView('<div class=card>Compiling… INGEST → … → WAIT_FOR_PATCH_APPROVAL. Start the API with <span class=mono>python -m services.api.server</span>.</div>');
-  BUILD=await get('/demo/canonical?domain='+d); drilled=null; active='Overview'; renderTabs(); render(); loadHistory();
+  BUILD=await get('/demo/canonical?domain='+d); drilled=null; CANDIDATE=null; active='Overview'; renderTabs(); render(); loadHistory();
 }
 async function refreshBuild(){ if(BUILD){BUILD=await get('/builds/'+BUILD.build_id); render();} }
 async function loadHistory(){ try{HISTORY=(await get('/builds')).builds||[];}catch(e){} }
@@ -98,12 +98,12 @@ setView(`<div class=card><h3>Approval — what exactly am I being asked to accep
 <label>Reviewer <input id=revName value="Demo Reviewer"/></label> <label>Reason <input id=revReason value="Matches policy; all checks pass." style="width:260px"/></label><br/>
 <button class=btn ok ${dis?'disabled':''} onclick="patchDecide('approve')">APPROVE_CANDIDATE</button><button class=btn danger onclick="patchDecide('reject')">REJECT_PATCH</button><button class=btn ghost onclick="patchDecide('revision')">REQUEST_REVISION</button>
 ${dis?'<p><small>APPROVE disabled by guardrails above.</small></p>':''}</div></div>
-<div class=cols2><div class=card><b>Gate 3 · Activation</b><p><small>Server-side hash verification before activation.</small></p><button class=btn ok onclick="activate()">Activate candidate procedure</button><div id=actOut class=mono></div></div>
+<div class=cols2><div class=card><b>Gate 3 · Activation</b><p><small>Server-side hash verification before activation. Candidate: <span class=mono>${typeof CANDIDATE!=='undefined'&&CANDIDATE?CANDIDATE:'— approve a candidate first —'}</span></small></p><button class=btn ok onclick="activate()">Activate candidate procedure</button><div id=actOut class=mono></div></div>
 <div class=card><b>Approvals + audit timeline</b><div class=mono>${JSON.stringify(appr.approvals,null,2)}\n---\n${(log.audit||[]).map(e=>`${new Date(e.ts*1000).toISOString()} ${e.event}`).join('\n')}</div></div></div></div>`);}
 async function revDecide(rid,how){await post(`/builds/${BUILD.build_id}/rules/${rid}/${how}`,{reason:'UI review'});vApproval();}
 async function patchDecide(how){const map={approve:'patch/approve',reject:'patch/reject',revision:'patch/request-revision'};const r=await post(`/builds/${BUILD.build_id}/${map[how]}`,{reviewer:{reviewer_id:'USR-001',display_name:document.getElementById('revName').value},reason:document.getElementById('revReason').value,role:'PROCEDURE_OWNER'});
-if(r.code!==200){alert('Blocked: '+JSON.stringify(r.data));}else{BUILD=await get('/builds/'+BUILD.build_id);vApproval();render();}}
-async function activate(){const r=await post(`/procedures/${BUILD.patch.patched_workflow||'WF-V4'}/activate`,{build_id:BUILD.build_id,reviewer:{reviewer_id:'USR-001',display_name:'Demo Reviewer'},reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data,null,2).slice(0,800);}
+if(r.code!==200){alert('Blocked: '+JSON.stringify(r.data));}else{if(r.data&&r.data.candidate_version_id){CANDIDATE=r.data.candidate_version_id;}BUILD=await get('/builds/'+BUILD.build_id);vApproval();render();}}
+async function activate(){if(!CANDIDATE){document.getElementById('actOut').textContent='No candidate yet — APPROVE_CANDIDATE first (the backend returns the exact candidate_version_id).';return;}const r=await post(`/procedures/${CANDIDATE}/activate`,{build_id:BUILD.build_id,reviewer:{reviewer_id:'USR-001',display_name:'Demo Reviewer'},reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data,null,2).slice(0,800);}
 async function vBench(){setView('<div class=card>Loading benchmark…</div>');try{BENCH=await get('/benchmark-runs/latest');}catch(e){setView('<div class=card>Run <span class=mono>make benchmark</span> first.</div>');return;}
 const m={};(BENCH.cases||[]).forEach(c=>{const f=c.case_id.split('-')[0];m[f]=m[f]||{};m[f][c.status]=(m[f][c.status]||0)+1;});
 setView(`<div class=card><h3>ProcessPatchBench — how do we know this is more than one scripted demo?</h3><div class=mono>${JSON.stringify(BENCH.run_id||'latest',null,0)} ${(BENCH.cases||[]).length} scenarios</div>

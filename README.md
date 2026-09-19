@@ -1,5 +1,7 @@
 # **A policy changed. Which procedure steps are wrong now?**
 
+![ci](https://github.com/Stakeylock/Bharatbuilds/actions/workflows/ci.yml/badge.svg)
+
 > Policies are source code. Procedures are compiled artifacts. Amendments are commits.
 > ProcessPatch finds the people or cases that prove a procedure is stale, patches the affected logic, reruns regression tests, and requires human approval of exact artifact hashes before anything changes.
 
@@ -32,7 +34,8 @@ deadline) validates 16/16.
 ## Quickstart
 
 ```bash
-python scripts/verify.py        # 131 assertions, no network/LLM/AWS
+pip install -e ".[dev]"        # pytest + pyyaml (clean-machine repro)
+python scripts/verify.py        # 142 assertions, no network/LLM/AWS
 make verify                     # same
 make benchmark                  # ProcessPatchBench v0.1.0, 26 scenarios
 make infra-validate             # SAM/ASL/dashboard checks, no credentials
@@ -45,7 +48,10 @@ API highlights: `GET /demo/canonical`, `POST /builds` (idempotent),
 `GET /builds/{id}/{diff,witnesses,patch,certificate,impact,guardrails,audit}`,
 rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,
 `POST .../patch/{approve,reject,request-revision}`, witness replay,
-`POST /procedures/{v}/activate` (hash-verified), benchmark endpoints.
+`POST /procedures/{v}/activate` (hash-verified), `POST /builds/{id}/resume`
+(server-side Step Functions resume — clients never hold task tokens),
+benchmark endpoints. The local server and the Lambda `ApiFn` share one
+implementation (`services/api/actions.py`) so both surfaces stay identical.
 
 ## Layout
 
@@ -57,8 +63,10 @@ rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,
 
 ## Trust
 
-AI extracts typed candidates with source spans. Deterministic code decides
-correctness. Humans approve exact hashes. Ambiguity → NEEDS_REVIEW, conflict →
+A deterministic parser extracts the bounded rule language into typed candidates
+with source spans; a Bedrock model fallback engages only when the parser yields
+nothing usable (and is schema-validated + Gate-1 reviewed like everything
+else). Deterministic code decides correctness. Humans approve exact hashes. Ambiguity → NEEDS_REVIEW, conflict →
 COMPILATION BLOCKED. Patches are VALIDATED_WITHIN_TESTED_MODEL, never
 "compliance guaranteed".
 

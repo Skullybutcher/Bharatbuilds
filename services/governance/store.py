@@ -145,7 +145,21 @@ def decide_patch(build_id: str, build: dict, decision: str, reviewer: dict,
     audit(f"PATCH_{decision}", {"build_id": build_id, "approval_id": rec["approval_id"]})
     if decision == "REJECT_PATCH":
         _mark_candidate(build, "inactive")
+    if decision == "APPROVE_CANDIDATE":
+        rec["candidate_version_id"] = create_candidate_version(build)["procedure_version_id"]
     return rec
+
+
+def create_candidate_version(build: dict) -> dict:
+    """Gate-2 side effect: persist the validated patch as a candidate procedure
+    version. Returns the version record; the UI must activate THIS id — no
+    hardcoded version names."""
+    from services.registry.store import save_procedure_version
+    candidate = (build.get("patch", {}) or {}).get("patched_workflow", {})
+    saved = save_procedure_version({**candidate, "status": "candidate"}, status="candidate")
+    audit("CANDIDATE_CREATED", {"build_id": build.get("build_id"),
+                                "procedure_version_id": saved.get("procedure_version_id")})
+    return saved
 
 
 def activate_procedure(build_id: str, build: dict, reviewer: dict, reason: str) -> dict:
@@ -187,3 +201,75 @@ def _mark_candidate(build: dict, status: str) -> None:
 
 def approvals_for(build_id: str) -> list:
     return [a for a in _load("approvals.json", []) if a.get("build_id") == build_id]
+
+
+# ---- Step Functions human-gate callbacks ------------------------------------
+def save_callback(build_id: str, gate: str, task_token: str | None,
+                  execution_arn: str | None = None) -> dict:
+    """Persist the taskToken at WAIT time so a later human action can resume
+    the execution WITHOUT the client ever holding the token."""
+    cbs = _load("callbacks.json", [])
+    rec = {"build_id": build_id, "gate": gate, "task_token": task_token,
+           "execution_arn": execution_arn, "status": "WAITING", "timestamp": time.time()}
+    cbs = [c for c in cbs if not (c.get("build_id") == build_id and c.get("gate") == gate)] + [rec]
+    _save("callbacks.json", cbs)
+    audit("GATE_WAITING", {"build_id": build_id, "gate": gate})
+    return rec
+
+
+def get_callback(build_id: str, gate: str) -> dict | None:
+    return next((c for c in _load("callbacks.json", [])
+                 if c.get("build_id") == build_id and c.get("gate") == gate), None)
+
+
+def resume_callback(build_id: str, gate: str, body: dict) -> dict:
+    """Apply the human decision through the normal domain path, then resume
+    the waiting execution server-side. Works locally (records RESUMED) and on
+    AWS (SendTaskSuccess)."""
+    import json as _json
+    cb = get_callback(build_id, gate)
+    if not cb:
+        raise KeyError(f"no waiting callback for {build_id}/{gate}")
+    output: dict
+    if gate == "rule_review":
+        for rid, dec in (body.get("decisions") or {}).items():
+            review_rule(build_id, rid, dec, body.get("human_value"),
+                        body.get("reason"), (body.get("reviewer") or {}).get("reviewer_id", "USR-001"))
+        acc = accepted_rules(build_id)
+        output = {"accepted": bool(acc) and not unresolved_rule_reviews(build_id),
+                  "accepted_rules": acc}
+    elif gate == "patch_approval":
+        from services.registry.store import get_build
+        build = get_build(build_id) or {}
+        rec = decide_patch(build_id, build, body.get("decision", "REJECT_PATCH"),
+                           body.get("reviewer", {}), body.get("reason", ""),
+                           body.get("role", "PROCEDURE_OWNER"))
+        output = {"decision": body.get("decision"), "approval_id": rec["approval_id"],
+                  "candidate_version_id": rec.get("candidate_version_id")}
+    elif gate == "activation":
+        from services.registry.store import get_build
+        build = get_build(build_id) or {}
+        if body.get("decision") == "APPROVE":
+            out = activate_procedure(build_id, build, body.get("reviewer", {}), body.get("reason", ""))
+            output = {"decision": "APPROVE",
+                      "procedure_version_id": out["procedure_version"]["procedure_version_id"]}
+        else:
+            output = {"decision": "REJECT"}
+    else:
+        raise ValueError(f"unknown gate {gate}")
+
+    sent = False
+    if cb.get("task_token"):
+        try:
+            import boto3  # lazy
+            boto3.client("stepfunctions").send_task_success(
+                taskToken=cb["task_token"], taskOutput=_json.dumps(output, default=str))
+            sent = True
+        except Exception as e:  # noqa: BLE001
+            output["resume_error"] = f"{type(e).__name__}: {e}"[:200]
+    cbs = [c for c in _load("callbacks.json", [])
+           if not (c.get("build_id") == build_id and c.get("gate") == gate)]
+    _save("callbacks.json", cbs + [{**cb, "status": "RESUMED" if sent else "DECIDED_LOCALLY",
+                                    "output": output}])
+    audit("GATE_RESUMED", {"build_id": build_id, "gate": gate, "sent_to_sfn": sent})
+    return output

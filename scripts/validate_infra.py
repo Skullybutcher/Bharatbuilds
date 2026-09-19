@@ -70,7 +70,15 @@ def main():
     sm = json.loads(asl_raw)
     states = sm["States"]
     check("asl StartAt exists", sm["StartAt"] in states)
-    # graph walk: every Next/Choice target + Default must exist; terminals checked
+    order = list(states)
+    check("asl LOAD_BUILD_CONTEXT first", order[1] == "LOAD_BUILD_CONTEXT", str(order[:3]))
+    check("asl accepted-rules default on happy path", "SET_ACCEPTED_DEFAULT" in states)
+    check("asl idempotency gate", "CHECK_IDEMPOTENT" in states and "READY_CACHED" in states)
+    check("asl impact AFTER validation",
+          order.index("COMPUTE_IMPACT") > order.index("CHECK_VALIDATION")
+          and order.index("COMPUTE_IMPACT") < order.index("WAIT_FOR_PATCH_APPROVAL"))
+    check("asl GovernFn loads context (S3+registry)",
+          "load_context" in asl_raw and "find_by_key" in asl_raw)    # graph walk: every Next/Choice target + Default must exist; terminals checked
     refs = set()
     for name, st in states.items():
         if "Next" in st:
@@ -96,6 +104,10 @@ def main():
 
     for f in ("deploy.sh", "deploy.ps1"):
         check(f"deploy script {f}", (INFRA / f).exists())
+    for bad in ("file://infra/parameters", "file://\"$PARAMS\"", "file://infra"):
+        check("deploy avoids file:// params quirk", bad not in (INFRA / "deploy.sh").read_text(), bad)
+    check("deploy requires AMPLIFY_TOKEN", "AMPLIFY_TOKEN" in (INFRA / "deploy.sh").read_text())
+    check("amplify token param NoEcho", "NoEcho" in (INFRA / "template.yaml").read_text())
     check("parameters.json", (INFRA / "parameters.json").exists())
     print("INFRA-VALIDATE", "PASS" if ok else "FAIL")
     return 0 if ok else 1

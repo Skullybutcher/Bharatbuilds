@@ -17,12 +17,19 @@ Amplify (frontend, auto-built from main)
        Lambdas: Extractor / Compiler / Witness / Validator / Impact / Govern
 DynamoDB single table (on-demand + PITR): builds, versions, reviews, approvals, audit.
 ArtifactBucket: certificates, benchmark reports. CloudWatch: logs, alarms, dashboard.
-Bedrock/approved model runtime: semantic extraction ONLY (ExtractorFn).
+Bedrock/approved model runtime: extraction fallback ONLY (ExtractorFn tries the
+deterministic parser first; `PROCESSPATCH_MODEL_FALLBACK=1` on Lambda).
 ```
 
 Trust boundary: model proposes typed candidates; deterministic Lambdas decide
 correctness. Same Python (`services/`) runs locally (file storage) and on Lambda
 (DynamoDB via `services/storage.py` selected by `PROCESSPATCH_STORAGE`).
+
+Witness search is **constraint-guided deterministic search** (literal
+boundaries ± ε plus bounded cartesian product over the supported
+numeric/date/enum fragment) — an executable approximation of
+Expected(x) XOR Actual(x), not an SMT solver. Z3 containerization for the
+WitnessFn remains a documented future step, not a current claim.
 
 Why no Neptune: ~20–100 nodes/workflow. DynamoDB/JSON + in-memory traversal is
 simpler and cheaper; Neptune only if cross-workflow scale justifies it.

@@ -1,23 +1,41 @@
 {
-  "Comment": "ProcessPatch compile-test-patch pipeline with human governance gates (Spec 57G). Human waits use the Lambda callback pattern (taskToken); the demo may resolve them via application state (POST /builds/... + /resume) while preserving the conceptual gates.",
+  "Comment": "ProcessPatch compile-test-patch pipeline with human governance gates (Spec 57G). INGEST carries only S3 key + ids; LOAD_BUILD_CONTEXT materializes text/versions; accepted_rules defaults to extraction output on the no-review path; impact is computed AFTER validation so it carries final nodes, regression and provenance; human waits use the Lambda callback pattern with server-side token persistence (POST /builds/{id}/resume).",
   "StartAt": "INGEST",
   "States": {
-    "INGEST": {"Type": "Pass", "Comment": "Build envelope: policy_s3_key, procedure_version_id, workspace_id.", "Next": "HASH_ARTIFACT"},
+    "INGEST": {"Type": "Pass", "Comment": "Envelope from EventBridge: policy_s3_key, policy_version_id, workflow_id, workspace_id.", "Next": "LOAD_BUILD_CONTEXT"},
+    "LOAD_BUILD_CONTEXT": {
+      "Type": "Task", "Resource": "${GovernFnArn}",
+      "Comment": "Reads S3 policy text, resolves active procedure + previous policy rules.",
+      "Parameters": {"op": "load_context", "policy_s3_key.$": "$.policy_s3_key", "policy_version_id.$": "$.policy_version_id", "workflow_id.$": "$.workflow_id", "workspace_id.$": "$.workspace_id", "procedure_version_id.$": "$.procedure_version_id"},
+      "ResultPath": "$.build_context", "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 2}],
+      "Next": "HASH_ARTIFACT"
+    },
     "HASH_ARTIFACT": {
       "Type": "Task", "Resource": "${GovernFnArn}", "Comment": "Idempotency hash over policy+procedure+compiler.",
-      "Parameters": {"op": "hash", "policy_text.$": "$.policy_text", "procedure.$": "$.procedure"},
-      "ResultPath": "$.artifact_hash", "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 2}],
+      "Parameters": {"op": "hash", "policy_text.$": "$.build_context.policy_text", "procedure.$": "$.build_context.procedure"},
+      "ResultPath": "$.artifact_hash",
       "Next": "EXTRACT_RULES"
     },
     "EXTRACT_RULES": {
       "Type": "Task", "Resource": "${ExtractorFnArn}",
-      "Parameters": {"policy_text.$": "$.policy_text", "policy_version_id.$": "$.policy_version_id", "build_id.$": "$.build_id"},
+      "Parameters": {"policy_text.$": "$.build_context.policy_text", "policy_version_id.$": "$.build_context.policy_version_id", "build_id.$": "$.build_id"},
       "ResultPath": "$.extraction", "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 2}],
       "Next": "VALIDATE_RULE_IR"
     },
     "VALIDATE_RULE_IR": {
       "Type": "Choice",
       "Choices": [{"Variable": "$.extraction.schema_valid", "BooleanEquals": false, "Next": "EXTRACTION_FAILURE"}],
+      "Default": "CHECK_IDEMPOTENT"
+    },
+    "CHECK_IDEMPOTENT": {
+      "Type": "Task", "Resource": "${GovernFnArn}", "Comment": "compile_key lookup; duplicates reuse the existing build.",
+      "Parameters": {"op": "find_by_key", "new_rules.$": "$.extraction.rules", "procedure.$": "$.build_context.procedure"},
+      "ResultPath": "$.idempotency",
+      "Next": "IDEMPOTENT_HIT?"
+    },
+    "IDEMPOTENT_HIT?": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.idempotency.idempotent_reuse", "BooleanEquals": true, "Next": "READY_CACHED"}],
       "Default": "RESOLVE_AUTHORITY"
     },
     "RESOLVE_AUTHORITY": {"Type": "Pass", "Comment": "Attach source precedence metadata; conflicts fail closed downstream.", "Next": "RULE_REVIEW_REQUIRED?"},
@@ -27,22 +45,35 @@
         {"Variable": "$.extraction.status", "StringEquals": "NEEDS_REVIEW", "Next": "WAIT_FOR_RULE_REVIEW"},
         {"Variable": "$.extraction.status", "StringEquals": "CONFLICT", "Next": "NEEDS_REVIEW"}
       ],
-      "Default": "COMPILE_CONSTRAINTS"
+      "Default": "SET_ACCEPTED_DEFAULT"
+    },
+    "SET_ACCEPTED_DEFAULT": {
+      "Type": "Pass", "Comment": "No review required: extraction output IS the accepted rule set.",
+      "Parameters": {"accepted_rules.$": "$.extraction.rules"},
+      "ResultPath": "$.review",
+      "Next": "COMPILE_CONSTRAINTS"
     },
     "WAIT_FOR_RULE_REVIEW": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {"FunctionName": "${GovernFnArn}", "Payload": {"op": "open_reviews", "build_id.$": "$.build_id", "rules.$": "$.extraction.rules", "taskToken.$": "$$.Task.Token"}},
-      "ResultPath": "$.rule_review", "HeartbeatSeconds": 86400,
+      "ResultPath": "$.rule_review_wait",
+      "HeartbeatSeconds": 86400,
       "Next": "RULE_REVIEW_DECIDED?"
     },
     "RULE_REVIEW_DECIDED?": {
       "Type": "Choice",
-      "Choices": [{"Variable": "$.rule_review.accepted", "BooleanEquals": true, "Next": "COMPILE_CONSTRAINTS"}],
+      "Choices": [{"Variable": "$.rule_review_wait.accepted", "BooleanEquals": true, "Next": "USE_REVIEWED_RULES"}],
       "Default": "NEEDS_REVIEW"
+    },
+    "USE_REVIEWED_RULES": {
+      "Type": "Pass", "Comment": "Resume payload carries accepted_rules from the review API.",
+      "Parameters": {"accepted_rules.$": "$.rule_review_wait.accepted_rules"},
+      "ResultPath": "$.review",
+      "Next": "COMPILE_CONSTRAINTS"
     },
     "COMPILE_CONSTRAINTS": {
       "Type": "Task", "Resource": "${CompilerFnArn}",
-      "Parameters": {"op": "compile", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules"},
+      "Parameters": {"op": "compile", "old_rules.$": "$.build_context.old_rules", "new_rules.$": "$.review.accepted_rules"},
       "ResultPath": "$.compiled",
       "Next": "CHECK_CONFLICT"
     },
@@ -54,39 +85,40 @@
     "SEMANTIC_DIFF": {"Type": "Pass", "Comment": "Surfaces $.compiled.semantic_delta; behavioral vs no-op vs provenance-only.", "Next": "FIND_WITNESSES"},
     "FIND_WITNESSES": {
       "Type": "Task", "Resource": "${WitnessFnArn}",
-      "Parameters": {"new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure"},
+      "Parameters": {"new_rules.$": "$.review.accepted_rules", "procedure.$": "$.build_context.procedure"},
       "ResultPath": "$.witnesses_out",
       "Next": "CHECK_WITNESSES"
     },
     "CHECK_WITNESSES": {
       "Type": "Choice",
       "Choices": [{"Variable": "$.witnesses_out.witnesses_found", "BooleanEquals": false, "Next": "GENERATE_CERTIFICATE_CLEAN"}],
-      "Default": "COMPUTE_IMPACT"
-    },
-    "COMPUTE_IMPACT": {
-      "Type": "Task", "Resource": "${ImpactFnArn}",
-      "Parameters": {"build_id.$": "$.build_id", "policy_version_id.$": "$.policy_version_id", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure", "patched_workflow.$": "$.procedure", "semantic_delta.$": "$.compiled.semantic_delta", "witnesses.$": "$.witnesses_out.witnesses", "faults": [], "validation": {}},
-      "ResultPath": "$.impact_prelim",
-      "Next": "LOCALIZE_PATCH"
+      "Default": "LOCALIZE_PATCH"
     },
     "LOCALIZE_PATCH": {
       "Type": "Task", "Resource": "${CompilerFnArn}",
-      "Parameters": {"op": "localize_patch", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure", "witnesses.$": "$.witnesses_out.witnesses"},
+      "Parameters": {"op": "localize_patch", "old_rules.$": "$.build_context.old_rules", "new_rules.$": "$.review.accepted_rules", "procedure.$": "$.build_context.procedure", "witnesses.$": "$.witnesses_out.witnesses"},
       "ResultPath": "$.patched",
       "Next": "VALIDATE_PATCH"
     },
     "VALIDATE_PATCH": {
       "Type": "Task", "Resource": "${ValidatorFnArn}",
-      "Parameters": {"build_id.$": "$.build_id", "policy_version_id.$": "$.policy_version_id", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure", "patched_workflow.$": "$.patched.patched_workflow", "patch.$": "$.patched.patch", "witnesses.$": "$.witnesses_out.witnesses", "faults.$": "$.patched.faults", "semantic_delta.$": "$.compiled.semantic_delta", "with_certificate": true, "impact.$": "$.impact_prelim"},
+      "Parameters": {"build_id.$": "$.build_id", "policy_version_id.$": "$.build_context.policy_version_id", "old_rules.$": "$.build_context.old_rules", "new_rules.$": "$.review.accepted_rules", "procedure.$": "$.build_context.procedure", "patched_workflow.$": "$.patched.patched_workflow", "patch.$": "$.patched.patch", "witnesses.$": "$.witnesses_out.witnesses", "faults.$": "$.patched.faults", "semantic_delta.$": "$.compiled.semantic_delta", "with_certificate": true},
       "ResultPath": "$.validation_out",
       "Next": "CHECK_VALIDATION"
     },
     "CHECK_VALIDATION": {
       "Type": "Choice",
-      "Choices": [{"Variable": "$.validation_out.patch_valid", "BooleanEquals": true, "Next": "GENERATE_CERTIFICATE"}],
+      "Choices": [{"Variable": "$.validation_out.patch_valid", "BooleanEquals": true, "Next": "COMPUTE_IMPACT"}],
       "Default": "NEEDS_REVIEW"
     },
-    "GENERATE_CERTIFICATE": {"Type": "Pass", "Comment": "Surfaces $.validation_out.certificate; never claims compliance.", "Next": "WAIT_FOR_PATCH_APPROVAL"},
+    "COMPUTE_IMPACT": {
+      "Type": "Task", "Resource": "${ImpactFnArn}",
+      "Comment": "Final impact: validated patch, final nodes, full regression + provenance.",
+      "Parameters": {"build_id.$": "$.build_id", "policy_version_id.$": "$.build_context.policy_version_id", "old_rules.$": "$.build_context.old_rules", "new_rules.$": "$.review.accepted_rules", "procedure.$": "$.build_context.procedure", "patched_workflow.$": "$.patched.patched_workflow", "semantic_delta.$": "$.compiled.semantic_delta", "witnesses.$": "$.witnesses_out.witnesses", "faults.$": "$.patched.faults", "validation.$": "$.validation_out.validation"},
+      "ResultPath": "$.impact",
+      "Next": "GENERATE_CERTIFICATE"
+    },
+    "GENERATE_CERTIFICATE": {"Type": "Pass", "Comment": "Surfaces $.validation_out.certificate with clause-level sources; never claims compliance.", "Next": "WAIT_FOR_PATCH_APPROVAL"},
     "WAIT_FOR_PATCH_APPROVAL": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {"FunctionName": "${GovernFnArn}", "Payload": {"op": "request_review", "build_id.$": "$.build_id", "taskToken.$": "$$.Task.Token"}},
@@ -125,6 +157,7 @@
       "Next": "READY"
     },
     "GENERATE_CERTIFICATE_CLEAN": {"Type": "Pass", "Comment": "No drift: record clean bill, no patch, no approval needed.", "Next": "READY"},
+    "READY_CACHED": {"Type": "Succeed", "Comment": "Idempotent reuse of an existing build."},
     "NEEDS_REVIEW": {"Type": "Pass", "Comment": "AMBIGUOUS_RULE | CONFLICTING_RULES | EXTRACTION_FAILURE | NO_VALID_PATCH -> human review.", "Next": "CLOSED_REVIEW"},
     "CLOSED_REVIEW": {"Type": "Succeed", "Comment": "Closed pending human review."},
     "CLOSED_REJECTED": {"Type": "Succeed", "Comment": "Reviewer rejected; candidate retained inactive; activation blocked."},

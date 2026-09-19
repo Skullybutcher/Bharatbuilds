@@ -83,5 +83,5 @@ def run_build(policy_version_id: str, old_rules: list[dict], new_rules: list[dic
             "certificate": cert, "new_rules": new_rules, "old_rules": old_rules,
             "procedure": procedure, "conflicts": [], "extraction": extraction or {"status": "fixture"},
             "policy_sha256": sha(new_rules), "procedure_sha256": sha(procedure),
-            "review_state": "AUTO_ACCEPTED_FIXTURE" if auto_accept_reviews else "REVIEW_PENDING",
+            "review_state": "REVIEW_PENDING",
             "created_at": time.time(), "duration_s": round(time.time() - t0, 3)}
