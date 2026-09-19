@@ -58,7 +58,10 @@ AH="Authorization: Bearer $TOKEN"
 
 # ---- who am I (role must be admin to pass the gates) -----------------------
 say "identity"
-curl -fsS "$API/builds" -H "$AH" | head -c 120; echo " …auth OK"
+TMP="${TMPDIR:-.}/pp-smoke.$$"  # repo-local temp: Windows curl can't see git-bash /tmp
+trap 'rm -f "$TMP"' EXIT
+curl -fsS "$API/builds" -H "$AH" -o "$TMP" || { echo "GET /builds failed" >&2; exit 2; }
+python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print('auth OK —',len(d.get('builds',[])),'builds on record')" "$TMP"
 
 # ---- compile (deferred: stops at Gate 1) -----------------------------------
 say "compile (deferred → Gate 1)"
