@@ -23,8 +23,6 @@ def _demo_text(domain: str, which: str = "policy_v2.md") -> str:
 
 
 def _get_build(bid: str):
-    if bid in MEMO:
-        return MEMO[bid]
     from services.registry.store import get_build
     b = get_build(bid)
     if b:
@@ -33,13 +31,10 @@ def _get_build(bid: str):
 
 
 def _store(build: dict):
+    from services.registry.store import save_build, audit
+    save_build(build)
+    audit("BUILD_READY", {"build_id": build["build_id"], "status": build.get("status")})
     MEMO[build["build_id"]] = build
-    try:
-        from services.registry.store import save_build, audit
-        save_build(build)
-        audit("BUILD_READY", {"build_id": build["build_id"], "status": build.get("status")})
-    except Exception:
-        pass
     return build
 
 
@@ -116,12 +111,13 @@ def create_build(body: dict):
                            "extraction_backend": backend, "new_rules": ext["rules"],
                            "review_state": "REVIEW_PENDING", "created_at": _t.time()})
         new = ext["rules"]
-        auto = body.get("auto_accept", backend == "deterministic-parser/0.1.0" and ext["status"] == "EXTRACTED")
+        auto = (backend == "deterministic-parser/0.1.0" and ext["status"] == "EXTRACTED"
+                and body.get("auto_accept", True))
     else:
         policy_text = _demo_text(domain)
         auto = body.get("auto_accept", True)
     key = compile_key(new, proc)
-    hit = find_build_by_key(key) or MEMO.get(key)
+    hit = find_build_by_key(key)
     if hit and not body.get("force"):
         return {**hit, "idempotent_reuse": True}
     if body.get("defer"):
@@ -143,7 +139,7 @@ def create_build(body: dict):
         try:
             from services.governance.store import open_rule_reviews, review_rule
             open_rule_reviews(build["build_id"], build.get("new_rules", []))
-            if body.get("auto_accept", auto):
+            if auto:
                 for r in build.get("new_rules", []):
                     review_rule(build["build_id"], r["rule_id"], "ACCEPT")
         except Exception:
@@ -153,8 +149,7 @@ def create_build(body: dict):
 
 def list_builds():
     from services.registry.store import list_builds as _lb
-    local = [{"build_id": b["build_id"], "status": b.get("status")} for b in MEMO.values()]
-    return {"builds": local + _lb()}
+    return {"builds": _lb()}
 
 
 def get_build_view(bid: str):

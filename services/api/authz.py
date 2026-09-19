@@ -29,6 +29,8 @@ import hmac
 import json
 import os
 import time
+import math
+import binascii
 import urllib.request
 
 ADMIN_GROUP = "pp-admins"
@@ -127,7 +129,10 @@ def _hs256_verify(token: str) -> dict:
 
 
 def _check_claims(claims: dict) -> None:
-    if claims.get("exp", 0) < time.time():
+    expiry = claims.get("exp", 0)
+    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not math.isfinite(expiry):
+        raise AuthzError(401, "invalid token expiry")
+    if expiry <= time.time():
         raise AuthzError(401, "token expired")
     if mode() == "cognito":
         _, _, client = _pool_coords()
@@ -136,6 +141,8 @@ def _check_claims(claims: dict) -> None:
         if claims.get("token_use") == "access":
             if claims.get("client_id") != client:
                 raise AuthzError(401, "wrong client")
+        elif claims.get("token_use") != "id":
+            raise AuthzError(401, "unsupported token use")
         elif claims.get("aud") != client:
             raise AuthzError(401, "wrong audience")
 
@@ -150,9 +157,16 @@ def authenticate(headers: dict) -> dict | None:
     if not auth.lower().startswith("bearer "):
         raise AuthzError(401, "sign in required (Authorization: Bearer <token>)")
     token = auth[7:].strip()
-    claims = _rs256_verify(token) if mode() == "cognito" else _hs256_verify(token)
-    _check_claims(claims)
-    groups = set(claims.get("cognito:groups") or [])
+    if mode() not in ("cognito", "hs256-test"):
+        raise AuthzError(500, "unsupported authentication mode")
+    try:
+        if len(token.split(".")) != 3:
+            raise ValueError("invalid token segments")
+        claims = _rs256_verify(token) if mode() == "cognito" else _hs256_verify(token)
+        _check_claims(claims)
+        groups = _groups(claims.get("cognito:groups"))
+    except (ValueError, TypeError, KeyError, AttributeError, binascii.Error) as exc:
+        raise AuthzError(401, "malformed bearer token") from exc
     if ADMIN_GROUP in groups:
         role = "admin"
     elif REVIEWER_GROUP in groups:
@@ -164,6 +178,19 @@ def authenticate(headers: dict) -> dict | None:
             "role": role, "groups": sorted(groups), "via": mode()}
 
 
+def _groups(value) -> set[str]:
+    # HTTP API authorizer claims may serialize an array as a string.
+    if isinstance(value, str):
+        value = value.strip()
+        try:
+            value = json.loads(value)
+        except ValueError:
+            value = value.strip("[]").split(",")
+    if not isinstance(value, (list, tuple, set)):
+        return set()
+    return {g.strip() for g in value if isinstance(g, str) and g.strip()}
+
+
 def claims_from_event(event: dict) -> dict | None:
     """Lambda path: API Gateway Cognito authorizer already validated the JWT."""
     if mode() == "off":
@@ -172,7 +199,7 @@ def claims_from_event(event: dict) -> dict | None:
     claims = ctx.get("jwt", {}).get("claims") or ctx.get("claims") or {}
     if not claims:
         return None  # authorizer absent -> authenticate(headers) will 401
-    groups = set(claims.get("cognito:groups") or [])
+    groups = _groups(claims.get("cognito:groups"))
     role = "admin" if ADMIN_GROUP in groups else ("reviewer" if REVIEWER_GROUP in groups else READ_ONLY)
     return {"reviewer_id": claims.get("email") or claims.get("username") or claims.get("sub", "?"),
             "display_name": claims.get("email") or claims.get("name") or "reviewer",

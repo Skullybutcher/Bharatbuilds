@@ -263,14 +263,18 @@ def api_handler(event, context):
     qs = event.get("queryStringParameters") or {}
     qs = {k: [v] for k, v in qs.items()}
     body = event.get("body") or "{}"
-    if event.get("isBase64Encoded"):
-        import base64
-        body = base64.b64decode(body).decode()
     try:
+        if event.get("isBase64Encoded"):
+            import base64
+            body = base64.b64decode(body, validate=True).decode()
+        if isinstance(body, str) and len(body.encode()) > 1024 * 1024:
+            return _out(event, {"error": "request body exceeds 1 MiB limit"}, 413)
         import json as _json
         body = _json.loads(body) if isinstance(body, str) else body
-    except Exception:
-        body = {}
+    except (ValueError, UnicodeError):
+        return _out(event, {"error": "body must be valid JSON"}, 400)
+    if not isinstance(body, dict):
+        return _out(event, {"error": "body must be a JSON object"}, 400)
 
     # --- auth: Cognito authorizer claims (or self-verified bearer token).
     # `off` mode (default) keeps the legacy credential-free behavior.
@@ -294,42 +298,44 @@ def api_handler(event, context):
             return _out(event, {"error": f"unknown: {e}"}, 404)
         except ValueError as e:
             return _out(event, {"error": str(e)}, 409)
+        except RuntimeError:
+            return _out(event, {"error": "service temporarily unavailable"}, 503)
 
     if method == "GET" and raw_path in ("/", "/health"):
-        return _out(event, A.health())
+        return call(A.health)
     if method == "GET" and raw_path == "/auth/config":
-        return _out(event, A.auth_config())
+        return call(A.auth_config)
     if method == "GET" and raw_path == "/demo/canonical":
-        return _out(event, A.canonical((qs.get("domain") or ["research_grant"])[0]))
+        return call(A.canonical, (qs.get("domain") or ["research_grant"])[0])
     if method == "GET" and raw_path == "/builds":
-        return _out(event, A.list_builds())
+        return call(A.list_builds)
     if method == "POST" and raw_path == "/builds":
-        return _out(event, A.create_build(body))
+        return call(A.create_build, body)
     if method == "GET" and raw_path == "/benchmarks":
-        return _out(event, A.bench_manifest())
+        return call(A.bench_manifest)
     if method == "GET" and raw_path.startswith("/benchmark-runs/"):
         seg = raw_path.split("/")
         if len(seg) == 3:
             return call(A.bench_run, seg[2]) if A.bench_run(seg[2]) else _out(event, {"error": "unknown run"}, 404)
         return _out(event, {"error": "use the local API for nested benchmark drill-downs"}, 400)
     if method == "GET" and raw_path.startswith("/procedures") and not raw_path.endswith("/activate"):
-        return _out(event, A.procedure_versions((qs.get("workflow_id") or [None])[0]))
+        return call(A.procedure_versions, (qs.get("workflow_id") or [None])[0])
     if method == "GET" and raw_path == "/workspaces":
-        return _out(event, A.list_workspaces())
+        return call(A.list_workspaces)
     if method == "POST" and raw_path == "/workspaces":
-        return _out(event, A.create_workspace(body))
+        return call(A.create_workspace, body)
     if method == "POST" and raw_path == "/procedures":
-        return _out(event, A.register_procedure(body))
+        return call(A.register_procedure, body)
     if method == "GET" and raw_path == "/traces":
-        return _out(event, A.list_traces((qs.get("workflow_id") or [None])[0]))
+        return call(A.list_traces, (qs.get("workflow_id") or [None])[0])
     if method == "POST" and raw_path == "/traces/csv":
-        return _out(event, A.bulk_ingest_traces_csv(body))
+        return call(A.bulk_ingest_traces_csv, body)
     if method == "POST" and raw_path == "/traces":
-        return _out(event, A.ingest_trace(body))
+        return call(A.ingest_trace, body)
     if method == "GET" and raw_path.startswith("/traces/"):
         return call(A.get_trace, raw_path.split("/")[2])
     if method == "GET" and raw_path.startswith("/portal"):
-        return _out(event, A.portal({k: v[0] for k, v in qs.items()}))
+        return call(A.portal, {k: v[0] for k, v in qs.items()})
     seg = raw_path.split("/")
     if len(seg) >= 3 and seg[1] == "builds":
         bid, tail = seg[2], "/".join(seg[3:])
@@ -373,14 +379,14 @@ def api_handler(event, context):
                 return _out(event, {"error": str(e)}, 404 if isinstance(e, KeyError) else 409)
         if method == "POST" and tail == "execute":
             try:
-                return _out(event, A.start_execution({"build_id": bid, **body}))
+                return call(A.start_execution, {"build_id": bid, **body})
             except KeyError:
                 return _out(event, {"error": "unknown build"}, 404)
         return _out(event, {"error": "not found", "path": raw_path}, 404)
     if method == "GET" and raw_path.startswith("/executions/"):
         import urllib.parse as _up
         try:
-            return _out(event, A.describe_execution(_up.unquote(raw_path[len("/executions/"):])))
+            return call(A.describe_execution, _up.unquote(raw_path[len("/executions/"):]))
         except KeyError:
             return _out(event, {"error": "unknown execution"}, 404)
     if method == "POST" and raw_path.startswith("/procedures/") and raw_path.endswith("/activate"):

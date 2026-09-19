@@ -1,11 +1,11 @@
 /* ProcessPatch UI logic — plain script, no modules, no bundler.
    Global function names are part of the UI contract (see DESIGN.md) and must
    stay stable: go, renderTabs, render, runBuild, cloudRun, submitPolicy,
-   loadPolicyFile, toggleJudge, judgeShow, revDecide, patchDecide, activate,
+   loadPolicyFile, revDecide, patchDecide, activate,
    replay, boundaryX, drill, drawer, closedrawer, openBuild, checkPortal,
    ingestTrace, registerProc, createWs, buildAgainst, authToggle,
    authMaybeExchange, authFetchCfg, esc, get, post. */
-let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null, JUDGE=false, JSTEP=0;
+let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null;
 /* Theme: light (paper — the ledger default) unless stored dark or OS dark. */
 function applyTheme(t){if(t==='light'||t==='dark'||t==='lab'){if(t==='light'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',t);}}else{document.documentElement.removeAttribute('data-theme');}
  const b=document.getElementById('themeBtn');if(b){const ico={light:'ph-moon',dark:'ph-sun',lab:'ph-flask'}[t]||'ph-moon';const lbl={light:'Switch to graphite night theme',dark:'Switch to lab theme',lab:'Switch to paper light theme'}[t]||'Toggle theme';b.innerHTML='<i class="ph '+ico+'" aria-hidden="true"></i>';b.title=lbl;b.setAttribute('aria-label',lbl);}}
@@ -32,21 +32,27 @@ async function authToggle(){
  if(AUTH.user){AUTH.id=null;AUTH.access=null;AUTH.user=null;try{localStorage.removeItem('pp_tokens');}catch(e){}renderTabs();render();return;}
  if(!authCfgOk()){alert('Auth not configured (window.PROCESSPATCH_AUTH). Local dev runs with auth off.');return;}
  const verifier=b64url(crypto.getRandomValues(new Uint8Array(32)));
+ const state=b64url(crypto.getRandomValues(new Uint8Array(16)));
+ const challenge=b64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
  sessionStorage.setItem('pp_pkce',verifier);
- location.href='https://'+AUTHCFG.domain+'/oauth2/authorize?response_type=code&client_id='+encodeURIComponent(AUTHCFG.clientId)+'&redirect_uri='+encodeURIComponent(AUTHCFG.redirectUri)+'&scope=openid+email&state='+b64url(crypto.getRandomValues(new Uint8Array(16)));
+ sessionStorage.setItem('pp_oauth_state',state);
+ location.href='https://'+AUTHCFG.domain+'/oauth2/authorize?response_type=code&client_id='+encodeURIComponent(AUTHCFG.clientId)+'&redirect_uri='+encodeURIComponent(AUTHCFG.redirectUri)+'&scope=openid+email&state='+state+'&code_challenge_method=S256&code_challenge='+challenge;
 }
 async function authMaybeExchange(){
  const q=new URLSearchParams(location.search);const code=q.get('code');
  if(!code||!authCfgOk())return;
+ const expectedState=sessionStorage.getItem('pp_oauth_state');
+ if(!expectedState||q.get('state')!==expectedState){history.replaceState({},'',location.pathname);showErr(new Error('Sign-in could not be verified. Please sign in again.'));return;}
  const body=new URLSearchParams({grant_type:'authorization_code',client_id:AUTHCFG.clientId,code:code,redirect_uri:AUTHCFG.redirectUri,code_verifier:sessionStorage.getItem('pp_pkce')||''});
- try{const r=await fetch('https://'+AUTHCFG.domain+'/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});const t=await r.json();AUTH.id=t.id_token||null;AUTH.access=t.access_token||null;AUTH.user=authClaims(AUTH.id||AUTH.access||'');authSave();}catch(e){}
+ try{const r=await fetch('https://'+AUTHCFG.domain+'/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});const t=await r.json();if(!r.ok||!t.access_token)throw new Error('Sign-in failed. Please try again.');AUTH.id=t.id_token||null;AUTH.access=t.access_token||null;AUTH.user=authClaims(AUTH.id||AUTH.access||'');authSave();}catch(e){showErr(e);}
+ sessionStorage.removeItem('pp_pkce');sessionStorage.removeItem('pp_oauth_state');
  history.replaceState({},'',location.pathname);
 }
 async function get(p){const r=await fetch(api()+p,{headers:authHeaders()});if(r.status===401){alert('Sign-in required — use Sign in (top right).');throw new Error('401 unauthorized');}if(!r.ok)throw new Error('GET '+p+' -> '+r.status);return r.json();}
 async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(b||{})});if(r.status===401){alert('Sign-in required — use Sign in (top right).');}let d=null;try{d=await r.json();}catch(e){}return {code:r.status,data:d};}
 function setView(h){document.getElementById('view').innerHTML=h;}
 function loading(msg){setView('<div class="card"><div class="loading" role="status">'+esc(msg||'Loading…')+'<span class="skel"></span><span class="skel"></span></div></div>');}
-function showErr(e){setView('<div class="card"><div class="err" role="alert">Request failed: '+esc(e.message||e)+'<br/><small>Start the API with <span class="mono">python -m services.api.server</span>.</small></div></div>');}
+function showErr(e){setView('<div class="card"><div class="err" role="alert"><h3>We couldn’t complete that request</h3><p>'+esc(e.message||e)+'</p><small>Check your connection and sign-in status, then try again.</small></div><button class="btn ghost" onclick="render()" style="margin-top:16px">Return to workspace</button></div>');}
 const NAV_ICONS={Overview:'graph',Impact:'crosshair',Witnesses:'fingerprint',Procedure:'flow-arrow',Patch:'git-diff',Tests:'check-square',Approval:'seal-check',Traces:'radioactive',Benchmarks:'chart-bar',Builds:'stack'};
 function renderTabs(){const t=document.getElementById('tabs');t.innerHTML='<div class="sec">Build</div>'+TABS.map(x=>'<button class="nav-item'+(x===active?' active':'')+'" '+(x===active?'aria-current="page"':'')+' onclick="go(\''+x+'\')"><i class="ph ph-'+(NAV_ICONS[x]||'square')+'" aria-hidden="true"></i>'+esc(x)+'</button>').join('')+'<div class="sec">AWS</div><div class="aws-chip" id="awsBox"></div>';const ab=document.getElementById('awsBox');if(ab)ab.innerHTML='<b>Cloud execution</b>'+(EXECArn?('running · '+esc(EXECArn.slice(0,34))+'…'):'none yet — use Cloud (top right)');const aub=document.getElementById('authBtn');if(aub)aub.textContent=AUTH.user?('Sign out · '+AUTH.user.role):'Sign in';}
 function go(x){active=x;renderTabs();render();}
@@ -59,19 +65,20 @@ function backendBadge(){const b=(BUILD&&BUILD.extraction_backend)||'fixture';if(
 function gateSpine(){const w=(BUILD&&BUILD.witnesses||[]).length;const v=(BUILD&&BUILD.validation)||{};const st=(BUILD&&BUILD.status)||'';
  const stages=[['Compile','policy → Rule IR',!!BUILD],
   ['Witness','verified failing case'+(w===1?'':'s'),w>0],
-  ['Validate','regression suite',v.status==='PATCH_VALIDATED'],
+  ['Validate','regression suite',v.status==='VALIDATED_WITHIN_TESTED_MODEL'],
   ['Approve','human decision, hash-bound',(BUILD&&BUILD.review_state==='APPROVED')||st==='PATCH_ACTIVE'],
   ['Activate','procedure version live',st==='PATCH_ACTIVE']];
  let nowIdx=stages.findIndex(s=>!s[2]);if(nowIdx<0)nowIdx=stages.length;
  return '<ol class="spine" aria-label="Pipeline stage">'+stages.map((s,i)=>'<li class="'+(s[2]?'done':(i===nowIdx?'now':''))+'"><span class="dot" aria-hidden="true">'+(s[2]?'✓':(i===nowIdx?'●':''))+'</span><span class="st">'+s[0]+'</span><span class="sd">'+s[1]+'</span></li>').join('')+'</ol>';}
-function render(){badge();if(!BUILD){setView('<div class="card hero"><div>'
+function preBuildTab(){const copy={Impact:['Impact map','Compile an amendment to calculate the affected rules, nodes, fields and witness coverage.'],Witnesses:['Verified witnesses','Compile an amendment to generate failing cases that reproduce procedural drift.'],Procedure:['Procedure graph','Compile an amendment to inspect the stale and patched procedure paths.'],Patch:['Candidate patch','Compile an amendment to see the smallest validated workflow change.'],Tests:['Regression tests','Compile an amendment to run witness, boundary, preservation and integrity checks.'],Approval:['Human approval','Compile an amendment before reviewing rule decisions, guardrails and hash-bound approvals.'],Traces:['Runtime traces','Compile an amendment to compare runtime evidence against the stale and patched procedure.'],Benchmarks:['Benchmark coverage','Compile an amendment to keep this workspace context together, then inspect benchmark results.'],Builds:['Build history','Compile an amendment to create the first build and populate this workspace history.']};const c=copy[active]||copy.Impact;setView('<div class="card prebuild-empty"><div class="empty" role="status"><i class="ph ph-'+esc(NAV_ICONS[active]||'file')+' e-ico" aria-hidden="true"></i><h2>'+esc(c[0])+'</h2><p>'+esc(c[1])+'</p><button class="btn" onclick="runBuild()">Compile Amendment</button></div></div>');}
+function render(){badge();if(!BUILD&&active!=='Overview'){preBuildTab();return;}if(!BUILD){setView('<div class="card hero"><div>'
 +'<h1>A policy changed.<br/>Which procedure steps are wrong now?</h1>'
 +'<p class="lead">Compile the amendment, prove each failure with a verified witness, ship a hash-bound patch — gated by human approval.</p>'
-+'<div class="hero-cta"><button class="btn lg" onclick="runBuild()">Compile Amendment</button><small>Local deterministic pipeline · no sign-in needed</small></div>'
++'<div class="hero-cta"><button class="btn lg" onclick="runBuild()">Compile Amendment</button><small>Verified examples · human approval before activation</small></div>'
 +gateSpine()+'</div>'
 +'<div><div class="editor"><div class="ed-head"><b>Policy input</b><small>paste text or upload a .md file</small></div>'
-+'<textarea id="policyText" rows="7" placeholder="Paste policy text, drag a .md file here, or use the file picker below"></textarea>'
-+'<div class="ed-foot"><input type="file" accept=".md,.txt" onchange="loadPolicyFile(this)"/><button class="btn sm" onclick="submitPolicy()">Compile pasted policy</button><small>Unparseable input stays pending at review — fail-closed.</small></div></div></div>'
++'<textarea aria-label="Policy amendment text" id="policyText" rows="7" placeholder="Paste policy text, drag a .md file here, or use the file picker below"></textarea>'
++'<div class="ed-foot"><input aria-label="Upload policy file" type="file" accept=".md,.txt" onchange="loadPolicyFile(this)"/><button class="btn sm" onclick="submitPolicy()">Compile pasted policy</button><small>Unparseable input stays pending at review — fail-closed.</small></div></div></div>'
 +dashHtml());dashFill();dragPolicy();return;}
 /* Drag-and-drop policy files onto the editor (functional affordance, not decoration). */
 function dragPolicy(){const ta=document.getElementById('policyText');if(!ta)return;
@@ -91,12 +98,13 @@ function dashHtml(){return '<div class="activity">'
 +'<div class="mini"><div class="m-head"><b>Runtime traces</b><i class="ph ph-radioactive" aria-hidden="true"></i></div><div id="dashTraces"><span class="skel"></span></div></div>'
 +'<div class="mini"><div class="m-head"><b>Procedure versions</b><i class="ph ph-flow-arrow" aria-hidden="true"></i></div><div id="dashProcs"><span class="skel"></span></div></div>'
 +'</div>';}
-function dashFill(){dashOne('dashBuilds','/builds','build_id',d=>d.builds||[],id=>"openBuild('"+id+"')");
- dashOne('dashTraces','/traces','trace_id',d=>d.traces||[],()=>"go('Traces')");
- dashOne('dashProcs','/procedures','procedure_version_id',d=>d.versions||[],()=>"go('Builds')");}
+function dashFill(){dashOne('dashBuilds','/builds','build_id',d=>d.builds||[],id=>openBuild(id));
+ dashOne('dashTraces','/traces','trace_id',d=>d.traces||[],()=>go('Traces'));
+ dashOne('dashProcs','/procedures','procedure_version_id',d=>d.versions||[],()=>go('Builds'));}
 async function dashOne(elId,endpoint,idKey,pluck,openFn){const el=document.getElementById(elId);if(!el)return;
  try{const items=pluck(await get(endpoint)).slice(0,4);
- el.innerHTML=items.length?items.map(x=>'<div class="row" onclick="'+openFn(String(x[idKey]))+'"><span class="r-id">'+esc(x[idKey])+'</span><span class="r-meta">'+esc(x.status||x.source||x.workflow_id||'')+'</span></div>').join(''):'<p class="mut">nothing stored yet</p>';
+ el.innerHTML=items.length?items.map((x,i)=>'<button type="button" class="row" data-row="'+i+'"><span class="r-id">'+esc(x[idKey])+'</span><span class="r-meta">'+esc(x.status||x.source||x.workflow_id||'')+'</span></button>').join(''):'<p class="mut">nothing stored yet</p>';
+ el.querySelectorAll('[data-row]').forEach(row=>row.addEventListener('click',()=>openFn(String(items[Number(row.dataset.row)][idKey]))));
  }catch(e){el.innerHTML='<p class="mut">unavailable</p>';}}
 async function cloudRun(){const d=document.getElementById('domain').value;loading('Registering DRAFT → starting Step Functions execution…');try{
 const b=await post('/builds',{domain:d,defer:true});const ex=await post('/builds/'+b.data.build_id+'/execute',{});EXECArn=ex.data.executionArn;
@@ -126,7 +134,7 @@ setView('<div class="card"><p class="kicker">Build status</p><div class="card-he
 +'<div class="card">'+gateSpine()+'</div>'
 +hero+'<div class="card"><div class="card-head"><h3>Synthetic portal — driven by procedure JSON</h3></div><label class="field">CGPA <input id="cgpa" value="7.80"/></label> <label class="field">Amount <input id="amt" value="40000"/></label> '
 +'<button class="btn" onclick="checkPortal(false)">Check (current portal)</button><button class="btn ghost" onclick="checkPortal(true)">Check (patched preview)</button><div id="portalOut" class="mono" style="margin-top:16px" role="status" aria-live="polite"></div></div>'
-+'<div class="card"><div class="card-head"><h3>Policy input</h3></div><label class="field" for="policyText">Policy text</label><textarea id="policyText" rows="4" placeholder="Paste policy text, or upload a .md file"></textarea><br/><input type="file" accept=".md,.txt" onchange="loadPolicyFile(this)"/> <button class="btn" onclick="submitPolicy()">Compile pasted policy</button> <small>Unparseable or qualified input stays PENDING at Gate 1.</small></div>');
++'<div class="card"><div class="card-head"><h3>Policy input</h3></div><label class="field" for="policyText">Policy text</label><textarea aria-label="Policy amendment text" id="policyText" rows="4" placeholder="Paste policy text, or upload a .md file"></textarea><br/><input aria-label="Upload policy file" type="file" accept=".md,.txt" onchange="loadPolicyFile(this)"/> <button class="btn" onclick="submitPolicy()">Compile pasted policy</button> <small>Unparseable or qualified input stays PENDING at Gate 1.</small></div>');
 fillCoverage();}
 /* ---------- Impact ---------- */
 let drilled=null;
@@ -194,7 +202,7 @@ function closedrawer(){document.getElementById('drawerRoot').innerHTML='';}
 function vPatch(){const pt=BUILD.patch||{};const ops=pt.operations||[];
 const blocks=ops.map(o=>{let body='';if(o.op==='CHANGE_CONDITION')body='- '+esc(o.field||'condition')+': '+esc(JSON.stringify(o.old))+'\n+ '+esc(o.field||'condition')+': '+esc(JSON.stringify(o.new));else if(o.op==='CHANGE_REQUIRED_FLAG')body='- required: '+esc(JSON.stringify((o.old||{}).required))+'\n+ required: '+esc(JSON.stringify((o.new||{}).required))+((o.new&&o.new.required_condition)?'\n+ required_if: '+esc(JSON.stringify(o.new.required_condition)):'');else body=esc(o.op)+' '+esc(o.node_id||o.from||'');
 return '<div class="card flat"><p class="kicker">'+esc(o.node_id||o.op)+'</p><div class="mono">'+body+'\nReason: '+esc(o.rationale||'—')+'</div></div>';}).join('');
-setView('<div class="card"><p class="kicker">Candidate patch '+esc(pt.patch_id||'')+'</p><div class="card-head"><h3>'+ops.length+' workflow edits · cost '+esc(pt.cost)+' · <span class="tag pass">VALIDATED</span></h3></div><p class="mut">'+esc(pt.strategy||'')+'</p>'+(blocks||'<div class="empty" role="status">No operations (semantics already equivalent).</div>')+'</div>');}
+setView('<div class="card"><p class="kicker">Candidate patch '+esc(pt.patch_id||'')+'</p><div class="card-head"><h3>'+ops.length+' workflow edits · cost '+esc(pt.cost)+' · <span class="tag '+((BUILD.validation||{}).status==='VALIDATED_WITHIN_TESTED_MODEL'?'pass':'warn')+'">'+esc((BUILD.validation||{}).status||'Not validated')+'</span></h3></div><p class="mut">'+esc(pt.strategy||'')+'</p>'+(blocks||'<div class="empty" role="status">No operations (semantics already equivalent).</div>')+'</div>');}
 /* ---------- Tests (actions style) ---------- */
 function vTests(){const v=BUILD.validation||{results:[]};const groups={};(v.results||[]).forEach(r=>{(groups[r.suite]=groups[r.suite]||[]).push(r);});
 const names={witness:'Witness replay',boundary:'Boundary behavior',unchanged:'Preservation',integrity:'Workflow integrity',ordering:'Ordering',metamorphic:'Metamorphic',provenance:'Provenance'};
@@ -236,7 +244,7 @@ setView('<div class="card"><p class="kicker">Runtime traces — real-world evide
 +'<label class="field"><input type="checkbox" id="trElig" checked/> eligible</label> <label class="field"><input type="checkbox" id="trOntime" checked/> on_time</label> <label class="field">source <input id="trSource" value="manual" style="width:110px"/></label> '
 +'<button class="btn sm" onclick="ingestTrace()">Ingest trace</button><div id="traceOut" class="mono" role="status"></div></div></div>'
 +'<div class="card flat"><p class="kicker">Bulk ingest (CSV)</p><p class="mut">Header row required; case columns = every non-reserved column (reserved: eligible, on_time, prohibited, required, steps_done, source, workflow_id, occurred_at). All-or-nothing — one bad row fails the batch; duplicate rows are skipped.</p>'
-+'<textarea id="traceCsv" rows="4" class="mono" placeholder="cgpa,amount,eligible,on_time\n7.9,40000,true,true\n8.2,51000,true,true"></textarea><br/>'
++'<textarea aria-label="Trace CSV data" id="traceCsv" rows="4" class="mono" placeholder="cgpa,amount,eligible,on_time\n7.9,40000,true,true\n8.2,51000,true,true"></textarea><br/>'
 +'<button class="btn sm" onclick="ingestCsv()">Ingest CSV</button> <span id="csvOut" class="mono" role="status"></span></div>'
 +'<div class="card flat"><p class="kicker">Comparison vs this build</p><table><thead><tr><th>trace</th><th>vs stale procedure</th><th>vs patched preview</th><th>note</th><th>action</th></tr></thead><tbody>'+crows+'</tbody></table></div>'
 +'<div class="card flat"><p class="kicker">Stored traces ('+list.length+')</p><table><thead><tr><th>id</th><th>case</th><th>outcome</th><th>source</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>');}
@@ -275,29 +283,25 @@ async function buildAgainst(pid){loading('Compiling amendment against '+pid+'…
 if(r.code!==200){showErr(new Error(JSON.stringify(r.data).slice(0,200)));return;}
 BUILD=r.data;drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
 async function openBuild(id){try{BUILD=await get('/builds/'+id);}catch(e){showErr(e);return;}CANDIDATE=null;active='Overview';renderTabs();render();}
-/* ---------- Judge mode ---------- */
-const JSTEPS=[['See the stale portal','Overview','Enter CGPA 7.80 and check: the portal rejects a student the policy calls eligible.'],['Compile the amendment','Overview','Click Compile Amendment (or Run Cloud Execution for the Step Functions path).'],['Meet the person who proves the bug','Witnesses','Each card is a verified failing case with expected vs actual paths.'],['Inspect the localized repair','Procedure','Click any node: why it exists, witnesses, patch ops. Red = stale, green = added.'],['Run regression tests','Tests','12+ checks: witnesses, boundaries, preservation, integrity.'],['Approve and replay','Approval','Review exact hashes, approve the candidate, activate, replay the portal.']];
-function toggleJudge(){JUDGE=!JUDGE;const hc=document.getElementById('hdrControls');if(hc)hc.style.display=JUDGE?'none':'';const jb=document.getElementById('judgebar');const main=document.getElementById('view');if(JUDGE){JSTEP=0;if(main)main.classList.add('with-judge');go('Overview');judgeShow();jb.style.display='flex';}else{if(main)main.classList.remove('with-judge');jb.style.display='none';}}
-function judgeShow(){const s=JSTEPS[JSTEP];const t=s[0],tab=s[1],txt=s[2];document.getElementById('judgebar').innerHTML='<span class="judge-track" style="width:'+Math.round(100*(JSTEP+1)/6)+'%"></span><b class="jstep">JUDGE MODE '+(JSTEP+1)+'/6 · '+esc(t)+'</b><span class="jdesc">'+esc(txt)+'</span><span class="sp"></span><button class="btn ghost sm" onclick="JSTEP=Math.max(0,JSTEP-1);judgeShow()">Back</button><button class="btn sm" onclick="JSTEP=Math.min(5,JSTEP+1);go(JSTEPS[JSTEP][1]);judgeShow()">Next</button><button class="btn ghost sm" onclick="toggleJudge()">Exit</button>';if(active!==tab)go(tab);}
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const dr=document.getElementById('drawerRoot');if(dr&&dr.firstChild)closedrawer();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const dr=document.getElementById('drawerRoot');if(dr&&dr.firstChild&&!PAL.open)closedrawer();}});
 /* ---------- Command palette (Ctrl+K / Cmd+K) — tabs + real actions ---------- */
 function paletteItems(){const items=TABS.map(t=>({label:t,hint:'go to tab',icon:NAV_ICONS[t]||'square',run:()=>go(t)}));
 items.push(
  {label:'Compile Amendment',hint:'run the local deterministic pipeline',icon:'lightning',run:()=>runBuild()},
  {label:'Run Cloud Execution',hint:'Step Functions path',icon:'cloud-arrow-up',run:()=>cloudRun()},
  {label:'Toggle theme',hint:'lab → paper → graphite',icon:'palette',run:()=>toggleTheme()},
- {label:'Judge Mode',hint:'scripted 6-step walkthrough',icon:'chalkboard-teacher',run:()=>toggleJudge()},
  {label:'Download governance bundle',hint:'sha256-sealed evidence pack (approval required)',icon:'seal-check',run:()=>downloadBundle()},
  {label:'Compile pasted policy',hint:'extract + compile the text in Policy input',icon:'brackets-curly',run:()=>{go('Overview');setTimeout(submitPolicy,60);}});
 return items;}
-let PAL={open:false,idx:0,items:[]};
-function openPalette(){if(PAL.open)return;PAL={open:true,idx:0,items:paletteItems()};
+let PAL={open:false,idx:0,items:[]};let paletteTrigger=null;
+function openPalette(){if(PAL.open)return;paletteTrigger=document.activeElement;PAL={open:true,idx:0,items:paletteItems()};
 const root=document.getElementById('drawerRoot');const ov=document.createElement('div');ov.id='palOverlay';
-ov.innerHTML='<div class="pal" role="dialog" aria-modal="true" aria-label="Command palette"><input id="palInput" type="text" placeholder="Type a command… (tabs, compile, traces, theme)" autocomplete="off"/><div id="palList" role="listbox" aria-label="Commands"></div><div class="pal-foot"><small>↑↓ navigate · Enter run · Esc close</small></div></div>';
+ov.innerHTML='<div class="pal" role="dialog" aria-modal="true" aria-label="Command palette"><input id="palInput" aria-label="Search commands" role="combobox" aria-expanded="true" aria-controls="palList" type="text" placeholder="Type a command… (tabs, compile, traces, theme)" autocomplete="off"/><div id="palList" role="listbox" aria-label="Commands"></div><div class="pal-foot"><small>↑↓ navigate · Enter run · Esc close</small></div></div>';
 root.appendChild(ov);ov.addEventListener('mousedown',e=>{if(e.target===ov)closePalette();});
 const inp=document.getElementById('palInput');inp.addEventListener('input',()=>palRender());
 inp.addEventListener('keydown',e=>{
- if(e.key==='ArrowDown'){e.preventDefault();PAL.idx=Math.min(PAL.idx+1,palFiltered().length-1);palRender(true);}
+ if(e.key==='Tab'){e.preventDefault();inp.focus();}
+ else if(e.key==='ArrowDown'){e.preventDefault();PAL.idx=Math.max(0,Math.min(PAL.idx+1,palFiltered().length-1));palRender(true);}
  else if(e.key==='ArrowUp'){e.preventDefault();PAL.idx=Math.max(0,PAL.idx-1);palRender(true);}
  else if(e.key==='Enter'){e.preventDefault();const f=palFiltered();const it=f[PAL.idx];if(it){closePalette();it.run();}}
  else if(e.key==='Escape'){e.preventDefault();closePalette();}});
@@ -307,10 +311,11 @@ let items=PAL.items;if(q)items=items.filter(it=>(it.label+' '+it.hint).toLowerCa
 return items;}
 function palRender(keepIdx){const list=document.getElementById('palList');if(!list)return;const f=palFiltered();
 if(!keepIdx)PAL.idx=Math.min(PAL.idx,Math.max(0,f.length-1));
-list.innerHTML=f.map((it,i)=>'<div class="pal-item'+(i===PAL.idx?' sel':'')+'" role="option" aria-selected="'+(i===PAL.idx)+'" data-i="'+i+'"><i class="ph ph-'+esc(it.icon)+'" aria-hidden="true"></i><b>'+esc(it.label)+'</b><small>'+esc(it.hint)+'</small></div>').join('')||'<div class="pal-item mut">no matching command</div>';
+list.innerHTML=f.map((it,i)=>'<div class="pal-item'+(i===PAL.idx?' sel':'')+'" id="pal-option-'+i+'" role="option" aria-selected="'+(i===PAL.idx)+'" data-i="'+i+'"><i class="ph ph-'+esc(it.icon)+'" aria-hidden="true"></i><b>'+esc(it.label)+'</b><small>'+esc(it.hint)+'</small></div>').join('')||'<div class="pal-item mut">no matching command</div>';
 [...list.querySelectorAll('.pal-item[data-i]')].forEach(n=>{n.addEventListener('click',()=>{const it=f[+n.dataset.i];closePalette();it.run();});n.addEventListener('mousemove',()=>{PAL.idx=+n.dataset.i;[...list.children].forEach((c,j)=>c.classList.toggle('sel',j===PAL.idx));});});
+const inp=document.getElementById('palInput');if(f.length)inp.setAttribute('aria-activedescendant','pal-option-'+PAL.idx);else inp.removeAttribute('aria-activedescendant');
 const sel=list.querySelector('.pal-item.sel');if(sel)sel.scrollIntoView({block:'nearest'});}
-function closePalette(){PAL.open=false;const ov=document.getElementById('palOverlay');if(ov)ov.remove();}
+function closePalette(){PAL.open=false;const ov=document.getElementById('palOverlay');if(ov)ov.remove();if(paletteTrigger&&paletteTrigger.isConnected)paletteTrigger.focus();}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();if(PAL.open)closePalette();else openPalette();}});
 try{const ab=document.getElementById('apiBase');if(ab&&window.PROCESSPATCH_API)ab.value=window.PROCESSPATCH_API;}catch(e){}
 renderTabs();render();authLoad();authFetchCfg().then(()=>authMaybeExchange()).then(()=>renderTabs());loadHistory();

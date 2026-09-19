@@ -247,6 +247,12 @@ Resources:
               Resource: '*'
               # SendTaskSuccess supports no resource types (service auth reference).
       Events:
+        Preflight:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: '/{proxy+}', Method: OPTIONS, Auth: { Authorizer: NONE } }
+        HealthAlias:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: /health, Method: GET, Auth: { Authorizer: NONE } }
         Proxy:
           Type: HttpApi
           Properties: { ApiId: !Ref Api, Path: '/{proxy+}', Method: ANY }

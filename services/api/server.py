@@ -40,12 +40,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             n = int(self.headers.get("Content-Length", 0))
         except ValueError:
-            n = 0
+            raise _AuthzHTTP(400, "invalid Content-Length")
+        if n < 0 or n > 1024 * 1024:
+            raise _AuthzHTTP(413, "request body exceeds 1 MiB limit")
         raw = self.rfile.read(n) if n else b"{}"
         try:
-            return json.loads(raw.decode() or "{}")
-        except Exception:
-            return {}
+            body = json.loads(raw.decode() or "{}")
+        except (ValueError, UnicodeError):
+            raise _AuthzHTTP(400, "body must be valid JSON")
+        if not isinstance(body, dict):
+            raise _AuthzHTTP(400, "body must be a JSON object")
+        return body
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -229,14 +234,17 @@ class Handler(BaseHTTPRequestHandler):
         except _AuthzHTTP as e:
             self._send(e.status, {"error": e.message})
             return
-        code, obj = self._route("GET", parsed.path, urllib.parse.parse_qs(parsed.query), {})
+        try:
+            code, obj = self._route("GET", parsed.path, urllib.parse.parse_qs(parsed.query), {})
+        except RuntimeError:
+            code, obj = 503, {"error": "service temporarily unavailable"}
         self._send(code, obj)
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        body = self._body()
         try:
+            body = self._body()
             _, body = self._guard("POST", path, body)
         except _AuthzHTTP as e:
             self._send(e.status, {"error": e.message})
@@ -247,6 +255,8 @@ class Handler(BaseHTTPRequestHandler):
             code, obj = 404, {"error": f"unknown: {e}"}
         except ValueError as e:
             code, obj = 409, {"error": str(e)}
+        except RuntimeError:
+            code, obj = 503, {"error": "service temporarily unavailable"}
         self._send(code, obj)
 
     def log_message(self, *a):
