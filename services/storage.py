@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import tempfile
 
 DATA_DIR = os.environ.get("PROCESSPATCH_DATA",
                           os.path.join(os.path.dirname(__file__), "..", "data"))
@@ -45,8 +46,17 @@ def _file_load(name: str, default):
 
 
 def _file_save(name: str, obj) -> None:
-    with open(_path(name), "w") as f:
-        json.dump(obj, f, indent=2, default=str)
+    path = _path(name)
+    fd, temporary = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 # ---- dynamodb backend -------------------------------------------------------
@@ -62,17 +72,29 @@ def _item_id(name: str, item: dict, n: int) -> str:
             or f"{time.time():.3f}-{n}")
 
 
+def _dd_items(table, name: str) -> list:
+    """Read the complete collection, including pages beyond DynamoDB's limit."""
+    request = {"KeyConditionExpression": "PK = :pk",
+               "ExpressionAttributeValues": {":pk": f"COLL#{name}"},
+               "ConsistentRead": True}
+    items = []
+    while True:
+        page = table.query(**request)
+        items.extend(page.get("Items", []))
+        if not page.get("LastEvaluatedKey"):
+            return items
+        request["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+
 def _dd_load(name: str, default):
     if _backend() != "dynamodb":
         return _file_load(name, default)
     try:
         if isinstance(default, dict):
-            r = _dd().get_item(Key={"PK": f"COLL#{name}", "SK": "META"})
+            r = _dd().get_item(Key={"PK": f"COLL#{name}", "SK": "META"}, ConsistentRead=True)
             raw = (r.get("Item") or {}).get("data_json")
             return json.loads(raw) if raw is not None else default
-        r = _dd().query(KeyConditionExpression="PK = :pk",
-                        ExpressionAttributeValues={":pk": f"COLL#{name}"})
-        items = sorted(r.get("Items", []), key=lambda i: i.get("SK", ""))
+        items = sorted(_dd_items(_dd(), name), key=lambda i: i.get("SK", ""))
         return [json.loads(i["data_json"]) for i in items]
     except Exception as e:  # noqa: BLE001 — re-raised, never swallowed
         raise RuntimeError(f"storage load failed for {name}: {type(e).__name__}: {e}") from e
@@ -88,8 +110,7 @@ def _dd_save(name: str, obj) -> None:
                              "data_json": json.dumps(obj, default=str),
                              "GSI_PK": "COLL", "GSI_SK": name})
             return
-        old = t.query(KeyConditionExpression="PK = :pk",
-                      ExpressionAttributeValues={":pk": f"COLL#{name}"}).get("Items", [])
+        old = _dd_items(t, name)
         with t.batch_writer() as b:
             for i in old:
                 b.delete_item(Key={"PK": i["PK"], "SK": i["SK"]})

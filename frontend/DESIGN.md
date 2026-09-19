@@ -4,7 +4,7 @@
 
 | Token | Value | Role |
 |---|---|---|
-| `--accent` / `--accent-hover` | `#2563eb` / `#1d4ed8` | The ONE accent (trust/engineering blue). Primary buttons, active nav edge, judge progress. White text on it passes ≥4.5:1. |
+| `--accent` / `--accent-hover` | `#2563eb` / `#1d4ed8` | The ONE accent (trust/engineering blue). Primary buttons and active nav edge. White text on it passes ≥4.5:1. |
 | `--pass` / `--pass-bg` / `--pass-ink` / `--pass-line` | `#16a34a` / `#052e16` / `#bbf7d0` / `#14532d` | Semantic pass ONLY: validated states, added graph nodes. |
 | `--fail-strong` / `--fail-bg` / `--fail-ink` / `--fail-line` | `#dc2626` / `#3f0d0d` / `#fecaca` / `#7f1d1d` | Semantic fail ONLY: witnesses, stale nodes, failing checks. |
 | `--warn-strong` / `--warn-bg` / `--warn-ink` / `--warn-line` | `#d97706` / `#451a03` / `#fed7aa` / `#9a3412` | Semantic warn ONLY: `BEDROCK_CANDIDATE`, `SKIPPED`, no-build-yet. |
@@ -21,7 +21,6 @@
 - **Overview:** status card first (build id + status pill + extraction trust badge + review state), then 4 stat tiles (north-star top-left per F-pattern), a text pipeline strip, then the Policy×Person×Procedure evidence grid and the portal/policy workhorses. Nothing marketing-grade.
 - **Tables are the product:** every data view (witness fields, procedure nodes, patch ops, test suites, approvals, traces, benchmarks, history) is a real `<table>` with `<thead>`, uppercase 12px headers, right-aligned numerics, row hover.
 - **Approval:** merge-protection rail (`<ol class="steps">`, 5 checks each paired with its exact criterion) above the three gate cards — modeled on a linear stepper with a review step.
-- **Judge Mode:** fixed bottom bar with a 2px real progress track (`(JSTEP+1)/6`), `JUDGE MODE n/6` counter, title + instruction, Back/Next/Exit. Header controls hide while guiding so the eye stays in flow.
 - **Async:** `loading()` renders skeleton bars + `role="status"`; `showErr()` renders an alert box with the recovery command; empty states are dashed boxes with the next action (never bare "no data").
 
 ## 3. References adapted (tightly, no copy-paste)

@@ -29,6 +29,8 @@ import hmac
 import json
 import os
 import time
+import math
+import binascii
 import urllib.request
 
 ADMIN_GROUP = "pp-admins"
@@ -127,7 +129,10 @@ def _hs256_verify(token: str) -> dict:
 
 
 def _check_claims(claims: dict) -> None:
-    if claims.get("exp", 0) < time.time():
+    expiry = claims.get("exp", 0)
+    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not math.isfinite(expiry):
+        raise AuthzError(401, "invalid token expiry")
+    if expiry <= time.time():
         raise AuthzError(401, "token expired")
     if mode() == "cognito":
         _, _, client = _pool_coords()
@@ -136,40 +141,13 @@ def _check_claims(claims: dict) -> None:
         if claims.get("token_use") == "access":
             if claims.get("client_id") != client:
                 raise AuthzError(401, "wrong client")
+        elif claims.get("token_use") != "id":
+            raise AuthzError(401, "unsupported token use")
         elif claims.get("aud") != client:
             raise AuthzError(401, "wrong audience")
 
 
 # ------------------------------------------------------------- identity ----
-def _parse_groups(raw) -> list:
-    """cognito:groups reaches the function in EVERY shape API GW has shipped:
-    proper list (REST context), 'pp-admins' (stringified single),
-    'pp-admins,pp-reviewers' (stringified many), and — live-verified via the
-    T41c AUTHDEBUG line — "[pp-admins]" (list flattened to its bracket-form,
-    double-quoted by the context serializer). Accept them all; fail closed to
-    [] (reads-only) on anything unparseable."""
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [str(g) for g in raw if str(g).strip()]
-    if isinstance(raw, str):
-        s = raw.strip()
-        if s.startswith("[") and s.endswith("]"):
-            inner = s[1:-1].strip()
-            if not inner:
-                return []
-            # JSON array (possibly itself quoted) or bracket-flattened names
-            try:
-                val = json.loads(s)
-                if isinstance(val, list):
-                    return [str(g).strip("\"'").strip() for g in val if str(g).strip("\"'").strip()]
-            except ValueError:
-                pass
-            return [g.strip("\"'").strip() for g in inner.split(",") if g.strip("\"'").strip()]
-        return [g.strip() for g in s.split(",") if g.strip()]
-    return []
-
-
 def authenticate(headers: dict) -> dict | None:
     """Verify the bearer token (if any) and return an identity dict.
     Returns None in `off` mode. Raises AuthzError(401) on bad tokens."""
@@ -179,9 +157,16 @@ def authenticate(headers: dict) -> dict | None:
     if not auth.lower().startswith("bearer "):
         raise AuthzError(401, "sign in required (Authorization: Bearer <token>)")
     token = auth[7:].strip()
-    claims = _rs256_verify(token) if mode() == "cognito" else _hs256_verify(token)
-    _check_claims(claims)
-    groups = set(claims.get("cognito:groups") or [])
+    if mode() not in ("cognito", "hs256-test"):
+        raise AuthzError(500, "unsupported authentication mode")
+    try:
+        if len(token.split(".")) != 3:
+            raise ValueError("invalid token segments")
+        claims = _rs256_verify(token) if mode() == "cognito" else _hs256_verify(token)
+        _check_claims(claims)
+        groups = _groups(claims.get("cognito:groups"))
+    except (ValueError, TypeError, KeyError, AttributeError, binascii.Error) as exc:
+        raise AuthzError(401, "malformed bearer token") from exc
     if ADMIN_GROUP in groups:
         role = "admin"
     elif REVIEWER_GROUP in groups:
@@ -193,6 +178,19 @@ def authenticate(headers: dict) -> dict | None:
             "role": role, "groups": sorted(groups), "via": mode()}
 
 
+def _groups(value) -> set[str]:
+    # HTTP API authorizer claims may serialize an array as a string.
+    if isinstance(value, str):
+        value = value.strip()
+        try:
+            value = json.loads(value)
+        except ValueError:
+            value = value.strip("[]").split(",")
+    if not isinstance(value, (list, tuple, set)):
+        return set()
+    return {g.strip() for g in value if isinstance(g, str) and g.strip()}
+
+
 def claims_from_event(event: dict) -> dict | None:
     """Lambda path: API Gateway Cognito authorizer already validated the JWT."""
     if mode() == "off":
@@ -201,7 +199,7 @@ def claims_from_event(event: dict) -> dict | None:
     claims = ctx.get("jwt", {}).get("claims") or ctx.get("claims") or {}
     if not claims:
         return None  # authorizer absent -> authenticate(headers) will 401
-    groups = set(_parse_groups(claims.get("cognito:groups")))
+    groups = _groups(claims.get("cognito:groups"))
     if not groups:
         # Some HTTP API JWT-authorizer configurations drop colon-carrying claim
         # keys (cognito:groups, cognito:username) before they reach the

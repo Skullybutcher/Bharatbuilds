@@ -125,7 +125,6 @@ nav.side button.nav-item.active i{color:var(--accent)}
 nav.side .aws-chip{margin:var(--sp-2) var(--sp-1) 0;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card-2);font-size:var(--fs-12);color:var(--mut);word-break:break-all}
 nav.side .aws-chip b{color:var(--mut-2);display:block;margin-bottom:2px}
 main{flex:1;padding:var(--sp-3);max-width:1180px;min-width:0;margin:0 auto;width:100%}
-main.with-judge{padding-bottom:calc(var(--sp-4) * 3)}
 /* ---------- cards / grids ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-2);
   margin:0 0 var(--sp-2);box-shadow:var(--shadow-1),inset 0 1px 0 rgba(255,255,255,.025)}
@@ -193,7 +192,7 @@ main.with-judge{padding-bottom:calc(var(--sp-4) * 3)}
 .util-cluster{display:flex;gap:var(--sp-1);align-items:center;padding-left:var(--sp-2);border-left:1px solid var(--line);margin-left:var(--sp-1)}
 @media(max-width:960px){.activity{grid-template-columns:1fr}.util-cluster{border-left:0;padding-left:0}}
 /* ---------- hero (no-build first screen) — focal zone ---------- */
-.hero{display:grid;grid-template-columns:1.35fr .65fr;gap:var(--sp-4);padding:var(--sp-4);align-items:start;
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:var(--sp-4);padding:var(--sp-4);align-items:start;
   background:radial-gradient(640px 240px at 12% -8%,rgba(15,118,110,.09),transparent 60%),var(--card);
   box-shadow:var(--shadow-1)}
 [data-theme="dark"] .hero{background:radial-gradient(640px 240px at 12% -8%,rgba(89,195,195,.08),transparent 60%),var(--card);
@@ -290,15 +289,6 @@ svg.graph .node:focus{outline:2px solid var(--focus);outline-offset:2px}
 .drawer{position:fixed;top:12px;right:12px;bottom:12px;width:min(440px,94vw);background:var(--panel);
   border:1px solid var(--line-soft);border-radius:var(--radius-lg);padding:var(--sp-3);overflow-y:auto;z-index:40;box-shadow:var(--shadow-2)}
 .overlay{position:fixed;inset:0;background:rgba(4,6,10,.6);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);z-index:39}
-/* ---------- judge mode bottom dock ---------- */
-.judge-track{position:absolute;top:0;left:0;height:2px;background:var(--accent);width:0;border-radius:2px}
-.judgebar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);width:min(1080px,94vw);background:rgba(255,255,255,.94);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line-soft);border-radius:var(--radius-lg);
-  padding:var(--sp-2) var(--sp-3);z-index:30;display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;box-shadow:var(--shadow-2)}
-[data-theme="dark"] .judgebar{background:rgba(18,22,31,.92)}
-.judgebar .jstep{font-size:var(--fs-13);font-weight:800;white-space:nowrap;color:var(--txt)}
-.judgebar .jdesc{font-size:var(--fs-13);color:var(--mut)}
-.judgebar .sp{flex:1}
 /* ---------- async states ---------- */
 .state-block{padding:var(--sp-3);text-align:left}
 .loading{color:var(--mut);padding:var(--sp-3)}
@@ -332,3 +322,32 @@ svg.graph .node:focus{outline:2px solid var(--focus);outline-offset:2px}
 .pal-foot{border-top:1px solid var(--line);padding:6px 12px;color:var(--mut)}
 .pal-item.mut{cursor:default;color:var(--mut)}
 @media(prefers-reduced-motion:reduce){#palOverlay{backdrop-filter:none}}
+
+/* Keep dense evidence and policy inputs inside their available workspace. */
+.hero>div,.cols2>div,.activity>div{min-width:0}
+textarea,input[type=file]{max-width:100%;min-width:0}
+.ed-head,.ed-foot{flex-wrap:wrap}
+.ed-foot input[type=file]{width:100%;flex:1 1 180px}
+.ed-foot .btn{white-space:nowrap}
+.activity{grid-column:1/-1}
+.mini button.row{width:100%;font:inherit;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--line);text-align:left}
+.connection-settings{position:relative;color:var(--mut);font-size:12px}
+.connection-settings summary{cursor:pointer;padding:8px}
+.connection-settings .api-inline{position:absolute;right:0;top:100%;background:var(--panel);padding:16px;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow-2);z-index:25}
+[data-theme=lab] .skel{background:linear-gradient(90deg,var(--card-2),var(--raise),var(--card-2));background-size:200% 100%}
+table{display:block;max-width:100%;overflow-x:auto}
+@media(max-width:1100px){.hero{grid-template-columns:1fr}.hero h1{max-width:24ch}}
+@media(max-width:960px){
+  header.top{position:relative;padding:16px;gap:12px}
+  .top-actions{margin-left:0;width:100%;gap:8px}
+  nav.side{flex-wrap:nowrap;overflow-x:auto;padding:8px;gap:4px;border-bottom:1px solid var(--line)}
+  nav.side .sec,nav.side .aws-chip{display:none}
+  nav.side button.nav-item{flex:0 0 auto;white-space:nowrap;min-height:44px}
+  main{padding:16px}
+  .hero{padding:24px;gap:24px}
+  .spine{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+  .spine li{padding:0;font-size:11px}.spine li::before{display:none}.spine .sd{display:none}
+  .util-cluster{flex-wrap:wrap}
+}
+@media(max-width:480px){.hero{padding:20px}h1{font-size:30px}.brand .sub{max-width:28ch}.activity{grid-template-columns:1fr}.pal-item small{display:none}.field{max-width:100%}.top-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.util-cluster{display:contents}.top-actions>.field{grid-column:1/-1}.top-actions .btn{min-height:40px}.connection-settings{justify-self:center}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

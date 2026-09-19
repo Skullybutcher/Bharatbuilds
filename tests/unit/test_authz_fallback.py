@@ -126,9 +126,15 @@ def test_bracket_flattened_groups_live_shape(signed_token):
     event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "[pp-reviewers, pp-admins]"
     ident = authz.claims_from_event(event)
     assert ident["role"] == "admin" and set(ident["groups"]) == {"pp-admins", "pp-reviewers"}
-    # garbage stays fail-closed
+    # garbage groups: the group-less fallback applies — a valid Bearer header
+    # rescues identity (token is ground truth, GW verified its signature)
     event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "[[["
     ident = authz.claims_from_event(event)
+    assert ident["role"] == "admin" and ident["via"] == "cognito"
+    # ...and with NO rescuable header, garbage groups fail closed to readonly
+    event_noh = _gw_event(None, with_groups=False)
+    event_noh["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "[[["
+    ident = authz.claims_from_event(event_noh)
     assert ident["role"] == "readonly"
 
 

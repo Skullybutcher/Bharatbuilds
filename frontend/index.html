@@ -8,8 +8,8 @@
 <script src="./config.js"></script>
 <link rel="stylesheet" href="./fonts/fonts.css"/>
 <link rel="stylesheet" href="./vendor/phosphor.css"/>
-<link rel="stylesheet" href="./styles.css"/>
-<script>/* default identity: lab (rust/graphite). localStorage overrides; real toggle in app.js. */try{if(!localStorage.getItem('pp_theme'))document.documentElement.setAttribute('data-theme','lab');}catch(e){document.documentElement.setAttribute('data-theme','lab');}</script>
+<link rel="stylesheet" href="./styles.css?v=20260919-prebuild-tabs"/>
+<script>/* default identity: lab (rust/graphite). localStorage overrides; real toggle in app.js. */try{const t=localStorage.getItem('pp_theme')||'lab';if(t==='dark'||t==='lab')document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','lab');}</script>
 </head>
 <body>
 <a class="skip-link" href="#view">Skip to content</a>
@@ -17,16 +17,15 @@
 <div class="brand"><div class="title">ProcessPatch</div><div class="sub">Operational Rule Compiler · CI for real-world procedures</div></div>
 <div id="buildBadge" class="badge" role="status">no build yet</div>
 <span id="hdrControls" class="top-actions">
-<label class="field">Domain <select id="domain"><option value="research_grant">research_grant</option><option value="reimbursement">reimbursement</option></select></label>
+<label class="field">Domain <select id="domain"><option value="research_grant">Research grants</option><option value="reimbursement">Reimbursements</option></select></label>
 <button class="btn sm" onclick="runBuild()">Compile Amendment</button>
 <span class="util-cluster">
 <button class="btn ghost sm" onclick="cloudRun()" title="Run via Step Functions in AWS">Cloud<i class="ph ph-cloud-arrow-up" aria-hidden="true" style="margin-left:6px"></i></button>
-<small class="api-inline">API <input id="apiBase" value="http://localhost:8000" style="width:150px" aria-label="API base URL"/></small>
+<details class="connection-settings"><summary>Connection</summary><small class="api-inline">API <input id="apiBase" value="http://localhost:8000" style="width:150px" aria-label="API base URL"/></small></details>
 <button class="btn ghost sm" onclick="toggleTheme()" id="themeBtn" aria-label="Toggle light or dark theme" title="Toggle theme"><i class="ph ph-sun" aria-hidden="true"></i></button>
 <button id="authBtn" class="btn ghost sm" onclick="authToggle()">Sign in</button>
 </span>
 <button class="btn ghost sm" onclick="openPalette()" title="Command palette (Ctrl+K)"><i class="ph ph-command" aria-hidden="true"></i></button>
-<button class="btn ghost sm" onclick="toggleJudge()">Judge Mode</button>
 </span>
 </header>
 <div class="shell">
@@ -35,8 +34,7 @@
 <div class="card hero" style="min-height:420px"><div><h1 style="opacity:.6">Loading…</h1><span class="skel" style="width:60%"></span><span class="skel" style="width:40%"></span></div></div>
 </main>
 </div>
-<div id="judgebar" class="judgebar" style="display:none" aria-label="Judge mode guide"></div>
 <div id="drawerRoot"></div>
-<script src="./lib/app.js"></script>
+<script src="./lib/app.js?v=20260919-prebuild-tabs"></script>
 </body>
 </html>
