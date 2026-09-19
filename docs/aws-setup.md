@@ -28,6 +28,34 @@ frontend auto-built from `main`.
 IAM is least-privilege: per-function DynamoDB/S3/Bedrock scopes, SFN role
 scoped to the 7 function ARNs, EventBridge role scoped to StartExecution.
 
+## GitHub Actions AWS authentication
+
+The `deploy` job in `.github/workflows/ci.yml` uses GitHub's OIDC token; it
+does not use long-lived AWS access keys. In IAM, create an identity provider
+with:
+
+```text
+Provider URL: https://token.actions.githubusercontent.com
+Audience: sts.amazonaws.com
+```
+
+The role stored in the repository secret `AWS_DEPLOY_ROLE_ARN` must trust that
+provider with `sts:AssumeRoleWithWebIdentity` and restrict the subject to:
+
+```text
+repo:Skullybutcher/Bharatbuilds:ref:refs/heads/main
+```
+
+Set the repository secret to the ARN of the role, for example:
+
+```text
+arn:aws:iam::262786914860:role/GitHubActionsProcessPatchDeploy
+```
+
+The workflow must retain `id-token: write` and `contents: read` permissions.
+The Node 20 message from older versions of the credentials action is only a
+warning; this repository uses `configure-aws-credentials@v5`.
+
 ## Deploy
 
 ```bash

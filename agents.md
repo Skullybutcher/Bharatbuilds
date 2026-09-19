@@ -56,6 +56,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T3 | New unit tests for `services/normalizer/normalizer.py` interval + delta edge cases | **IBM Bob** | `tests/unit/test_normalizer_ext.py` (new file only) | DONE |
 | T4 | `CHANGELOG.md` for v0.3.0 features (auth, traces, language, workspaces, judge demo) | **IBM Bob** | `CHANGELOG.md` (new file only) | DONE |
 | T5 | Backend standing by: fixes/reviews requested by T1–T4; no frontend edits | **Buffy** | everything except `frontend/**` | STANDBY |
+| T6 | Repair GitHub Actions AWS OIDC deployment authentication | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -82,6 +83,8 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 ## 6. Activity log (append-only, newest first)
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
+
+- 2026-09-19 18:00 | GitHub Copilot | T6 | `.github/workflows/ci.yml`, `docs/aws-setup.md`, AWS IAM OIDC provider | DONE: registered `https://token.actions.githubusercontent.com` with audience `sts.amazonaws.com`; verified role `GitHubActionsProcessPatchDeploy` trust for `repo:Skullybutcher/Bharatbuilds:ref:refs/heads/main`; upgraded credentials action to v5; infra validation, 178/178 verify, 70/70 pytest, and workflow YAML parse PASS | commit: "Fix GitHub Actions AWS OIDC deployment auth"; human should rerun the failed workflow
 
 - 2026-09-19 14:10 | Buffy | T5 (NEEDS_BUFFY closure) | `scripts/smoke.ps1` | DONE: mirrored bash smoke auth checks (auth-config fetch, 401 checks on /builds + guardrails via StatusCode helper); PowerShell Parser::ParseFile → parse OK; verify 178/178 PASS after edit | commit: "Smoke (ps1): assert auth-gated routes like bash smoke" — resolves the NEEDS_BUFFY note from T2 review prep
 - 2026-09-19 14:00 | Buffy | integration review of T1–T4 | read-only across frontend/**, tests/**, docs/**, CHANGELOG.md | VERDICT: all four tasks verified independently — 178/178 verify, 70/70 pytest (Bob's 18 included), INFRA PASS, judge_demo 6/6 beats, app.js syntax OK, zero banned patterns in styles.css, all 10 tabs + contract functions + esc() (48 uses) intact, Bob's doc numbers spot-checked correct (31-scenario, 16-case, 178, auth cross-refs) | both agents' DONE claims confirmed; tree ready for human to commit
