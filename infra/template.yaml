@@ -142,6 +142,26 @@ Resources:
       UserPoolId: !Ref UserPool
       Description: May review rules (Gate 1) and decide patches (Gate 2).
 
+  # Demo admin — the pool is invite-only (no self-signup), so without this
+  # account NOBODY can log in to the deployed demo. Confirmation message is
+  # suppressed; infra/deploy.sh sets a random password post-deploy and prints
+  # it (never committed). See T33.
+  DemoAdmin:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPool
+      Username: demo-admin@processpatch.demo
+      MessageAction: SUPPRESS
+      UserAttributes:
+        - { Name: email, Value: demo-admin@processpatch.demo }
+        - { Name: email_verified, Value: 'true' }
+  DemoAdminMembership:
+    Type: AWS::Cognito::UserPoolUserToGroupAttachment
+    Properties:
+      GroupName: !Ref AdminsGroup
+      UserPoolId: !Ref UserPool
+      Username: !Ref DemoAdmin
+
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
@@ -162,7 +182,12 @@ Resources:
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
         - !Sub '${FrontendOrigin}/'
+        # Live demo URLs (deploy.sh's Amplify discovery can fail silently and
+        # leave FrontendOrigin at the bootstrap value — these keep the real
+        # deployment working regardless). See T33.
+        - 'https://main.d1bq8os9dwj0d.amplifyapp.com/'
         - 'http://localhost:8000/'
+        - 'http://localhost:8080/'
       AccessTokenValidity: 8
       IdTokenValidity: 8
       TokenValidityUnits: { AccessToken: hours, IdToken: hours }
@@ -184,7 +209,18 @@ Resources:
               issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
             IdentitySource: '$request.header.Authorization'
       CorsConfiguration:
-        AllowOrigins: [!Ref FrontendOrigin]
+        # FrontendOrigin plus the LIVE demo URL and local dev. Hardcoding the
+        # live origin is deliberate: the bootstrap FrontendOrigin depends on
+        # deploy.sh's Amplify-app discovery, which failed in practice and left
+        # the deployed API CORS-allowing only 'main.dummy.amplifyapp.com' —
+        # every real browser was blocked. A stale allow-list entry for a URL
+        # that no longer exists costs nothing; a missing entry for the live
+        # URL costs the demo. See T33.
+        AllowOrigins:
+          - !Ref FrontendOrigin
+          - 'https://main.d1bq8os9dwj0d.amplifyapp.com'
+          - 'http://localhost:8080'
+          - 'http://127.0.0.1:8080'
         AllowMethods: ['GET', 'POST', 'OPTIONS']
         AllowHeaders: ['Content-Type', 'Authorization']
 
