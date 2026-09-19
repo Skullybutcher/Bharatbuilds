@@ -240,8 +240,18 @@ Resources:
         - S3WritePolicy: { BucketName: !Ref SourceBucket }
         - Statement:
             - Effect: Allow
-              Action: states:StartExecution
+              Action:
+                - states:StartExecution
+                - states:DescribeExecution
               Resource: !Ref BuildStateMachine
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+                - states:DescribeExecution
+              Resource: !Sub '${BuildStateMachine}:*'
+              # execution ARNs are <smArn>:<execName>; DescribeExecution
+              # resolves against execution resources (GET /executions/{arn}).
         - Statement:
             - Effect: Allow
               Action: states:SendTaskSuccess
