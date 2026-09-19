@@ -1,0 +1,33 @@
+# Amplify build spec — generates frontend/config.js from the API_URL
+# environment variable (set in Amplify console → App settings → Environment
+# variables, value = the deployed API base, e.g. the ApiUrl CloudFormation
+# output from `infra/deploy.sh`). No API_URL set => localhost default, which
+# only works when the API is actually local.
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - |
+          if [ -z "$API_URL" ]; then
+            echo "WARNING: API_URL not set — building with localhost default; the deployed UI will not reach the API." >&2
+          fi
+    build:
+      commands:
+        - |
+          {
+            echo "// Generated at Amplify build time from \$API_URL (deploy default: localhost)."
+            echo "window.PROCESSPATCH_API = window.PROCESSPATCH_API || \"${API_URL:-http://localhost:8000}\";"
+          } > frontend/config.js
+        - echo "config.js -> $(cat frontend/config.js | tail -1)"
+  artifacts:
+    baseDirectory: frontend
+    files:
+      - '**/*'
+  cache:
+    paths: []
+customHeaders:
+  - pattern: '/config.js'
+    headers:
+      - key: Cache-Control
+        value: 'no-cache, must-revalidate'

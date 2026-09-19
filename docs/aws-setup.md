@@ -45,7 +45,10 @@ suffix wildcard accommodates GitHub branch and environment subject formats:
 
 ```text
 repo:Skullybutcher/Bharatbuilds:*
+repo:Skullybutcher@*/Bharatbuilds@*:ref:refs/heads/main
 ```
+
+GitHub repositories using immutable subject claims include numeric owner and repository IDs, so the role must allow both forms for the `main` branch:
 
 The workflow uses the verified role ARN directly so a stale or malformed
 repository secret cannot select a different role:
@@ -55,6 +58,9 @@ arn:aws:iam::262786914860:role/GitHubActionsProcessPatchDeploy
 ```
 
 The workflow must retain `id-token: write` and `contents: read` permissions.
+It also prints the non-secret repository/ref/event context immediately before
+the credential step, which makes any future trust-subject mismatch visible in
+the job log.
 The Node 20 message from older versions of the credentials action is only a
 warning; this repository uses `configure-aws-credentials@v5`.
 
