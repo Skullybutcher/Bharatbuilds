@@ -246,12 +246,10 @@ Resources:
               Resource: !Ref BuildStateMachine
         - Statement:
             - Effect: Allow
-              Action:
-                - states:StartExecution
-                - states:DescribeExecution
-              Resource: !Sub '${BuildStateMachine}:*'
-              # execution ARNs are <smArn>:<execName>; DescribeExecution
-              # resolves against execution resources (GET /executions/{arn}).
+              Action: states:DescribeExecution
+              Resource: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:processpatch-build-${EnvName}:*'
+              # execution ARNs are ...:execution:<sm-name>:<exec-name> — the
+              # :stateMachine: segment of the SM ARN does NOT match them.
         - Statement:
             - Effect: Allow
               Action: states:SendTaskSuccess

@@ -322,6 +322,13 @@ def api_handler(event, context):
             return _out(event, {"error": str(e)}, 409)
         except RuntimeError:
             return _out(event, {"error": "service temporarily unavailable"}, 503)
+        except Exception as e:  # noqa: BLE001 — 500 with a CloudWatch trace line
+            import os as _eos, json as _ejson, traceback as _etb
+            if _eos.environ.get("PP_AUTH_DEBUG") == "1":
+                print("RESUMEDEBUG", _ejson.dumps({"path": raw_path, "method": method,
+                    "exc": f"{type(e).__name__}: {e}"[:300]})[:1200])
+                _etb.print_exc()
+            return _out(event, {"error": "internal error"}, 500)
 
     if method == "GET" and raw_path in ("/", "/health"):
         return call(A.health)

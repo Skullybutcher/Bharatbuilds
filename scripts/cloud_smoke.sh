@@ -76,7 +76,7 @@ import json, sys
 policy = """# Smoke amendment (2026-09-19, POLICY-V2) — amends POLICY-V1
 
 ### Sec 4.1 Eligibility threshold (amended)
-Applicants must have CGPA >= 7.25. (Relaxed from 8.0.)
+Applicants must have CGPA >= 7.1. (Relaxed from 8.0.)
 
 ### Sec 4.2 Recommendation (amended)
 A faculty recommendation is required only when CGPA < 8.0.
@@ -96,32 +96,44 @@ case "$(echo "$B" | jqpy "d.get('idempotent_reuse', False)")" in
 esac
 
 say "execute (Step Functions)"
+# Baseline the builds list BEFORE starting, then diff for the new BUILD- doc:
+# a Step Functions execution only exposes its output at TERMINAL state, but the
+# happy path parks at a human gate and never terminates until the gates are
+# driven — so the execution output can never be the discovery mechanism.
+BASE=$(mktemp)
+curl -fsS "$API/builds" -H "$AH" -o "$BASE"
 EX=$(curl -fsS -X POST "$API/builds/$BID/execute" -H "$AH" -H "Content-Type: application/json" -d '{}')
 ARN=$(echo "$EX" | jqpy "d['executionArn']")
 echo "execution: ${ARN##*/}"
 [ -n "$ARN" ] && [ "$ARN" != "None" ] || die "no executionArn from /execute: $EX"
 
-# ---- wait for the execution to park at a gate, then adopt the real build id --
-# A DRAFT never mutates (by design); Step Functions compiles under a NEW hash-
-# derived BUILD- id and persists it. Follow the execution output to find it.
-poll_exec() {
-  local OUT=""
+# ---- wait for the compiled build to appear (SFN persists under a new id) -----
+# Adoption by diff: the first BUILD- entry that wasn't in the baseline. The
+# DRAFT never mutates (by design); the state machine persists a fresh doc.
+adopt_build() {
+  local NEW="" TMPB
+  TMPB=$(mktemp)
   for _ in $(seq 1 60); do
-    OUT=$(curl -fsS "$API/executions/$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe=''))" "$ARN")" -H "$AH" 2>/dev/null || echo "")
-    ES=$(echo "$OUT" | jqpy "d['status']" 2>/dev/null || echo "?")
-    BS=$(echo "$OUT" | jqpy "(d.get('output') or '')" 2>/dev/null | python3 -c "import json,sys;print(json.loads(sys.stdin.read() or '{}').get('build_id','-'))" 2>/dev/null || echo "-")
-    echo "  exec: $ES  build_id: $BS"
-    case "$ES" in
-      SUCCEEDED|FAILED|TIMED_OUT|ABORTED) break;;
-    esac
+    curl -fsS "$API/builds" -H "$AH" -o "$TMPB" 2>/dev/null || { sleep 3; continue; }
+    NEW=$(python3 - "$BASE" "$TMPB" <<'PYEOF'
+import json, sys
+base = {b.get("build_id") for b in json.load(open(sys.argv[1])).get("builds", [])}
+for b in json.load(open(sys.argv[2])).get("builds", []):
+    bid = b.get("build_id", "")
+    if bid.startswith("BUILD-") and bid not in base:
+        print(bid); break
+PYEOF
+)
+    [ -n "$NEW" ] && break
     sleep 3
   done
-  [ "$ES" = "SUCCEEDED" ] || die "execution ended $ES — check the SFN console / GovernFn logs"
-  [ "$BS" != "-" ] || die "execution output carried no build_id — cloud persist op did not return the doc"
-  BID="$BS"
+  rm -f "$TMPB"
+  [ -n "$NEW" ] || die "no new BUILD- doc appeared in 3min — the execution died before persisting (check SFN console / GovernFn logs)"
+  BID="$NEW"
   echo "  adopted cloud build: $BID"
 }
-poll_exec
+adopt_build
+rm -f "$BASE"
 
 # ---- poll until the build parks at a gate ------------------------------------
 # Two paths by design:
