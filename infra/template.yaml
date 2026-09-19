@@ -11,7 +11,7 @@ Parameters:
     Description: Resource suffix (demo, staging, prod).
   GitHubRepo:
     Type: String
-    Default: https://github.com/Stakeylock/Bharatbuilds.git
+    Default: https://github.com/Skullybutcher/Bharatbuilds.git
     Description: Public repo backing the Amplify frontend branch.
   ModelId:
     Type: String
@@ -31,6 +31,13 @@ Parameters:
     Type: String
     Default: '*'
     Description: Allowed CORS origin for the API. Keep '*' only for disposable demos; production deployments must set the Amplify URL.
+  AmplifyServiceRoleArn:
+    Type: String
+    Default: ''
+    Description: Existing IAM role ARN for Amplify builds. The role must trust amplify.amazonaws.com.
+
+Conditions:
+  HasAmplifyServiceRole: !Not [!Equals [!Ref AmplifyServiceRoleArn, '']]
 
 Globals:
   Function:
@@ -154,7 +161,7 @@ Resources:
       AllowedOAuthScopes: [openid, email]
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
-        - !Sub 'https://main.${FrontendApp.AppId}.amplifyapp.com/'
+        - !Sub '${FrontendOrigin}/'
         - 'http://localhost:8000/'
       AccessTokenValidity: 8
       IdTokenValidity: 8
@@ -169,13 +176,13 @@ Resources:
         # JWT authorizer on every route; public paths opt out per-route below
         # (health, canonical demo build, auth config). See docs/auth.md.
         DefaultAuthorizer: CognitoAuthorizer
-        AddDefaultAuthorizerToCorsOptions: false
         Authorizers:
           CognitoAuthorizer:
             AuthorizationScopes: [openid, email]
-            JwtConfig:
-              Audience: [!Ref WebClient]
-              Issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
+            JwtConfiguration:
+              audience: [!Ref WebClient]
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
+            IdentitySource: '$request.header.Authorization'
       CorsConfiguration:
         AllowOrigins: [!Ref FrontendOrigin]
         AllowMethods: ['GET', 'POST', 'OPTIONS']
@@ -194,6 +201,7 @@ Resources:
           PP_USER_POOL_ID: !Ref UserPool
           PP_CLIENT_ID: !Ref WebClient
           PP_AUTH_DOMAIN: !Sub '${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
+          SOURCE_BUCKET: !Ref SourceBucket
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
         - S3WritePolicy: { BucketName: !Ref SourceBucket }
@@ -212,13 +220,13 @@ Resources:
           Properties: { ApiId: !Ref Api, Path: '/{proxy+}', Method: ANY }
         Health:
           Type: HttpApi
-          Properties: { ApiId: !Ref Api, Path: /, Method: GET, Auth: { Authorizer: NO_AUTH } }
+          Properties: { ApiId: !Ref Api, Path: /, Method: GET, Auth: { Authorizer: NONE } }
         Canonical:
           Type: HttpApi
-          Properties: { ApiId: !Ref Api, Path: /demo/canonical, Method: GET, Auth: { Authorizer: NO_AUTH } }
+          Properties: { ApiId: !Ref Api, Path: /demo/canonical, Method: GET, Auth: { Authorizer: NONE } }
         AuthConfig:
           Type: HttpApi
-          Properties: { ApiId: !Ref Api, Path: /auth/config, Method: GET, Auth: { Authorizer: NO_AUTH } }
+          Properties: { ApiId: !Ref Api, Path: /auth/config, Method: GET, Auth: { Authorizer: NONE } }
 
   # ---------------- Pipeline Lambdas ----------------
   ExtractorFn:
@@ -292,7 +300,6 @@ Resources:
       Name: !Sub 'processpatch-build-${EnvName}'
       DefinitionUri: statemachine.asl.json
       DefinitionSubstitutions:
-        ApiFnArn: !GetAtt ApiFn.Arn
         ExtractorFnArn: !GetAtt ExtractorFn.Arn
         CompilerFnArn: !GetAtt CompilerFn.Arn
         WitnessFnArn: !GetAtt WitnessFn.Arn
@@ -307,8 +314,6 @@ Resources:
               LogGroupArn: !GetAtt StateMachineLogs.Arn
       Tracing: { Enabled: true }
       Policies:
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ApiFn
         - LambdaInvokePolicy:
             FunctionName: !Ref ExtractorFn
         - LambdaInvokePolicy:
@@ -325,6 +330,23 @@ Resources:
             TableName: !Ref RegistryTable
         - S3WritePolicy:
             BucketName: !Ref ArtifactBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogDelivery
+                - logs:GetLogDelivery
+                - logs:UpdateLogDelivery
+                - logs:DeleteLogDelivery
+                - logs:ListLogDeliveries
+                - logs:PutResourcePolicy
+                - logs:DescribeResourcePolicies
+                - logs:DescribeLogGroups
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub '${StateMachineLogs.Arn}:*'
 
   StateMachineLogs:
     Type: AWS::Logs::LogGroup
@@ -400,45 +422,36 @@ Resources:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: !Sub 'processpatch-${EnvName}'
-      DashboardBody: !Sub
-        - '${Body}'
-        - Body:
-            Fn::Transform:
-              Name: AWS::Include
-              Parameters: { Location: ./cloudwatch-dashboard.json }
-          SM: !Ref BuildStateMachine
-
-  # ---------------- Frontend ----------------
-  FrontendApp:
-    Type: AWS::Amplify::App
-    Properties:
-      Name: !Sub 'processpatch-${EnvName}'
-      Repository: !Ref GitHubRepo
-      AccessToken: !Ref AmplifyAccessToken
-      EnvironmentVariables:
-        API_URL: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod'
-      BuildSpec: |
-        version: 1
-        frontend:
-          phases:
-            preBuild:
-              commands:
-                - echo "window.PROCESSPATCH_API=\"${API_URL:-http://localhost:8000}\";" > frontend/config.js
-            build:
-              commands: []
-          artifacts:
-            baseDirectory: frontend
-            files:
-              - '**/*'
-          cache:
-            paths: []
-
-  FrontendBranch:
-    Type: AWS::Amplify::Branch
-    Properties:
-      AppId: !GetAtt FrontendApp.AppId
-      BranchName: !Ref AmplifyBranch
-      EnableAutoBuild: true
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {"type": "text", "x": 0, "y": 0, "width": 24, "height": 2,
+             "properties": {"markdown": "# ProcessPatch - compile/test/patch pipeline\nCustom namespace: **ProcessPatch** (CompileRuns, WitnessesFound, NeedsReviewCount, ExtractionFailures, PatchValidationFailures)."}},
+            {"type": "metric", "x": 0, "y": 2, "width": 12, "height": 6,
+             "properties": {"title": "Step Functions executions", "region": "${AWS::Region}",
+               "metrics": [["AWS/States", "ExecutionsStarted", "StateMachineArn", "${BuildStateMachine}"],
+                           [".", "ExecutionsSucceeded", ".", "."],
+                           [".", "ExecutionsFailed", ".", "."]], "stat": "Sum", "period": 300}},
+            {"type": "metric", "x": 12, "y": 2, "width": 12, "height": 6,
+             "properties": {"title": "Lambda errors + throttles", "region": "${AWS::Region}",
+               "metrics": [["AWS/Lambda", "Errors", {"stat": "Sum"}],
+                           [".", "Throttles", {"stat": "Sum"}]], "stat": "Sum", "period": 300}},
+            {"type": "metric", "x": 0, "y": 8, "width": 12, "height": 6,
+             "properties": {"title": "Pipeline latency (p50 duration)", "region": "${AWS::Region}",
+               "metrics": [["AWS/Lambda", "Duration", {"stat": "p50"}],
+                           ["AWS/States", "ExecutionTime", {"stat": "p50"}]], "period": 300}},
+            {"type": "metric", "x": 12, "y": 8, "width": 12, "height": 6,
+             "properties": {"title": "Domain metrics (ProcessPatch namespace)", "region": "${AWS::Region}",
+               "metrics": [["ProcessPatch", "CompileRuns", {"stat": "Sum"}],
+                           [".", "WitnessesFound", {"stat": "Sum"}],
+                           [".", "NeedsReviewCount", {"stat": "Sum"}],
+                           [".", "PatchValidationFailures", {"stat": "Sum"}]], "period": 300}},
+            {"type": "metric", "x": 0, "y": 14, "width": 24, "height": 6,
+             "properties": {"title": "DynamoDB throttles + latency", "region": "${AWS::Region}",
+               "metrics": [["AWS/DynamoDB", "ReadThrottleEvents", {"stat": "Sum"}],
+                           [".", "WriteThrottleEvents", {"stat": "Sum"}]], "period": 300}}
+          ]
+        }
 
 Outputs:
   ApiUrl:
@@ -462,5 +475,3 @@ Outputs:
     Value: !Ref ArtifactBucket
   DashboardName:
     Value: !Ref Dashboard
-  AmplifyAppId:
-    Value: !GetAtt FrontendApp.AppId

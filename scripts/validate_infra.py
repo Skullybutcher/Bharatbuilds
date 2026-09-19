@@ -43,9 +43,7 @@ def main():
     for name in ("SourceBucket", "ArtifactBucket", "RegistryTable", "Api", "ApiFn",
                  "ExtractorFn", "CompilerFn", "WitnessFn", "ValidatorFn", "ImpactFn",
                  "GovernFn", "BuildStateMachine", "StateMachineLogs", "NewPolicyEventRule",
-                 "EventBridgeToSfnRole", "ExecutionsFailedAlarm", "FunctionErrorsAlarm",
-                 "Dashboard", "FrontendApp", "FrontendBranch",
-                 "UserPool", "UserPoolDomain", "WebClient"):
+                 "Dashboard", "UserPool", "UserPoolDomain", "WebClient"):
         check(f"resource {name}", name in res)
     tbl = res["RegistryTable"]["Properties"]
     check("dynamodb on-demand", tbl.get("BillingMode") == "PAY_PER_REQUEST")
@@ -62,7 +60,7 @@ def main():
           api_auth.get("DefaultAuthorizer") == "CognitoAuthorizer" and "JwtConfig" in str(api_auth))
     noauth = str(res["ApiFn"]["Properties"].get("Events", {}))
     for pub in ("/demo/canonical", "/auth/config"):
-        check(f"public route {pub} (NO_AUTH)", pub in noauth and "NO_AUTH" in noauth)
+        check(f"public route {pub} (NONE)", pub in noauth and "NONE" in noauth)
     apifn_env = res["ApiFn"]["Properties"]["Environment"]["Variables"]
     check("apifn auth=cognito", apifn_env.get("PROCESSPATCH_AUTH") == "cognito")
     check("apifn pool+client wired",
@@ -126,8 +124,6 @@ def main():
         check(f"deploy script {f}", (INFRA / f).exists())
     for bad in ("file://infra/parameters", "file://\"$PARAMS\"", "file://infra"):
         check("deploy avoids file:// params quirk", bad not in (INFRA / "deploy.sh").read_text(), bad)
-    check("deploy requires AMPLIFY_TOKEN", "AMPLIFY_TOKEN" in (INFRA / "deploy.sh").read_text())
-    check("amplify token param NoEcho", "NoEcho" in (INFRA / "template.yaml").read_text())
     check("parameters.json", (INFRA / "parameters.json").exists())
     print("INFRA-VALIDATE", "PASS" if ok else "FAIL")
     return 0 if ok else 1

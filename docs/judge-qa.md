@@ -110,3 +110,40 @@ the `make app` demo exercises the exact logic that runs in the cloud, with
 only the storage backend swapped. That is also why the cloud approval path
 reuses the same gates via server-side resume instead of duplicating side
 effects. (`docs/architecture.md`, `README.md`)
+
+## 11. How do I know the patch is safe to activate?
+
+You check three things, and all three are computed, never asserted. The
+governance bundle (`GET /builds/{id}/governance-bundle`) packs reviews,
+approvals, guardrail evaluation, witnesses, patch, certificate, and audit
+into one artifact sealed with a sha256 over canonical bytes — and the
+endpoint refuses (409) builds with no human approval on record, so an
+unapproved candidate can never masquerade as governed. The coverage endpoint
+(`GET /builds/{id}/coverage`) reports which affected nodes and rule fields
+at least one verified witness exercises, computed with the same localizer
+the impact engine uses. Both endpoints are read-only; neither can change the
+build they describe. (`services/api/actions.py`: `governance_bundle`,
+`coverage`)
+
+## 12. What happens when reality disagrees with the model?
+
+A disagreeing trace can be nominated (`POST /builds/{id}/nominate-witness`),
+but nomination is a suggestion from reality, not a promotion. The endpoint
+first recomputes trace-compare and refuses (409) unless the trace actually
+disagrees with the stale procedure — the honesty gate, identical criteria.
+A nominated case then runs through `find_witnesses` plus the full regression
+validator exactly like pipeline-discovered witnesses; if the pipeline already
+covers it, the answer is `verified: false`, not a duplicate witness. Every
+nomination is audited with the reviewer's id. (`services/api/actions.py`:
+`nominate_witness`; `docs/traces.md`)
+
+## 13. What does coverage mean — and what does it NOT mean?
+
+Covered means exactly one thing: a verified witness exercises that node or
+field — nothing else counts, and the endpoint says so in its own note. Node
+share is computed with the same localizer as the impact engine; field share
+counts affected rule fields cited by at least one witness case. What it does
+NOT mean: passing tests, exercised code paths, or a compliance percentage —
+uncovered blast radius is reported, not hidden, precisely because it marks
+where the next regression would ship from. Treat low coverage as a work
+list, never as a grade to game. (`services/api/actions.py`: `coverage`)

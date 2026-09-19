@@ -6,6 +6,7 @@ dist/
 .DS_Store
 data/
 .env
+.aws-sam/
 benchmark_runs/BENCH-LOCAL-*
 !.gitkeep
 
@@ -23,3 +24,4 @@ venv/
 *.log
 Thumbs.db
 desktop.ini
+chat.json

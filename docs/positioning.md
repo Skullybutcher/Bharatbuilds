@@ -27,9 +27,9 @@ the compile-and-repair step neither covers.
 
 | Tool | What it does | What it doesn't do that ProcessPatch does |
 |---|---|---|
-| OPA | Evaluates hand-written Rego to allow/deny at enforcement points; audit + replay. | Extract rules from natural-language amendments; prove a deployed procedure stale with named witnesses; synthesize the repaired procedure; bind activation to human approval of exact hashes. |
-| Celonis | Reconstructs how processes run from event logs; conformance vs. the modeled process. | Start from a policy amendment instead of logs — it finds deviations but doesn't compile the fix. |
-| Temporal | Durable execution with HITL approval signals and audit history. | Derive what the procedure should *become* after a rule change (semantic diff, witnesses, localized patch). Engines are complement: ProcessPatch itself orchestrates on Step Functions. |
+| OPA | Evaluates hand-written Rego to allow/deny at enforcement points; audit + replay. | Extract rules from natural-language amendments; prove a deployed procedure stale with named witnesses; synthesize the repaired procedure; bind activation to human approval of exact hashes — and export the whole case as a sha256-sealed evidence pack refused (409) without that approval. |
+| Celonis | Reconstructs how processes run from event logs; conformance vs. the modeled process. | Start from a policy amendment instead of logs — it finds deviations but doesn't compile the fix; nor does it report coverage where covered means a verified witness exercises the node, computed by the same engine that found the fault. |
+| Temporal | Durable execution with HITL approval signals and audit history. | Derive what the procedure should *become* after a rule change (semantic diff, witnesses, localized patch) — and let a disagreeing real-world trace nominate a candidate that only the verified pipeline can promote. Engines are complement: ProcessPatch itself orchestrates on Step Functions. |
 | Guardrails / Ragas | Validate LLM text output (validators, faithfulness metrics). | Touch operational procedures at all — and their verdicts come from models, while ProcessPatch verdicts are deterministic code with the model strictly proposing. |
 
 ## Honest positioning

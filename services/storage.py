@@ -58,7 +58,7 @@ def _dd():
 def _item_id(name: str, item: dict, n: int) -> str:
     return (item.get("review_id") or item.get("approval_id")
             or item.get("policy_version_id") or item.get("procedure_version_id")
-            or item.get("build_id") or item.get("executionArn")
+            or item.get("executionArn") or item.get("build_id")
             or f"{time.time():.3f}-{n}")
 
 
@@ -93,6 +93,7 @@ def _dd_save(name: str, obj) -> None:
         with t.batch_writer() as b:
             for i in old:
                 b.delete_item(Key={"PK": i["PK"], "SK": i["SK"]})
+        with t.batch_writer() as b:
             for n, item in enumerate(obj):
                 b.put_item(Item={"PK": f"COLL#{name}", "SK": _item_id(name, item, n),
                                  "data_json": json.dumps(item, default=str),
