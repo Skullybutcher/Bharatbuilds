@@ -20,16 +20,16 @@ const api=()=>{const el=document.getElementById('apiBase');if(el&&!el.value)el.v
 /* ---------- auth (Cognito hosted UI + PKCE; inert when unset / local dev) ---------- */
 let AUTHCFG=window.PROCESSPATCH_AUTH||null;
 const AUTH={user:null,id:null,access:null};
-async function authFetchCfg(){if(AUTHCFG&&AUTHCFG.clientId)return;try{const c=await get('/auth/config');if(c&&c.enabled){AUTHCFG={clientId:c.client_id,domain:c.domain,redirectUri:location.origin+'/'};}}catch(e){}}
+async function authFetchCfg(){if(AUTHCFG&&AUTHCFG.clientId)return AUTHCFG;try{const r=await fetch(api()+'/auth/config');if(r.ok){const c=await r.json();if(c&&c.enabled){AUTHCFG={clientId:c.client_id,domain:c.domain,redirectUri:location.origin+'/'};}}}catch(e){}return AUTHCFG;}
 function authCfgOk(){return !!(AUTHCFG&&AUTHCFG.clientId&&AUTHCFG.redirectUri&&AUTHCFG.domain);}
-function authClaims(tok){if(!tok)return null;try{const p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));const gs=p['cognito:groups']||[];return {email:p.email||p['cognito:username']||p.sub,groups:gs,role:gs.includes('pp-admins')?'admin':(gs.includes('pp-reviewers')?'reviewer':'readonly')};}catch(e){return null;}}
-function authSave(){try{localStorage.setItem('pp_tokens',JSON.stringify({id:AUTH.id,access:AUTH.access}));}catch(e){}}
-function authLoad(){try{const t=JSON.parse(localStorage.getItem('pp_tokens')||'null');if(t){AUTH.id=t.id;AUTH.access=t.access;AUTH.user=authClaims(t.id||t.access||'');}}catch(e){}}
-function authHeaders(){return (AUTH.access&&authCfgOk())?{'Authorization':'Bearer '+AUTH.access}:{};}
+function authClaims(tok){if(!tok)return null;try{const p=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(p.exp&&(p.exp*1000)<Date.now())return null;const gs=p['cognito:groups']||[];return {email:p.email||p['cognito:username']||p.sub,groups:gs,role:gs.includes('pp-admins')?'admin':(gs.includes('pp-reviewers')?'reviewer':'readonly')};}catch(e){return null;}}
+function authSave(){try{if(AUTH.id||AUTH.access){localStorage.setItem('pp_tokens',JSON.stringify({id:AUTH.id,access:AUTH.access}));}else{localStorage.removeItem('pp_tokens');}}catch(e){}}
+function authLoad(){try{const t=JSON.parse(localStorage.getItem('pp_tokens')||'null');if(t){const u=authClaims(t.id||t.access||'');if(u){AUTH.id=t.id;AUTH.access=t.access;AUTH.user=u;}else{AUTH.id=null;AUTH.access=null;AUTH.user=null;localStorage.removeItem('pp_tokens');}}}catch(e){}}
+function authHeaders(){const tok=AUTH.access||AUTH.id;return tok?{'Authorization':'Bearer '+tok}:{};}
 function authReviewer(){return AUTH.user?{reviewer_id:AUTH.user.email,display_name:AUTH.user.email}:{reviewer_id:'USR-001',display_name:'Demo Reviewer'};}
 function b64url(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 async function authToggle(){
- if(AUTH.user){AUTH.id=null;AUTH.access=null;AUTH.user=null;try{localStorage.removeItem('pp_tokens');}catch(e){}renderTabs();render();return;}
+ if(AUTH.user){AUTH.id=null;AUTH.access=null;AUTH.user=null;authSave();renderTabs();render();return;}
  if(!authCfgOk()){alert('Auth not configured (window.PROCESSPATCH_AUTH). Local dev runs with auth off.');return;}
  const verifier=b64url(crypto.getRandomValues(new Uint8Array(32)));
  const state=b64url(crypto.getRandomValues(new Uint8Array(16)));
@@ -44,12 +44,12 @@ async function authMaybeExchange(){
  const expectedState=sessionStorage.getItem('pp_oauth_state');
  if(!expectedState||q.get('state')!==expectedState){history.replaceState({},'',location.pathname);showErr(new Error('Sign-in could not be verified. Please sign in again.'));return;}
  const body=new URLSearchParams({grant_type:'authorization_code',client_id:AUTHCFG.clientId,code:code,redirect_uri:AUTHCFG.redirectUri,code_verifier:sessionStorage.getItem('pp_pkce')||''});
- try{const r=await fetch('https://'+AUTHCFG.domain+'/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});const t=await r.json();if(!r.ok||!t.access_token)throw new Error('Sign-in failed. Please try again.');AUTH.id=t.id_token||null;AUTH.access=t.access_token||null;AUTH.user=authClaims(AUTH.id||AUTH.access||'');authSave();}catch(e){showErr(e);}
+ try{const r=await fetch('https://'+AUTHCFG.domain+'/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body});const t=await r.json();if(!r.ok||!t.access_token)throw new Error((t&&t.error_description)||t.error||'Sign-in failed. Please try again.');AUTH.id=t.id_token||null;AUTH.access=t.access_token||null;AUTH.user=authClaims(AUTH.id||AUTH.access||'');authSave();}catch(e){showErr(e);}
  sessionStorage.removeItem('pp_pkce');sessionStorage.removeItem('pp_oauth_state');
  history.replaceState({},'',location.pathname);
 }
-async function get(p){const r=await fetch(api()+p,{headers:authHeaders()});if(r.status===401){alert('Sign-in required — use Sign in (top right).');throw new Error('401 unauthorized');}if(!r.ok)throw new Error('GET '+p+' -> '+r.status);return r.json();}
-async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(b||{})});if(r.status===401){alert('Sign-in required — use Sign in (top right).');}let d=null;try{d=await r.json();}catch(e){}return {code:r.status,data:d};}
+async function get(p){const r=await fetch(api()+p,{headers:authHeaders()});if(r.status===401){throw new Error('401 unauthorized');}if(!r.ok)throw new Error('GET '+p+' -> '+r.status);return r.json();}
+async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(b||{})});let d=null;try{d=await r.json();}catch(e){}return {code:r.status,data:d};}
 function setView(h){document.getElementById('view').innerHTML=h;}
 function loading(msg){setView('<div class="card"><div class="loading" role="status">'+esc(msg||'Loading…')+'<span class="skel"></span><span class="skel"></span></div></div>');}
 function showErr(e){setView('<div class="card"><div class="err" role="alert"><h3>We couldn’t complete that request</h3><p>'+esc(e.message||e)+'</p><small>Check your connection and sign-in status, then try again.</small></div><button class="btn ghost" onclick="render()" style="margin-top:16px">Return to workspace</button></div>');}
@@ -70,8 +70,9 @@ function gateSpine(){const w=(BUILD&&BUILD.witnesses||[]).length;const v=(BUILD&
   ['Activate','procedure version live',st==='PATCH_ACTIVE']];
  let nowIdx=stages.findIndex(s=>!s[2]);if(nowIdx<0)nowIdx=stages.length;
  return '<ol class="spine" aria-label="Pipeline stage">'+stages.map((s,i)=>'<li class="'+(s[2]?'done':(i===nowIdx?'now':''))+'"><span class="dot" aria-hidden="true">'+(s[2]?'✓':(i===nowIdx?'●':''))+'</span><span class="st">'+s[0]+'</span><span class="sd">'+s[1]+'</span></li>').join('')+'</ol>';}
-function preBuildTab(){const copy={Impact:['Impact map','Compile an amendment to calculate the affected rules, nodes, fields and witness coverage.'],Witnesses:['Verified witnesses','Compile an amendment to generate failing cases that reproduce procedural drift.'],Procedure:['Procedure graph','Compile an amendment to inspect the stale and patched procedure paths.'],Patch:['Candidate patch','Compile an amendment to see the smallest validated workflow change.'],Tests:['Regression tests','Compile an amendment to run witness, boundary, preservation and integrity checks.'],Approval:['Human approval','Compile an amendment before reviewing rule decisions, guardrails and hash-bound approvals.'],Traces:['Runtime traces','Compile an amendment to compare runtime evidence against the stale and patched procedure.'],Benchmarks:['Benchmark coverage','Compile an amendment to keep this workspace context together, then inspect benchmark results.'],Builds:['Build history','Compile an amendment to create the first build and populate this workspace history.']};const c=copy[active]||copy.Impact;setView('<div class="card prebuild-empty"><div class="empty" role="status"><i class="ph ph-'+esc(NAV_ICONS[active]||'file')+' e-ico" aria-hidden="true"></i><h2>'+esc(c[0])+'</h2><p>'+esc(c[1])+'</p><button class="btn" onclick="runBuild()">Compile Amendment</button></div></div>');}
-function render(){badge();if(!BUILD&&active!=='Overview'){preBuildTab();return;}if(!BUILD){setView('<div class="card hero"><div>'
+const BUILD_TABS=['Impact','Witnesses','Procedure','Patch','Tests','Approval'];
+function preBuildTab(){const copy={Impact:['Impact map','Compile an amendment to calculate the affected rules, nodes, fields and witness coverage.'],Witnesses:['Verified witnesses','Compile an amendment to generate failing cases that reproduce procedural drift.'],Procedure:['Procedure graph','Compile an amendment to inspect the stale and patched procedure paths.'],Patch:['Candidate patch','Compile an amendment to see the smallest validated workflow change.'],Tests:['Regression tests','Compile an amendment to run witness, boundary, preservation and integrity checks.'],Approval:['Human approval','Compile an amendment before reviewing rule decisions, guardrails and hash-bound approvals.']};const c=copy[active]||copy.Impact;setView('<div class="card prebuild-empty"><div class="empty" role="status"><i class="ph ph-'+esc(NAV_ICONS[active]||'file')+' e-ico" aria-hidden="true"></i><h2>'+esc(c[0])+'</h2><p>'+esc(c[1])+'</p><button class="btn" onclick="runBuild()">Compile Amendment</button></div></div>');}
+function render(){badge();if(!BUILD&&BUILD_TABS.includes(active)){preBuildTab();return;}if(!BUILD&&active==='Overview'){setView('<div class="card hero"><div>'
 +'<h1>A policy changed.<br/>Which procedure steps are wrong now?</h1>'
 +'<p class="lead">Compile the amendment, prove each failure with a verified witness, ship a hash-bound patch — gated by human approval.</p>'
 +'<div class="hero-cta"><button class="btn lg" onclick="runBuild()">Compile Amendment</button><small>Verified examples · human approval before activation</small></div>'
@@ -90,7 +91,7 @@ try{({Overview:vOverview,Impact:vImpact,Witnesses:vWit,Procedure:vProc,Patch:vPa
 /* ---------- actions ---------- */
 async function runBuild(){const d=document.getElementById('domain').value;loading('Compiling amendment (deterministic pipeline)…');try{BUILD=await get('/demo/canonical?domain='+d);}catch(e){showErr(e);return;}drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
 async function refreshBuild(){if(BUILD){try{BUILD=await get('/builds/'+BUILD.build_id);}catch(e){}render();}}
-async function loadHistory(){try{HISTORY=(await get('/builds')).builds||[];}catch(e){}}
+async function loadHistory(){if(authCfgOk()&&!AUTH.user)return;try{HISTORY=(await get('/builds')).builds||[];}catch(e){}}
 /* No-build dashboard modules — real stored data only, never decoration.
    Rendered as empty containers; filled asynchronously after setView. */
 function dashHtml(){return '<div class="activity">'
@@ -102,10 +103,11 @@ function dashFill(){dashOne('dashBuilds','/builds','build_id',d=>d.builds||[],id
  dashOne('dashTraces','/traces','trace_id',d=>d.traces||[],()=>go('Traces'));
  dashOne('dashProcs','/procedures','procedure_version_id',d=>d.versions||[],()=>go('Builds'));}
 async function dashOne(elId,endpoint,idKey,pluck,openFn){const el=document.getElementById(elId);if(!el)return;
+ if(authCfgOk()&&!AUTH.user){el.innerHTML='<p class="mut">Sign in to view</p>';return;}
  try{const items=pluck(await get(endpoint)).slice(0,4);
  el.innerHTML=items.length?items.map((x,i)=>'<button type="button" class="row" data-row="'+i+'"><span class="r-id">'+esc(x[idKey])+'</span><span class="r-meta">'+esc(x.status||x.source||x.workflow_id||'')+'</span></button>').join(''):'<p class="mut">nothing stored yet</p>';
  el.querySelectorAll('[data-row]').forEach(row=>row.addEventListener('click',()=>openFn(String(items[Number(row.dataset.row)][idKey]))));
- }catch(e){el.innerHTML='<p class="mut">unavailable</p>';}}
+ }catch(e){const msg=(e.message&&e.message.includes('401'))?'Sign in to view':'unavailable';el.innerHTML='<p class="mut">'+msg+'</p>';}}
 async function cloudRun(){const d=document.getElementById('domain').value;loading('Registering DRAFT → starting Step Functions execution…');try{
 const b=await post('/builds',{domain:d,defer:true});const ex=await post('/builds/'+b.data.build_id+'/execute',{});EXECArn=ex.data.executionArn;
 setView('<div class="card"><div class="card-head"><h3>Cloud execution</h3></div><div class="mono">'+esc(EXECArn)+'\nstatus: '+esc(ex.data.status)+'\n'+esc(ex.data.note||'')+'</div><div id="execPoll" class="mono">polling…</div></div>');
@@ -263,7 +265,7 @@ setView('<div class="card"><p class="kicker">ProcessPatchBench</p><div class="ca
 +'<table><thead><tr><th>case</th><th>split</th><th>status</th></tr></thead><tbody>'+(BENCH.cases||[]).map(c=>'<tr><td>'+esc(c.case_id)+'</td><td>'+esc(c.split||'')+'</td><td>'+esc(c.status)+'</td></tr>').join('')+'</tbody></table>'
 +'<p><small>Downstream repair uses gold Rule IR; the eval split is authored/frozen, not an external real-world benchmark.</small></p></div>');}
 /* ---------- Builds (workspaces + history) ---------- */
-async function vHist(){let ws=[],vers=[];try{[ws,vers]=await Promise.all([get('/workspaces').then(d=>d.workspaces||[]),get('/procedures').then(d=>d.versions||[])]);}catch(e){}
+async function vHist(){let ws=[],vers=[];try{const [wData,vData,hData]=await Promise.all([get('/workspaces').then(d=>d.workspaces||[]).catch(()=>[]),get('/procedures').then(d=>d.versions||[]).catch(()=>[]),get('/builds').then(d=>d.builds||[]).catch(()=>[])]);ws=wData;vers=vData;if(hData&&hData.length)HISTORY=hData;}catch(e){}
 const versBlock=vers.length?'<table><thead><tr><th>version</th><th>workflow</th><th>status</th><th></th></tr></thead><tbody>'+vers.map(v=>'<tr><td class="mono">'+esc(v.procedure_version_id)+'</td><td class="mono">'+esc(v.workflow_id||'—')+'</td><td>'+esc(v.status||'')+'</td><td><button class="btn ghost sm" onclick="buildAgainst(\''+esc(v.procedure_version_id)+'\')">Compile amendment</button></td></tr>').join('')+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-flow-arrow e-ico" aria-hidden="true"></i><b>No procedures registered.</b> Paste a procedure graph below and register it.<br/><br/><button class="btn ghost sm" onclick="document.getElementById(\'procJson\').focus()">Register a procedure</button></div>';
 const wsBlock=ws.length?'<table><thead><tr><th>id</th><th>name</th></tr></thead><tbody>'+ws.map(w=>'<tr><td class="mono">'+esc(w.workspace_id)+'</td><td>'+esc(w.name)+'</td></tr>').join('')+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-stack e-ico" aria-hidden="true"></i><b>No workspaces yet.</b> Name one below and create it.<br/><br/><button class="btn ghost sm" onclick="document.getElementById(\'wsName\').focus()">Create a workspace</button></div>';
 const histBlock=HISTORY.length?'<table><thead><tr><th>build</th><th>status</th><th></th></tr></thead><tbody>'+HISTORY.map(b=>'<tr><td class="mono">'+esc(b.build_id||b)+'</td><td>'+esc(b.status||'')+'</td><td><button class="btn ghost sm" onclick="openBuild(\''+esc(b.build_id||b)+'\')">Open</button></td></tr>').join('')+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-stack e-ico" aria-hidden="true"></i><b>No builds yet.</b> Compile your first amendment to see it here.<br/><br/><button class="btn sm" onclick="runBuild()">Compile Amendment</button></div>';
@@ -317,5 +319,20 @@ const inp=document.getElementById('palInput');if(f.length)inp.setAttribute('aria
 const sel=list.querySelector('.pal-item.sel');if(sel)sel.scrollIntoView({block:'nearest'});}
 function closePalette(){PAL.open=false;const ov=document.getElementById('palOverlay');if(ov)ov.remove();if(paletteTrigger&&paletteTrigger.isConnected)paletteTrigger.focus();}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();if(PAL.open)closePalette();else openPalette();}});
-try{const ab=document.getElementById('apiBase');if(ab&&window.PROCESSPATCH_API)ab.value=window.PROCESSPATCH_API;}catch(e){}
-renderTabs();render();authLoad();authFetchCfg().then(()=>authMaybeExchange()).then(()=>renderTabs());loadHistory();
+async function initApp(){
+ try{const ab=document.getElementById('apiBase');if(ab&&window.PROCESSPATCH_API)ab.value=window.PROCESSPATCH_API;}catch(e){}
+ authLoad();
+ renderTabs();
+ await authFetchCfg();
+ const q=new URLSearchParams(location.search);
+ if(q.get('code')&&authCfgOk()){
+  loading('Verifying sign-in…');
+  await authMaybeExchange();
+ }
+ renderTabs();
+ render();
+ if(AUTH.user||!authCfgOk()){
+  loadHistory();
+ }
+}
+initApp();
