@@ -29,8 +29,8 @@ Parameters:
     Description: GitHub personal access token for Amplify hosting (repo access). Export AMPLIFY_TOKEN locally; never commit it.
   FrontendOrigin:
     Type: String
-    Default: '*'
-    Description: Allowed CORS origin for the API. Keep '*' only for disposable demos; production deployments must set the Amplify URL.
+    Default: 'https://main.dummy.amplifyapp.com'
+    Description: HTTPS origin for Cognito callbacks and API CORS. The deploy script replaces the bootstrap value with the real Amplify URL.
   AmplifyServiceRoleArn:
     Type: String
     Default: ''

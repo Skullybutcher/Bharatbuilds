@@ -47,7 +47,7 @@ sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IA
   ParameterKey=PP_USER_POOL_ID,ParameterValue="$POOL" \
   ParameterKey=PP_CLIENT_ID,ParameterValue="$CLIENT" \
   ParameterKey=PP_AUTH_DOMAIN,ParameterValue="$DOMAIN" \
-  --no-confirm-changeset --no-fail-empty-changeset
+  --no-confirm-changeset --no-fail-on-empty-changeset
 
 echo "Create the first admin after deploy:"
 echo "  aws cognito-idp admin-create-user --user-pool-id $POOL --username <email> --user-attributes Name=email,Value=<email> Name=email_verified,Value=true --message-action SUPPRESS --region $REGION"

@@ -61,6 +61,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T8 | Eliminate GitHub OIDC role ARN secret mismatch | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 | T9 | Add one-run GitHub OIDC claim diagnostics | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 | T10 | Support GitHub immutable OIDC subject claims | **GitHub Copilot** | `docs/aws-setup.md`, `agents.md` | DONE |
+| T11 | Fix Cognito bootstrap callback URL deployment | **GitHub Copilot** | `infra/template.yaml`, `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | CLAIMED |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -87,6 +88,9 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 ## 6. Activity log (append-only, newest first)
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
+
+
+- 2026-09-19 21:00 | GitHub Copilot | T11 | `infra/template.yaml`, `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | DONE: fixed Cognito WebClient callback URL from invalid `*/` to valid HTTPS bootstrap origin; corrected second SAM deploy option to `--no-fail-on-empty-changeset`; infra validation, 178/178 verify, and 70/70 pytest PASS | commit: "Fix Cognito bootstrap callback URL deployment"
 
 
 - 2026-09-19 20:00 | GitHub Copilot | T10 | `docs/aws-setup.md`, `agents.md`, AWS IAM role trust | DONE: raw runner log confirmed repository/ref/event are correct; updated trust to allow both legacy `repo:Skullybutcher/Bharatbuilds:*` and immutable `repo:Skullybutcher@*/Bharatbuilds@*:ref:refs/heads/main` subjects; workflow, live trust, infra validation, 178/178 verify, and 70/70 pytest PASS | push once and rerun Actions; commit: "Support immutable GitHub OIDC subjects"

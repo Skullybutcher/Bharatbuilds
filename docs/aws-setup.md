@@ -74,7 +74,10 @@ STACK=processpatch-demo REGION=ap-south-1 bash infra/deploy.sh
 ```
 
 Parameters live in `infra/parameters.json` (EnvName, GitHubRepo, ModelId,
-AmplifyBranch) plus the `AmplifyAccessToken` secret passed via
+AmplifyBranch). The template uses a valid HTTPS bootstrap origin for the first
+CloudFormation pass because Cognito rejects `*` callback URLs; the deploy
+script replaces it with the real Amplify branch URL on the second pass. The
+`AmplifyAccessToken` secret is passed via
 `$AMPLIFY_TOKEN` — `sam deploy --parameter-overrides` takes explicit
 `ParameterKey=…,ParameterValue=…` pairs (not `file://…`), which the deploy
 scripts expand with stdlib python. Model calls are restricted to extraction (Bedrock InvokeModel
