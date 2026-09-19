@@ -60,6 +60,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T7 | Diagnose recurring GitHub Actions OIDC trust rejection | **GitHub Copilot** | `docs/aws-setup.md`, `agents.md` | DONE |
 | T8 | Eliminate GitHub OIDC role ARN secret mismatch | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 | T9 | Add one-run GitHub OIDC claim diagnostics | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
+| T10 | Support GitHub immutable OIDC subject claims | **GitHub Copilot** | `docs/aws-setup.md`, `agents.md` | DONE |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -86,6 +87,9 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 ## 6. Activity log (append-only, newest first)
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
+
+
+- 2026-09-19 20:00 | GitHub Copilot | T10 | `docs/aws-setup.md`, `agents.md`, AWS IAM role trust | DONE: raw runner log confirmed repository/ref/event are correct; updated trust to allow both legacy `repo:Skullybutcher/Bharatbuilds:*` and immutable `repo:Skullybutcher@*/Bharatbuilds@*:ref:refs/heads/main` subjects; workflow, live trust, infra validation, 178/178 verify, and 70/70 pytest PASS | push once and rerun Actions; commit: "Support immutable GitHub OIDC subjects"
 
 
 - 2026-09-19 19:30 | GitHub Copilot | T9 | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE: added non-secret GitHub repository/ref/event/run diagnostics before OIDC, made STS audience explicit, added run-specific session name; workflow assertion, live trust, infra validation, 178/178 verify, and 70/70 pytest PASS | push once and inspect the five context lines if AWS still rejects; commit: "Diagnose GitHub OIDC claims before AWS authentication"
