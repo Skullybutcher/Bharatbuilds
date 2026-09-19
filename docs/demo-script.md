@@ -6,6 +6,8 @@ fails, fix before recording — the demo is never rehearsed live. Present on
 local `make app` (http://localhost:8080); keep a second tab on the same URL
 as the hot fallback. Total on-clock: 225s + 15s buffer = 240s.
 
+## Beat 0 · off-clock — sign in (top right)
+Sign in with the demo admin credentials BEFORE starting the timer; the walkthrough assumes an approved session.
 ## Beat 1 · 0:00–0:25 — the person, the stale portal (Overview)
 
 - Clicks: enter CGPA 7.80 → Check (current portal). Hold on DISAGREEMENT.

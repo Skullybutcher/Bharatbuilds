@@ -35,6 +35,23 @@ the audit trail, so approvals bind the exact human who made them.
 
 `POST /builds/{id}/resume` with `gate: activation` is admin-only (same Gate 3).
 
+## Deployed demo login
+
+The pool is invite-only with no self-signup, so the deployed demo ships
+exactly one login: `demo-admin@processpatch.demo` — the sole
+`AWS::Cognito::UserPoolUser` in `infra/template.yaml` (`DemoAdmin`,
+confirmation SUPPRESS), attached to `pp-admins` (`DemoAdminMembership`).
+CloudFormation cannot set a password, so `infra/deploy.sh` generates a random
+one, sets it `--permanent`, and prints a `DEMO LOGIN` block exactly once —
+never written to disk or git, so a lost password means re-running that step
+(the script prints the manual `admin-set-user-password` fallback, and a
+`NOTE` when the user is missing on pre-existing stacks). As a `pp-admins`
+member the demo login unlocks Gates 2/3 (patch approve + activation) on top
+of everything `pp-reviewers` can do; there is no reviewer demo account, so
+Gate-1 review on the deployed demo goes through the same admin login. Never
+commit, screenshot, or stream the password — rotate it with
+`admin-set-user-password` after the demo window.
+
 ## Identity flow (cloud)
 
 1. UI redirects to the Cognito hosted UI (PKCE verifier in sessionStorage).
