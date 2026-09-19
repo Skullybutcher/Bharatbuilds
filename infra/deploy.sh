@@ -10,15 +10,17 @@ PARAMS="$(dirname "$0")/parameters.json"
 
 command -v sam >/dev/null || { echo "install AWS SAM CLI first"; exit 1; }
 command -v aws >/dev/null || { echo "install AWS CLI first"; exit 1; }
+[ -n "${AMPLIFY_TOKEN:-}" ] || { echo "AMPLIFY_TOKEN is required; add it as a GitHub Actions secret before deployment" >&2; exit 2; }
 
 # Auth params are passed explicitly below (resolved from stack outputs), so
 # exclude them here to avoid duplicate --parameter-overrides keys.
-OVERRIDES=$(python3 -c "import json;print(' '.join(f\"ParameterKey={k},ParameterValue={v}\" for k,v in json.load(open('$PARAMS')).items() if k not in ('FrontendOrigin','PP_USER_POOL_ID','PP_CLIENT_ID','PP_AUTH_DOMAIN')))")
+OVERRIDES=$(python3 -c 'import json,sys; excluded={"FrontendOrigin","PP_USER_POOL_ID","PP_CLIENT_ID","PP_AUTH_DOMAIN"}; parameters=json.load(open(sys.argv[1], encoding="utf-8")); print(" ".join("ParameterKey={},ParameterValue={}".format(key,value) for key,value in parameters.items() if key not in excluded))' "$PARAMS")
+BOOTSTRAP_ORIGIN="https://main.dummy.amplifyapp.com"
 # shellcheck disable=SC2086
 sam build --template-file infra/template.yaml
 # shellcheck disable=SC2086
 sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IAM \
-  --parameter-overrides $OVERRIDES \
+  --parameter-overrides $OVERRIDES ParameterKey=FrontendOrigin,ParameterValue="$BOOTSTRAP_ORIGIN" \
   --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
 
 API=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
@@ -47,7 +49,8 @@ sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IA
   ParameterKey=PP_USER_POOL_ID,ParameterValue="$POOL" \
   ParameterKey=PP_CLIENT_ID,ParameterValue="$CLIENT" \
   ParameterKey=PP_AUTH_DOMAIN,ParameterValue="$DOMAIN" \
-  --no-confirm-changeset --no-fail-empty-changeset
+  --resolve-s3 \
+  --no-confirm-changeset --no-fail-on-empty-changeset
 
 echo "Create the first admin after deploy:"
 echo "  aws cognito-idp admin-create-user --user-pool-id $POOL --username <email> --user-attributes Name=email,Value=<email> Name=email_verified,Value=true --message-action SUPPRESS --region $REGION"

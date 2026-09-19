@@ -74,11 +74,21 @@ STACK=processpatch-demo REGION=ap-south-1 bash infra/deploy.sh
 ```
 
 Parameters live in `infra/parameters.json` (EnvName, GitHubRepo, ModelId,
-AmplifyBranch) plus the `AmplifyAccessToken` secret passed via
+AmplifyBranch). The deploy script explicitly passes a valid HTTPS bootstrap
+origin on the first CloudFormation pass because existing stacks retain old
+parameter values and Cognito rejects `*` callback URLs; it replaces that value
+with the real Amplify branch URL on the second pass. The
+`AmplifyAccessToken` secret is passed via
 `$AMPLIFY_TOKEN` — `sam deploy --parameter-overrides` takes explicit
 `ParameterKey=…,ParameterValue=…` pairs (not `file://…`), which the deploy
 scripts expand with stdlib python. Model calls are restricted to extraction (Bedrock InvokeModel
 scoped to `ModelId`, default `amazon.nova-micro-v1:0`).
+
+Both SAM deployment passes use `--resolve-s3`; the second pass must upload the
+rebuilt Lambda artifacts as well as update the auth parameters.
+
+For GitHub Actions, create the repository secret `AMPLIFY_TOKEN`. The workflow
+maps it to the deployment script, which checks it before running SAM.
 
 ## Validate without credentials
 

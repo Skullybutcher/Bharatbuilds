@@ -1,53 +1,92 @@
-# Demo script (3 min)
+# Demo script — presenter runbook, 4 minutes, Judge Mode order
 
-Record only after `python scripts/judge_demo.py` prints ALL 6 BEATS VERIFIED —
-the demo below is those beats, performed live.
+Pre-flight (before the clock, not counted): `python scripts/verify.py` →
+PASS; `python scripts/judge_demo.py` → ALL 6 BEATS VERIFIED. If either
+fails, fix before recording — the demo is never rehearsed live. Present on
+local `make app` (http://localhost:8080); keep a second tab on the same URL
+as the hot fallback. Total on-clock: 225s + 15s buffer = 240s.
 
-Person-first spine: a real applicant (CGPA 7.80) is ELIGIBLE under Policy V2,
-but the deployed portal calls them INELIGIBLE — enforcing yesterday's rule.
-Everything after that answers: which procedure steps are wrong now, and who
-says the fix is safe?
+## Beat 1 · 0:00–0:25 — the person, the stale portal (Overview)
 
-## Local path (default): one command
+- Clicks: enter CGPA 7.80 → Check (current portal). Hold on DISAGREEMENT.
+- SAY: "A policy changed. This applicant scores 7.80 — eligible under the
+  new rules, but the portal still enforces yesterday's. That disagreement is
+  the whole product."
+- Wrong/fallback: if the portal call hangs, cut to pre-fetched judge output
+  (expected True, actual False) and keep talking; never narrate a spinner.
 
-`make app` → http://localhost:8080 — UI + API on one port, no deploy, no
-keys, no sign-in (local dev runs with auth off). Zero-risk rehearsal before
-any cloud step. (If :8080 is taken on your machine:
-`python scripts/app.py --port 8082 --backend-port 8002 --no-open`.)
+## Beat 2 · 0:25–0:55 — compile (Overview)
 
-0:00 Overview hero → COMPILE AMENDMENT (deterministic pipeline).
-0:15 Portal check CGPA 7.80 → DISAGREEMENT — PROCEDURAL DRIFT CONFIRMED.
-0:30 BUILD: COMPOUND change, 2 witnesses, localized patch, 16/16 validation.
-0:43 Witness A (7.80 PASS vs FAIL) + Replay witness. Witness B (8.20 SKIP vs
-REQUIRE) + Boundary explorer.
-1:05 Procedure tab: red = stale node; click it — provenance drawer (Policy V2
-p3 §4.2), witnesses touching it, patch ops.
-1:20 Patch tab: the localized diff. Tests tab: 16/16,
-VALIDATED_WITHIN_TESTED_MODEL — never "compliance guaranteed".
-1:35 Impact tab: blast radius (2 nodes), synthetic cohort (n=100) — counts are
-representative witnesses, never headcounts.
-1:50 Traces tab: one ingested real execution DISAGREEs with stale, AGREEs with
-patched. Traces are evidence only — never witnesses.
-2:00 Approval tab: 5 merge-protection checks green → APPROVE (Gate 2) →
-activate (Gate 3) → new procedure version. Patch certificate.
-2:30 Judge Mode replays this exact arc in 6 guided steps for evaluators.
-2:50 Close: "AI extracts; deterministic code verifies; humans approve."
-"Software bugs get regression tests. Procedural bugs should too."
+- Clicks: COMPILE AMENDMENT → scroll the build status card and stat tiles.
+- SAY: "One click compiles the amendment: status PATCH_VALIDATED, two
+  witnesses, sixteen passing checks — validated within the tested model,
+  nothing more. Note the extraction badge: deterministic parser, no model
+  call on this policy."
+- Wrong/fallback: if compile is slow, hard-cut to the loaded build (same
+  build_id the judge script verifies) and continue.
 
-## Cloud path (same beats, real orchestration)
+## Beat 3 · 0:55–1:25 — meet the witness (Witnesses)
 
-Amplify URL (Outputs.AmplifyAppId → branch URL); set the UI's API field to
-the ApiUrl; SIGN IN (hosted UI — reviewer/admin groups gate the actions).
-Run Cloud Execution instead of Compile Amendment: DRAFT registration → Step
-Functions execution (task-token human gates) → poll the execution ARN → same
-witnesses / patch / tests / approval flow, decided via /resume with
-hash-verified activation. Screenshot the CloudWatch dashboard (name in
-Outputs) for the write-up.
+- Clicks: expand W-001 → Replay witness → Boundary explorer.
+- SAY: "This isn't a metric, it's a person: the exact case that proves the
+  bug, with expected versus actual paths side by side — replayable after the
+  patch, with the knife-edge at 7.5."
+- Wrong/fallback: if replay lags, the static paths already tell the story —
+  skip the click, don't wait on camera.
 
-## Honesty checklist (say these, or cut the take)
+## Beat 4 · 1:25–1:45 — the repair site (Procedure)
 
-- Name the extraction badge on screen (FIXTURE / DETERMINISTIC_PARSER /
-  BEDROCK_CANDIDATE).
-- Cohort and benchmark numbers are authored/synthetic — never population or
-  prevalence claims.
-- No witness without the verified pipeline; no "COMPLIANCE GUARANTEED".
+- Clicks: red stale node → provenance drawer.
+- SAY: "The fault localizes to this gate: why it exists, Policy V2 section
+  4.2, witnesses touching it, patch operations. Red is stale, green is
+  added — every color maps to a real state."
+- Wrong/fallback: if the drawer misfires, the node table below the graph
+  carries the same config and provenance — scroll instead.
+
+## Beat 5 · 1:45–2:10 — regression (Tests)
+
+- Clicks: expand one suite (Witness replay), pan the suite list.
+- SAY: "Sixteen of sixteen: witness replay, boundaries, preservation,
+  integrity, ordering, metamorphic, provenance. The suite proves the patch
+  fixes the witnesses without breaking anything else."
+- Wrong/fallback: none needed — read the counts on screen, never quote
+  memorized figures.
+
+## Beat 6 · 2:10–2:40 — merge protection (Approval)
+
+- Clicks: walk the 5 checks → Approve candidate (reviewer) → certificate.
+- SAY: "Five merge-protection checks, all green. A reviewer approves the
+  exact candidate hash — activation stays a separate human's job. The
+  certificate reads VALIDATED_WITHIN_TESTED_MODEL, never compliance
+  guaranteed."
+- Wrong/fallback: if approval needs auth here, show the disabled Approve
+  with its merge-protection reason instead of signing in live.
+
+## Beat 7 · 2:40–3:05 — bundle download (Approval)
+
+- Clicks: Download governance bundle → show the file (reviews, approvals,
+  guardrails, witnesses, patch, certificate, audit + bundle_sha256).
+- SAY: "One sealed evidence pack over canonical bytes — and this endpoint
+  refuses unapproved builds with a 409, so a candidate can never masquerade
+  as a governed artifact."
+- Wrong/fallback: if the download stalls, open the pre-saved bundle JSON
+  and point at bundle_sha256; if it 409s, say so — refusal without approval
+  is the governance working, not a bug.
+
+## Beat 8 · 3:05–3:30 — nomination (Traces)
+
+- Clicks: paste `demo/traces-sample.csv` into the CSV card (expect ingested:
+  10, duplicates: 1) → Nominate witness on a DISAGREE trace.
+- SAY: "Ten real executions ingested, one duplicate caught by content hashing.
+  A disagreeing trace nominates a candidate — but only the verified pipeline
+  can promote it. Either a new witness or 'already covers': both are honest
+  answers."
+- Wrong/fallback: duplicates: 1 is idempotent ingest working, not an error.
+  If the table is empty, ingest the scripted 7.80 case; if that fails, cut.
+
+## Close · 3:30–3:45, buffer to 4:00
+
+- SAY: "AI extracts; deterministic code verifies; humans approve. Software
+  gets regression tests when code changes — real-world procedures should get
+  them when rules change."
+- 15s buffer for transitions and breath. End on the certificate wording.
