@@ -94,6 +94,22 @@ def test_groupless_claims_fall_back_to_token(signed_token):
     authz.authorize("POST", "/builds", ident, {"domain": "research_grant", "defer": True})
 
 
+def test_stringified_groups_recognized(signed_token):
+    """Authorizer contexts that stringify claims: 'pp-admins' must be one
+    group, NOT a set of 9 characters (set('pp-admins') is non-empty so the
+    group-less fallback never fires, but membership fails -> READ_ONLY)."""
+    tok = signed_token
+    event = _gw_event(tok, with_groups=False)
+    event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "pp-admins"
+    ident = authz.claims_from_event(event)
+    assert ident["role"] == "admin"
+    assert ident["groups"] == ["pp-admins"]
+    # comma-joined shape too
+    event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "pp-reviewers,pp-admins"
+    ident = authz.claims_from_event(event)
+    assert ident["role"] == "admin" and set(ident["groups"]) == {"pp-admins", "pp-reviewers"}
+
+
 def test_groupless_with_malformed_token_stays_readonly(signed_token):
     """Secure default: garbage token + group-less claims -> readonly, no 500."""
     ident = authz.claims_from_event(_gw_event("garbage.sig.here", with_groups=False))

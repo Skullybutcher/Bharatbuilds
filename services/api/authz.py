@@ -172,7 +172,14 @@ def claims_from_event(event: dict) -> dict | None:
     claims = ctx.get("jwt", {}).get("claims") or ctx.get("claims") or {}
     if not claims:
         return None  # authorizer absent -> authenticate(headers) will 401
-    groups = set(claims.get("cognito:groups") or [])
+    raw_groups = claims.get("cognito:groups") or []
+    if isinstance(raw_groups, str):
+        # Some authorizer contexts stringify claims ("pp-admins" or
+        # "pp-admins,pp-reviewers"). set("pp-admins") is a set of CHARACTERS —
+        # non-empty (so no fallback triggers) but membership fails (role
+        # collapses to READ_ONLY, every write 403s). Split instead.
+        raw_groups = [g.strip() for g in raw_groups.split(",") if g.strip()]
+    groups = set(raw_groups)
     if not groups:
         # Some HTTP API JWT-authorizer configurations drop colon-carrying claim
         # keys (cognito:groups, cognito:username) before they reach the
