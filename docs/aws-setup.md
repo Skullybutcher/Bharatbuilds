@@ -84,6 +84,9 @@ with the real Amplify branch URL on the second pass. The
 scripts expand with stdlib python. Model calls are restricted to extraction (Bedrock InvokeModel
 scoped to `ModelId`, default `amazon.nova-micro-v1:0`).
 
+Both SAM deployment passes use `--resolve-s3`; the second pass must upload the
+rebuilt Lambda artifacts as well as update the auth parameters.
+
 For GitHub Actions, create the repository secret `AMPLIFY_TOKEN`. The workflow
 maps it to the deployment script, which checks it before running SAM.
 

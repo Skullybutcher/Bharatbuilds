@@ -49,6 +49,7 @@ sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IA
   ParameterKey=PP_USER_POOL_ID,ParameterValue="$POOL" \
   ParameterKey=PP_CLIENT_ID,ParameterValue="$CLIENT" \
   ParameterKey=PP_AUTH_DOMAIN,ParameterValue="$DOMAIN" \
+  --resolve-s3 \
   --no-confirm-changeset --no-fail-on-empty-changeset
 
 echo "Create the first admin after deploy:"

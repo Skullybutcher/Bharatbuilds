@@ -64,6 +64,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T11 | Fix Cognito bootstrap callback URL deployment | **GitHub Copilot** | `infra/template.yaml`, `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | CLAIMED |
 | T12 | Pass HTTPS bootstrap origin on first deploy | **GitHub Copilot** | `infra/deploy.sh`, `infra/parameters.json`, `docs/aws-setup.md`, `agents.md` | DONE |
 | T13 | Wire Amplify token into GitHub deployment | **GitHub Copilot** | `.github/workflows/ci.yml`, `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | DONE |
+| T14 | Harden second SAM deployment pass | **GitHub Copilot** | `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | DONE |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -91,6 +92,8 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
 
+
+- 2026-09-19 22:30 | GitHub Copilot | T14 | `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | DONE: historical `chat.json` review matched current failure; second SAM deploy now includes `--resolve-s3`, preventing `S3 Bucket not specified` during auth redeploy; Bash syntax, infra validation, 178/178 verify, and 70/70 pytest PASS | commit: "Harden second SAM deployment pass"
 
 - 2026-09-19 22:00 | GitHub Copilot | T13 | `.github/workflows/ci.yml`, `infra/deploy.sh`, `docs/aws-setup.md`, `agents.md` | DONE: backend stack completed successfully; second pass failed because GitHub did not provide `AMPLIFY_TOKEN`; mapped repository secret into deploy step, added fail-fast preflight, replaced fragile shell quoting, normalized Bash line endings; workflow wiring, Bash syntax, infra validation, 178/178 verify, and 70/70 pytest PASS | commit: "Wire Amplify token into GitHub deployment"
 
