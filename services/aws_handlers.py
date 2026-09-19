@@ -122,10 +122,17 @@ def govern_handler(event, context):
     """Rule-review and approval gates (server-side guardrails + hash binding)."""
     from services.governance.store import (open_rule_reviews, review_rule, decide_patch,
                                            request_patch_review, approval_guardrails, activate_procedure,
-                                           approvals_for, save_callback)
+                                           approvals_for, save_callback, get_candidate,
+                                           mark_build_status)
     op = event.get("op")
     if op == "load_context":
-        # INGEST tail: materialize S3 text + registry versions into build context.
+        # Two entry shapes: (a) inline materialized context from an API-driven
+        # start (demo/hackathon path); (b) S3 key + registry ids (event path).
+        if event.get("policy_text") and event.get("procedure"):
+            return _out(event, {"policy_text": event["policy_text"],
+                                "procedure": event["procedure"],
+                                "old_rules": event.get("old_rules", []),
+                                "policy_version_id": event.get("policy_version_id", "POLICY-VX")})
         import os as _os
         import boto3  # lazy: Lambda only
         bucket = _os.environ.get("SOURCE_BUCKET", "")
@@ -154,8 +161,9 @@ def govern_handler(event, context):
                             "build": hit})
     if op == "hash":
         from services.registry.store import sha
-        return _out(event, {"sha256": sha({"policy_text": event.get("policy_text", ""),
-                                           "procedure": event.get("procedure", {})})})
+        digest = sha({"policy_text": event.get("policy_text", ""),
+                      "procedure": event.get("procedure", {})})
+        return _out(event, {"sha256": digest, "build_id": f"BUILD-{digest[:12].upper()}"})
     if op == "create_procedure_version":
         from services.registry.store import save_procedure_version
         return _out(event, {"procedure_version": save_procedure_version(
@@ -183,12 +191,28 @@ def govern_handler(event, context):
             return _out(event, {"error": str(e)}, 409)
     if op == "activate":
         try:
-            return _out(event, activate_procedure(event["build_id"], event["build"],
+            from services.registry.store import get_build as _gb
+            build = event.get("build") or _gb(event.get("build_id", "")) or {}
+            return _out(event, activate_procedure(event["build_id"], build,
                                             event.get("reviewer", {}), event.get("reason", "")))
         except ValueError as e:
             return _out(event, {"error": str(e)}, 409)
     if op == "approvals":
         return _out(event, {"approvals": approvals_for(event["build_id"])})
+    if op == "persist_build":
+        from services.registry.store import save_build
+        doc = {k: event.get(k) for k in ("build_id", "compile_key", "policy_version_id",
+                                         "compiler_version", "status", "semantic_delta",
+                                         "witnesses", "faults", "patch", "patched_workflow",
+                                         "validation", "impact", "certificate", "new_rules",
+                                         "old_rules", "procedure", "review_state",
+                                         "policy_sha256", "procedure_sha256")}
+        doc = {k: v for k, v in doc.items() if v is not None}
+        return _out(event, {"persisted": bool(save_build(doc))})
+    if op == "get_candidate":
+        return _out(event, {"candidate": get_candidate(event["build_id"])})
+    if op == "mark_status":
+        return _out(event, {"build": mark_build_status(event["build_id"], event.get("status", ""))})
     return _out(event, {"error": f"unknown op {op}"}, 400)
 
 
@@ -283,7 +307,18 @@ def api_handler(event, context):
                 return _out(event, resume_callback(bid, body.get("gate", "patch_approval"), body))
             except (KeyError, ValueError) as e:
                 return _out(event, {"error": str(e)}, 404 if isinstance(e, KeyError) else 409)
+        if method == "POST" and tail == "execute":
+            try:
+                return _out(event, A.start_execution({"build_id": bid, **body}))
+            except KeyError:
+                return _out(event, {"error": "unknown build"}, 404)
         return _out(event, {"error": "not found", "path": raw_path}, 404)
+    if method == "GET" and raw_path.startswith("/executions/"):
+        import urllib.parse as _up
+        try:
+            return _out(event, A.describe_execution(_up.unquote(raw_path[len("/executions/"):])))
+        except KeyError:
+            return _out(event, {"error": "unknown execution"}, 404)
     if method == "POST" and raw_path.startswith("/procedures/") and raw_path.endswith("/activate"):
         return call(A.activate, raw_path.split("/")[2], body)
     if "resume" in raw_path:

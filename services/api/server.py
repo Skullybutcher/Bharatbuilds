@@ -135,7 +135,17 @@ class Handler(BaseHTTPRequestHandler):
                     return 200, resume_callback(bid, body.get("gate", "patch_approval"), body)
                 except (KeyError, ValueError) as e:
                     return 404 if isinstance(e, KeyError) else 409, {"error": str(e)}
+            if method == "POST" and tail == "execute":
+                try:
+                    return 200, actions.start_execution({"build_id": bid, **body})
+                except KeyError:
+                    return 404, {"error": "unknown build"}
             return 404, {"error": "not found", "path": path}
+        if method == "GET" and path.startswith("/executions/"):
+            try:
+                return 200, actions.describe_execution(urllib.parse.unquote(path[len("/executions/"):]))
+            except KeyError:
+                return 404, {"error": "unknown execution"}
         if method == "POST" and path.startswith("/procedures/") and path.endswith("/activate"):
             try:
                 return 200, actions.activate(path.split("/")[2], body)

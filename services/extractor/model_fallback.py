@@ -72,7 +72,7 @@ def model_extract(policy_text: str, policy_version_id: str = "POLICY-VX",
                                  "reason": f"model rule failed schema: {errs}"})
         else:
             rules.append(r)
-    status = "NEEDS_REVIEW" if needs_review and not rules else ("EXTRACTED" if rules else "NEEDS_REVIEW")
+    status = "NEEDS_REVIEW" if needs_review else ("EXTRACTED" if rules else "NEEDS_REVIEW")
     return {"rules": rules, "needs_review": needs_review, "conflicts": [],
             "status": status, "backend": f"bedrock:{model_id}"}
 

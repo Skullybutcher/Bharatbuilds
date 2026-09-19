@@ -236,7 +236,7 @@ def main() -> int:
     check("Infra", "7 lambdas", sum(1 for v in tpl["Resources"].values() if v.get("Type") == "AWS::Serverless::Function") == 7)
     check("Infra", "single-table registry", "RegistryTable" in tpl["Resources"])
     sm = json.loads((ROOT / "infra/statemachine.asl.json").read_text())
-    check("Infra", "37 pipeline states", len(sm["States"]) == 37, str(len(sm["States"])))
+    check("Infra", "40 pipeline states", len(sm["States"]) == 40, str(len(sm["States"])))
     check("Infra", "3 task-token gates", sum("waitForTaskToken" in json.dumps(s) for s in sm["States"].values()) == 3)
     order = list(sm["States"])
     check("Infra", "context loads before extract", order.index("LOAD_BUILD_CONTEXT") < order.index("EXTRACT_RULES"))

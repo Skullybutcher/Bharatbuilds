@@ -157,6 +157,11 @@ def create_candidate_version(build: dict) -> dict:
     from services.registry.store import save_procedure_version
     candidate = (build.get("patch", {}) or {}).get("patched_workflow", {})
     saved = save_procedure_version({**candidate, "status": "candidate"}, status="candidate")
+    cands = _load("candidates.json", [])
+    cands.append({"build_id": build.get("build_id"),
+                  "procedure_version_id": saved.get("procedure_version_id"),
+                  "status": "candidate", "ts": time.time()})
+    _save("candidates.json", cands)
     audit("CANDIDATE_CREATED", {"build_id": build.get("build_id"),
                                 "procedure_version_id": saved.get("procedure_version_id")})
     return saved
@@ -203,6 +208,26 @@ def approvals_for(build_id: str) -> list:
     return [a for a in _load("approvals.json", []) if a.get("build_id") == build_id]
 
 
+def get_candidate(build_id: str) -> dict | None:
+    """Read-only lookup of the candidate minted at APPROVE_CANDIDATE time.
+    The Step Functions path uses this (FETCH) instead of creating a second
+    candidate — exactly one owner per side effect."""
+    cands = [c for c in _load("candidates.json", [])
+             if c.get("build_id") == build_id and c.get("status") == "candidate"]
+    return cands[-1] if cands else None
+
+
+def mark_build_status(build_id: str, status: str) -> dict | None:
+    from services.registry.store import get_build, save_build
+    b = get_build(build_id)
+    if not b:
+        return None
+    b["status"] = status
+    save_build(b)
+    audit("BUILD_STATUS", {"build_id": build_id, "status": status})
+    return b
+
+
 # ---- Step Functions human-gate callbacks ------------------------------------
 def save_callback(build_id: str, gate: str, task_token: str | None,
                   execution_arn: str | None = None) -> dict:
@@ -247,12 +272,17 @@ def resume_callback(build_id: str, gate: str, body: dict) -> dict:
         output = {"decision": body.get("decision"), "approval_id": rec["approval_id"],
                   "candidate_version_id": rec.get("candidate_version_id")}
     elif gate == "activation":
+        # Single owner of the side effect is the ACTIVATE state (cloud) or the
+        # direct /procedures/{v}/activate call (local). Resume only verifies
+        # preconditions so nothing activates twice.
         from services.registry.store import get_build
         build = get_build(build_id) or {}
+        _ = build  # loaded to confirm the build exists for the decision below
+        approvals = [a for a in _load("approvals.json", []) if a.get("build_id") == build_id]
         if body.get("decision") == "APPROVE":
-            out = activate_procedure(build_id, build, body.get("reviewer", {}), body.get("reason", ""))
-            output = {"decision": "APPROVE",
-                      "procedure_version_id": out["procedure_version"]["procedure_version_id"]}
+            if not any(a.get("decision") == "APPROVE_CANDIDATE" for a in approvals):
+                raise ValueError("Activation blocked: no APPROVE_CANDIDATE on record.")
+            output = {"decision": "APPROVE"}
         else:
             output = {"decision": "REJECT"}
     else:

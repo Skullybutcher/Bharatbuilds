@@ -1,8 +1,8 @@
 {
-  "Comment": "ProcessPatch compile-test-patch pipeline with human governance gates (Spec 57G). INGEST carries only S3 key + ids; LOAD_BUILD_CONTEXT materializes text/versions; accepted_rules defaults to extraction output on the no-review path; impact is computed AFTER validation so it carries final nodes, regression and provenance; human waits use the Lambda callback pattern with server-side token persistence (POST /builds/{id}/resume).",
+  "Comment": "ProcessPatch compile-test-patch pipeline with human governance gates (Spec 57G). INGEST carries only S3 key + ids (EventBridge auto-start is DISABLED for the hackathon; the API starts executions with a complete envelope). SET_BUILD_ID derives the id from the artifact hash; PERSIST_BUILD stores the cloud build before the first approval wait so resume callbacks load real state; FETCH_CANDIDATE reads (never re-creates) the approved candidate; MARK_ACTIVE flips build status after ACTIVATE. Human waits use taskToken callbacks persisted server-side (POST /builds/{id}/resume).",
   "StartAt": "INGEST",
   "States": {
-    "INGEST": {"Type": "Pass", "Comment": "Envelope from EventBridge: policy_s3_key, policy_version_id, workflow_id, workspace_id.", "Next": "LOAD_BUILD_CONTEXT"},
+    "INGEST": {"Type": "Pass", "Comment": "Envelope from the API: policy_s3_key, policy_version_id, workflow_id, workspace_id, procedure_version_id.", "Next": "LOAD_BUILD_CONTEXT"},
     "LOAD_BUILD_CONTEXT": {
       "Type": "Task", "Resource": "${GovernFnArn}",
       "Comment": "Reads S3 policy text, resolves active procedure + previous policy rules.",
@@ -11,11 +11,12 @@
       "Next": "HASH_ARTIFACT"
     },
     "HASH_ARTIFACT": {
-      "Type": "Task", "Resource": "${GovernFnArn}", "Comment": "Idempotency hash over policy+procedure+compiler.",
+      "Type": "Task", "Resource": "${GovernFnArn}", "Comment": "Idempotency hash over policy+procedure+compiler; also mints provisional build_id.",
       "Parameters": {"op": "hash", "policy_text.$": "$.build_context.policy_text", "procedure.$": "$.build_context.procedure"},
       "ResultPath": "$.artifact_hash",
-      "Next": "EXTRACT_RULES"
+      "Next": "SET_BUILD_ID"
     },
+    "SET_BUILD_ID": {"Type": "Pass", "InputPath": "$.artifact_hash.build_id", "ResultPath": "$.build_id", "Next": "EXTRACT_RULES"},
     "EXTRACT_RULES": {
       "Type": "Task", "Resource": "${ExtractorFnArn}",
       "Parameters": {"policy_text.$": "$.build_context.policy_text", "policy_version_id.$": "$.build_context.policy_version_id", "build_id.$": "$.build_id"},
@@ -48,7 +49,7 @@
       "Default": "SET_ACCEPTED_DEFAULT"
     },
     "SET_ACCEPTED_DEFAULT": {
-      "Type": "Pass", "Comment": "No review required: extraction output IS the accepted rule set.",
+      "Type": "Pass", "Comment": "No review required: deterministic extraction output IS the accepted rule set (audited).",
       "Parameters": {"accepted_rules.$": "$.extraction.rules"},
       "ResultPath": "$.review",
       "Next": "COMPILE_CONSTRAINTS"
@@ -118,7 +119,14 @@
       "ResultPath": "$.impact",
       "Next": "GENERATE_CERTIFICATE"
     },
-    "GENERATE_CERTIFICATE": {"Type": "Pass", "Comment": "Surfaces $.validation_out.certificate with clause-level sources; never claims compliance.", "Next": "WAIT_FOR_PATCH_APPROVAL"},
+    "GENERATE_CERTIFICATE": {"Type": "Pass", "Comment": "Surfaces $.validation_out.certificate with clause-level sources; never claims compliance.", "Next": "PERSIST_BUILD"},
+    "PERSIST_BUILD": {
+      "Type": "Task", "Resource": "${GovernFnArn}",
+      "Comment": "Store the cloud build BEFORE the first approval wait so resume callbacks load real state.",
+      "Parameters": {"op": "persist_build", "build_id.$": "$.build_id", "compile_key.$": "$.idempotency.compile_key", "policy_version_id.$": "$.build_context.policy_version_id", "status": "PATCH_VALIDATED", "semantic_delta.$": "$.compiled.semantic_delta", "witnesses.$": "$.witnesses_out.witnesses", "faults.$": "$.patched.faults", "patch.$": "$.patched.patch", "patched_workflow.$": "$.patched.patched_workflow", "validation.$": "$.validation_out.validation", "impact.$": "$.impact", "certificate.$": "$.validation_out.certificate", "new_rules.$": "$.review.accepted_rules", "old_rules.$": "$.build_context.old_rules", "procedure.$": "$.build_context.procedure", "review_state": "REVIEWED", "policy_sha256.$": "$.artifact_hash.sha256"},
+      "ResultPath": "$.persisted",
+      "Next": "WAIT_FOR_PATCH_APPROVAL"
+    },
     "WAIT_FOR_PATCH_APPROVAL": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {"FunctionName": "${GovernFnArn}", "Payload": {"op": "request_review", "build_id.$": "$.build_id", "taskToken.$": "$$.Task.Token"}},
@@ -128,14 +136,15 @@
     "PATCH_APPROVED?": {
       "Type": "Choice",
       "Choices": [
-        {"Variable": "$.patch_decision.decision", "StringEquals": "APPROVE_CANDIDATE", "Next": "CREATE_PROCEDURE_VERSION"},
+        {"Variable": "$.patch_decision.decision", "StringEquals": "APPROVE_CANDIDATE", "Next": "FETCH_CANDIDATE"},
         {"Variable": "$.patch_decision.decision", "StringEquals": "REQUEST_REVISION", "Next": "REVISION_REQUIRED"}
       ],
       "Default": "CLOSED_REJECTED"
     },
-    "CREATE_PROCEDURE_VERSION": {
+    "FETCH_CANDIDATE": {
       "Type": "Task", "Resource": "${GovernFnArn}",
-      "Parameters": {"op": "create_procedure_version", "patched_workflow.$": "$.patched.patched_workflow"},
+      "Comment": "Read-only: the candidate was minted once by decide_patch (single owner).",
+      "Parameters": {"op": "get_candidate", "build_id.$": "$.build_id"},
       "ResultPath": "$.candidate",
       "Next": "WAIT_FOR_ACTIVATION_APPROVAL"
     },
@@ -152,8 +161,15 @@
     },
     "ACTIVATE": {
       "Type": "Task", "Resource": "${GovernFnArn}",
-      "Parameters": {"op": "activate", "build_id.$": "$.build_id", "build.$": "$", "reviewer.$": "$.activation_decision.reviewer", "reason.$": "$.activation_decision.reason"},
+      "Comment": "Single owner of the activation side effect; loads the persisted build for hash verification.",
+      "Parameters": {"op": "activate", "build_id.$": "$.build_id", "reviewer.$": "$.activation_decision.reviewer", "reason.$": "$.activation_decision.reason"},
       "ResultPath": "$.activation",
+      "Next": "MARK_ACTIVE"
+    },
+    "MARK_ACTIVE": {
+      "Type": "Task", "Resource": "${GovernFnArn}",
+      "Parameters": {"op": "mark_status", "build_id.$": "$.build_id", "status": "PATCH_ACTIVE"},
+      "ResultPath": "$.marked",
       "Next": "READY"
     },
     "GENERATE_CERTIFICATE_CLEAN": {"Type": "Pass", "Comment": "No drift: record clean bill, no patch, no approval needed.", "Next": "READY"},

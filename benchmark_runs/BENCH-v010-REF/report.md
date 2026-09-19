@@ -51,3 +51,9 @@
 - EXC-ADD-002 [exception_added/eval] AUTO_REPAIRED
 
 Honest summary: failures above are real gaps, not hidden. See 57C.11.
+
+Methodology: extraction is scored against POLICY TEXT; downstream
+compiler/repair stages run on hand-authored GOLD RULE IR so extraction
+errors do not contaminate repair metrics. Do not cite these numbers as
+'raw-NL end-to-end repair'. Eval split is held-out authored, not
+independent real-world data.

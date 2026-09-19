@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>ProcessPatch — CI for real-world procedures</title>
+<script src="./config.js"></script>
 <style>
 :root{--green:#16a34a;--red:#dc2626;--amber:#d97706;--grey:#6b7280;--blue:#2563eb;--bg:#0b0f14;--card:#111827;--line:#1f2937}
 *{box-sizing:border-box}body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:#e5e7eb}
@@ -37,16 +38,18 @@ small{color:#9ca3af}
 <div id="buildBadge" class="badge">no build yet</div>
 <select id="domain"><option value="research_grant">research_grant</option><option value="reimbursement">reimbursement</option></select>
 <button class="btn" onclick="runBuild()">COMPILE AMENDMENT / FIND DRIFT</button>
+<button class="btn ghost" onclick="cloudRun()">RUN CLOUD EXECUTION (Step Functions)</button>
 <button class="btn ghost" onclick="refreshBuild()">Refresh</button>
 <small>API <input id="apiBase" value="http://localhost:8000" style="width:190px"/></small>
 </header>
 <div class="tabs" id="tabs"></div>
 <main id="view"></main>
 <script>
-let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], drilled=null, CANDIDATE=null;
+let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], drilled=null, CANDIDATE=null, EXECArn=null;
+try{if(window.PROCESSPATCH_API){API=window.PROCESSPATCH_API;}}catch(e){}
+const api=()=>{const el=document.getElementById('apiBase');if(el&&!el.value)el.value=API;return (el&&el.value||API).replace(/\/$/,'');};
 const TABS=['Overview','Impact','Policy Diff','Witnesses','Procedure','Patch','Tests','Evidence','Approval','Benchmarks','Build History'];
 let active='Overview';
-const api=()=>document.getElementById('apiBase').value.replace(/\/$/,'');
 async function get(p){const r=await fetch(api()+p);return r.json();}
 async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});return {code:r.status,data:await r.json()};}
 async function runBuild(){
@@ -59,19 +62,43 @@ async function loadHistory(){ try{HISTORY=(await get('/builds')).builds||[];}cat
 function setView(h){document.getElementById('view').innerHTML=h;}
 function renderTabs(){const t=document.getElementById('tabs');t.innerHTML='';TABS.forEach(x=>{const b=document.createElement('button');b.textContent=x;b.className=x===active?'active':'';b.onclick=()=>{active=x;renderTabs();render();};t.appendChild(b);});}
 function badge(){const b=document.getElementById('buildBadge');if(!BUILD){b.textContent='no build yet';b.className='badge';return;}const n=(BUILD.witnesses||[]).length;b.textContent=`${BUILD.build_id} · ${BUILD.status} · ${n} witnesses`;b.className='badge '+(BUILD.status==='PATCH_VALIDATED'?'pass':(n?'fail':'warn'));}
-function trust(t){return t==='AI-EXTRACTED'?'<span class="tag info">AI-EXTRACTED · proposes, never decides</span>':t==='VERIFIED'?'<span class="tag fail">VERIFIED · witness reproduces</span>':t==='VALIDATED'?'<span class="tag pass">VALIDATED · patch passed checks</span>':t==='HUMAN' ?'<span class="tag warn">HUMAN-APPROVED</span>':`<span class=tag>${t}</span>`;}
+function trust(t){if(t==='FIXTURE')return '<span class="tag info">FIXTURE · hand-authored gold Rule IR</span>';if(t==='DETERMINISTIC_PARSER')return '<span class="tag info">DETERMINISTIC_PARSER · bounded language</span>';if(t==='BEDROCK_CANDIDATE')return '<span class="tag warn">BEDROCK_CANDIDATE · requires human review</span>';return t==='AI-EXTRACTED'?'<span class="tag info">AI-EXTRACTED · proposes, never decides</span>':t==='VERIFIED'?'<span class="tag fail">VERIFIED · witness reproduces</span>':t==='VALIDATED'?'<span class="tag pass">VALIDATED · patch passed checks</span>':t==='HUMAN' ?'<span class="tag warn">HUMAN-APPROVED</span>':`<span class=tag>${t}</span>`;}
+function backendBadge(){const b=(BUILD&&BUILD.extraction_backend)||'fixture';const m={fixture:'FIXTURE','deterministic-parser/0.1.0':'DETERMINISTIC_PARSER'};let k=m[b]||'FIXTURE';if((b||'').startsWith('bedrock:'))k='BEDROCK_CANDIDATE';return trust(k);}
+async function cloudRun(){
+  const d=document.getElementById('domain').value;
+  setView('<div class=card>Starting cloud execution…</div>');
+  const b=await post('/builds',{domain:d});
+  const ex=await post(`/builds/${b.data.build_id}/execute`,{});
+  EXECArn=ex.data.executionArn;
+  setView(`<div class=card><h3>Cloud execution</h3><div class=mono>${EXECArn}\nstatus: ${ex.data.status}\n${ex.data.note||''}</div><div id=execPoll class=mono>polling…</div></div>`);
+  for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,3000));
+    try{const s=await get('/executions/'+encodeURIComponent(EXECArn));
+    document.getElementById('execPoll').textContent='status: '+s.status;
+    if(s.status!=='RUNNING'){break;}}catch(e){break;}}
+  BUILD=await get('/builds/'+b.data.build_id);drilled=null;CANDIDATE=null;active='Overview';renderTabs();render();loadHistory();
+}
+async function submitPolicy(){
+  const t=document.getElementById('policyText').value;if(!t.trim()){alert('paste policy text first');return;}
+  const d=document.getElementById('domain').value;
+  const r=await post('/builds',{domain:d,policy_text:t,policy_version_id:'POLICY-UPLOAD'});
+  if(r.data.status==='NEEDS_REVIEW'||r.data.status==='CONFLICT'||r.data.status==='EXTRACTION_UNAVAILABLE'){alert('Extraction needs review: '+r.data.status+' — see Approval tab Gate 1.');}
+  BUILD=r.data;drilled=null;CANDIDATE=null;active=(r.data.witnesses?'Overview':'Approval');renderTabs();render();
+}
+function loadPolicyFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('policyText').value=r.result;};r.readAsText(f);}
 function render(){badge();if(!BUILD){setView('<div class=card><h3>A policy changed. Which procedure steps are wrong now?</h3><p>Select a domain and click <b>COMPILE AMENDMENT</b>.</p><p class=mono>Policy change → Compile → Witness → Localized patch → Regression tests → Validated procedure</p><p><small>Software gets regression tests when code changes. Real-world procedures should get them when rules change.</small></p></div>');return;}
   ({Overview:vOverview,Impact:vImpact,'Policy Diff':vDiff,Witnesses:vWit,Procedure:vProc,Patch:vPatch,Tests:vTests,Evidence:vEvidence,Approval:vApproval,Benchmarks:vBench,'Build History':vHist})[active]();}
 function portalCard(def){return `<div class=card><h3>Synthetic portal — driven by procedure JSON ${trust('VERIFIED')}</h3><label>CGPA <input id=cgpa value="${def}"/></label> <label>Amount <input id=amt value="40000"/></label>
 <button class=btn onclick="checkPortal(false)">Check (current portal)</button><button class=btn ghost onclick="checkPortal(true)">Check (patched preview)</button><div id=portalOut class=mono style="margin-top:10px"></div></div>`;}
 async function checkPortal(p){const q=`cgpa=${encodeURIComponent(document.getElementById('cgpa').value)}&amount=${encodeURIComponent(document.getElementById('amt').value)}&patched=${p?1:0}&domain=${document.getElementById('domain').value}`;const j=await get('/portal?'+q);
 document.getElementById('portalOut').textContent=`Expected: eligible=${j.expected.eligible} required=${JSON.stringify(j.expected.required)}\nActual:   eligible=${j.actual.eligible} required=${JSON.stringify(j.actual.required)}\n`+((j.expected.eligible!==j.actual.eligible||JSON.stringify(j.expected.required)!==JSON.stringify(j.actual.required))?'DISAGREEMENT — PROCEDURAL DRIFT CONFIRMED':'agree');}
-function vOverview(){const w=BUILD.witnesses||[];setView(`<div class=card><h2>Research Grant Procedure — ${BUILD.build_id} <span class="badge ${w.length?'fail':'pass'}">${BUILD.status}</span></h2>
-<p>${(BUILD.semantic_delta||{}).type} · ${w.length} witnesses · ${(BUILD.faults||[]).length} fault regions · ${BUILD.validation.failed} failing checks · machine=${(BUILD.validation||{}).status}</p>
+function vOverview(){const w=BUILD.witnesses||[];const v=BUILD.validation||{failed:'—',total:'—',status:BUILD.status};setView(`<div class=card><h2>Research Grant Procedure — ${BUILD.build_id} <span class="badge ${w.length?'fail':'pass'}">${BUILD.status}</span></h2>
+<p>${((BUILD.semantic_delta||{}).type||'no compiled delta yet')} · ${w.length} witnesses · ${(BUILD.faults||[]).length} fault regions · ${v.failed} failing checks · machine=${v.status||'—'}</p>
+<p>Extraction: ${backendBadge()} · Review: <span class=tag>${BUILD.review_state||'—'}</span></p>
+<div class=card><h3>Policy input — paste text or upload .md (bounded language; Bedrock fallback only if enabled server-side)</h3><textarea id=policyText rows=5 style="width:100%" placeholder="Applicants must have CGPA >= 7.5."></textarea><br/><input type=file accept=".md,.txt" onchange="loadPolicyFile(this)"/> <button class=btn onclick="submitPolicy()">Compile pasted policy</button> <small>Non-deterministic or ambiguous input stays PENDING at Gate 1 (mandatory human review).</small></div>
 <div class=cols><div class=card><b>POLICY</b><div class=mono>CGPA ≥ 7.5\nrec only if CGPA &lt; 8.0\ndept approval → submit</div></div>
 <div class=card><b>PERSON</b><div class=mono>CGPA 7.80\nExpected: ACCEPT\nActual: REJECT</div><b>DISAGREEMENT</b></div>
 <div class=card><b>PROCEDURE (stale)</b><div class=mono>CGPA ≥ 8.0\nrec: always required</div></div></div>
-<p>${trust('AI-EXTRACTED')} extraction with source spans · ${trust('VERIFIED')} witnesses reproduce · ${trust('VALIDATED')} patch passed ${BUILD.validation.total} checks · approval still required (see Approval tab)</p></div>`+portalCard('7.80'));}
+<p>${trust('AI-EXTRACTED')} extraction with source spans · ${trust('VERIFIED')} witnesses reproduce · ${trust('VALIDATED')} patch passed ${(BUILD.validation||{total:'—'}).total} checks · approval still required (see Approval tab)</p></div>`+portalCard('7.80'));}
 function vImpact(){const im=BUILD.impact||{};const b=im.behavioral||{},tc=im.test_cohort||{},v=im.verification||{};const rows=Object.entries(b).map(([k,n])=>`<tr><td class=clickable onclick="drill('${k}')">${k} (${n})</td><td>${n}</td></tr>`).join('');
 setView(`<div class=card><h3>Impact Dashboard — what changed, where it propagated, who is affected ${trust('VERIFIED')}</h3>
 <div class=cols><div class=card><b>Semantic Change</b><div class=mono>${(im.semantic_breakdown||{}).delta_type}\naffected rules: ${(im.artifacts||{}).affected_rules||[]}</div></div>

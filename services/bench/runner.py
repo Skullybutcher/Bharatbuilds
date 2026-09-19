@@ -187,9 +187,17 @@ def run_case(cid: str) -> dict:
                 break
         if not hit:
             domain_ok = False
+    # Independent verifier re-check: each displayed witness must genuinely
+    # reproduce disagreement (not just carry a verified flag).
+    reproduced = 0
+    for w in witnesses:
+        exp = {**evaluate_expected(model, w["case"]), "order_ok": True}
+        if diff_case(exp, execute(c["procedure"], w["case"], model.ordering), w["case"]) is not None:
+            reproduced += 1
+    validity = (reproduced / len(witnesses)) if witnesses else 1.0
     res["witness"] = {"count": len(witnesses), "kinds": sorted(kinds_found),
                       "expected_kinds": gw.get("kinds"), "kinds_ok": kinds_ok, "domain_ok": domain_ok,
-                      "validity": 1.0 if all(w.get("verified") for w in witnesses) else 0.0}
+                      "validity": round(validity, 3)}
     if not (kinds_ok and domain_ok):
         res.update({"status": "FAILED_REPAIR", "latency": t})
         return res
@@ -221,10 +229,13 @@ def run_case(cid: str) -> dict:
     cost_ok = patch["cost"] <= gr.get("max_locality_cost", 1e9)
     preserved = [r for r in validation["results"] if r["suite"] == "unchanged" and "preserved" in r.get("detail", "")]
     preserv_ok = all(r["pass"] for r in preserved)
+    from services.provenance.provenance import coverage as _cov
+    prov_cov = _cov(patched.get("nodes", []))["coverage"]
     res["repair"] = {"effect_ok": effect_ok, "effect_detail": effect_detail,
                      "forbidden_hit": forbidden_hit, "cost": patch["cost"],
                      "cost_ok": cost_ok, "validation": f"{validation['passed']}/{validation['total']}",
-                     "preservation_ok": preserv_ok, "ops": patch["operations"]}
+                     "preservation_ok": preserv_ok, "provenance_coverage": round(prov_cov, 3),
+                     "ops": patch["operations"]}
     if validation["status"] != "VALIDATED_WITHIN_TESTED_MODEL":
         res.update({"status": "FAILED_REPAIR", "latency": t})
     elif not (effect_ok and cost_ok and not forbidden_hit):
@@ -274,11 +285,11 @@ def metrics(results: list[dict]) -> dict:
             "correct_escalation_rate": round(sum(1 for r in results if r["status"] == "CORRECTLY_ESCALATED") / max(sum(1 for r in results if r.get("expects_escalation")), 1), 3),
             "extraction_accuracy": ext_acc,
             "delta_classification_accuracy": round(delta_match, 3),
-            "witness_validity": 1.0,
+            "witness_validity": round(sum(r["witness"].get("validity", 0) for r in wit) / max(len(wit), 1), 3),
             "witness_completeness": round(sum(1 for r in wit if r["witness"]["kinds_ok"] and r["witness"]["domain_ok"]) / max(len(wit), 1), 3),
             "localization_recall": round(sum(r["localization"]["recall"] for r in loc) / max(len(loc), 1), 3),
             "repair_success": round(sum(1 for r in rep if r["status"] == "AUTO_REPAIRED") / max(len(rep), 1), 3),
             "preservation_rate": round(sum(1 for r in rep if r["repair"].get("preservation_ok")) / max(len(rep), 1), 3),
             "median_patch_cost": sorted([r["repair"]["cost"] for r in rep])[len(rep) // 2] if rep else 0,
             "median_latency_s": {k: sorted(v)[len(v) // 2] for k, v in lat.items()},
-            "provenance_coverage": 1.0}
+            "provenance_coverage": round(sum(r["repair"].get("provenance_coverage", 0) for r in rep) / max(len(rep), 1), 3)}

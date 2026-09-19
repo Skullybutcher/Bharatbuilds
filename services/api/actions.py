@@ -17,6 +17,11 @@ def _demo(domain: str = "research_grant"):
             json.loads((d / "workflow_v1.json").read_text()))
 
 
+def _demo_text(domain: str, which: str = "policy_v2.md") -> str:
+    p = ROOT / "demo" / domain / which
+    return p.read_text() if p.exists() else ""
+
+
 def _get_build(bid: str):
     if bid in MEMO:
         return MEMO[bid]
@@ -47,6 +52,8 @@ def canonical(domain: str = "research_grant"):
     from services.governance.store import open_rule_reviews, review_rule
     old, new, proc = _demo(domain)
     build = run_build("POLICY-V2", old, new, proc)
+    build["policy_text"] = _demo_text(domain)
+    build["extraction_backend"] = "fixture"
     try:
         open_rule_reviews(build["build_id"], build.get("new_rules", []))
         for r in build.get("new_rules", []):
@@ -65,16 +72,43 @@ def create_build(body: dict):
     old = body.get("old_rules", old)
     new = body.get("new_rules", new)
     proc = body.get("procedure", proc)
+    policy_text = body.get("policy_text")
+    backend = "fixture"
+    if policy_text:
+        # Real policy input surface: extract (parser, Bedrock fallback when
+        # enabled), then Gate-1 rules apply — deterministic-clean results may
+        # auto-accept with audit; anything else stays PENDING (mandatory review).
+        from services.extractor.model_fallback import extract_with_fallback
+        ext = extract_with_fallback(policy_text, body.get("policy_version_id", "POLICY-UPLOAD"))
+        backend = ext.get("backend", "deterministic-parser/0.1.0")
+        if not ext["rules"] or ext["status"] in ("NEEDS_REVIEW", "CONFLICT", "EXTRACTION_UNAVAILABLE"):
+            from services.governance.store import open_rule_reviews as _open
+            import time as _t
+            bid = f"BUILD-EXTRACT-{int(_t.time()) % 1000000:06d}"
+            try:
+                _open(bid, ext["rules"])
+            except Exception:
+                pass
+            return _store({"build_id": bid, "status": ext["status"], "extraction": ext,
+                           "extraction_backend": backend, "new_rules": ext["rules"],
+                           "review_state": "REVIEW_PENDING", "created_at": _t.time()})
+        new = ext["rules"]
+        auto = body.get("auto_accept", backend == "deterministic-parser/0.1.0" and ext["status"] == "EXTRACTED")
+    else:
+        policy_text = _demo_text(domain)
+        auto = body.get("auto_accept", True)
     key = compile_key(new, proc)
     hit = find_build_by_key(key) or MEMO.get(key)
     if hit and not body.get("force"):
         return {**hit, "idempotent_reuse": True}
     build = run_build(body.get("policy_version_id", "POLICY-V2"), old, new, proc)
+    build["policy_text"] = policy_text
+    build["extraction_backend"] = backend
     if build.get("status") not in ("NEEDS_REVIEW", "CONFLICT"):
         try:
             from services.governance.store import open_rule_reviews, review_rule
             open_rule_reviews(build["build_id"], build.get("new_rules", []))
-            if body.get("auto_accept", True):
+            if body.get("auto_accept", auto):
                 for r in build.get("new_rules", []):
                     review_rule(build["build_id"], r["rule_id"], "ACCEPT")
         except Exception:
@@ -234,6 +268,67 @@ def portal(params: dict):
 def procedure_versions(workflow_id=None):
     from services.registry.store import list_procedure_versions as _lpv
     return {"versions": _lpv(workflow_id)}
+
+
+def start_execution(body: dict):
+    """API-driven cloud execution (primary demo path).
+
+    Local (no STATEMACHINE_ARN): the synchronous pipeline already ran at build
+    creation, so record a READY_LOCAL execution. On AWS: upload the policy
+    text to the versioned source bucket for evidence, then StartExecution with
+    a complete inline envelope (LOAD_BUILD_CONTEXT passes it through).
+    """
+    import os as _os
+    import time as _t
+    from services.registry.store import _load, _save
+    bid = body.get("build_id")
+    b = _get_build(bid) if bid else None
+    if not b:
+        raise KeyError(bid or "missing build_id")
+    arn = _os.environ.get("STATEMACHINE_ARN", "")
+    key = f"builds/{bid}/policy.md"
+    if arn:
+        import boto3  # lazy
+        bucket = _os.environ.get("SOURCE_BUCKET", "")
+        if bucket and b.get("policy_text"):
+            boto3.client("s3").put_object(Bucket=bucket, Key=key,
+                                          Body=b["policy_text"].encode())
+        ex = boto3.client("stepfunctions").start_execution(
+            stateMachineArn=arn, name=f"{bid}-{int(_t.time())}",
+            input=_json_dumps({"build_id": bid,
+                               "policy_text": b.get("policy_text", ""),
+                               "procedure": b.get("procedure", {}),
+                               "old_rules": b.get("old_rules", []),
+                               "policy_version_id": b.get("policy_version_id", "POLICY-V2")}))
+        rec = {"executionArn": ex["executionArn"], "build_id": bid,
+               "status": "RUNNING", "started": _t.time()}
+    else:
+        rec = {"executionArn": f"local:{bid}", "build_id": bid,
+               "status": "READY_LOCAL", "started": _t.time(),
+               "note": "local synchronous pipeline already executed at build creation"}
+    execs = [e for e in _load("executions.json", []) if e.get("executionArn") != rec["executionArn"]] + [rec]
+    _save("executions.json", execs)
+    return rec
+
+
+def describe_execution(arn: str):
+    import os as _os
+    from services.registry.store import _load
+    if arn.startswith("local:"):
+        rec = next((e for e in _load("executions.json", [])
+                    if e.get("executionArn") == arn), None)
+        if not rec:
+            raise KeyError(arn)
+        return rec
+    import boto3  # lazy
+    d = boto3.client("stepfunctions").describe_execution(executionArn=arn)
+    return {"executionArn": arn, "status": d.get("status"), "started": str(d.get("startDate")),
+            "output": (d.get("output") or "")[:2000]}
+
+
+def _json_dumps(obj) -> str:
+    import json as _j
+    return _j.dumps(obj, default=str)
 
 
 def bench_manifest():

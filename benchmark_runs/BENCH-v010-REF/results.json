@@ -48,6 +48,7 @@
         "cost_ok": true,
         "validation": "12/12",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -143,6 +144,7 @@
         "cost_ok": true,
         "validation": "13/13",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -164,7 +166,7 @@
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
-        "repair": 0.001
+        "repair": 0.0
       }
     },
     {
@@ -211,6 +213,7 @@
         "cost_ok": true,
         "validation": "3/3",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",
@@ -230,7 +233,7 @@
       },
       "status": "AUTO_REPAIRED",
       "latency": {
-        "extraction": 0.001,
+        "extraction": 0.0,
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
@@ -279,6 +282,7 @@
         "cost_ok": true,
         "validation": "7/7",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "ADD_NODE",
@@ -305,7 +309,7 @@
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
-        "repair": 0.0
+        "repair": 0.001
       }
     },
     {
@@ -352,6 +356,7 @@
         "cost_ok": true,
         "validation": "8/8",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",
@@ -386,9 +391,9 @@
       "latency": {
         "extraction": 0.0,
         "delta": 0.0,
-        "witness": 0.0,
+        "witness": 0.001,
         "localize": 0.0,
-        "repair": 0.001
+        "repair": 0.0
       }
     },
     {
@@ -435,6 +440,7 @@
         "cost_ok": true,
         "validation": "5/5",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",
@@ -523,6 +529,7 @@
         "cost_ok": true,
         "validation": "4/4",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "MOVE_NODE",
@@ -623,6 +630,7 @@
         "cost_ok": true,
         "validation": "7/7",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "ADD_NODE",
@@ -647,7 +655,7 @@
       },
       "status": "AUTO_REPAIRED",
       "latency": {
-        "extraction": 0.0,
+        "extraction": 0.002,
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
@@ -698,6 +706,7 @@
         "cost_ok": true,
         "validation": "12/12",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -719,7 +728,7 @@
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
-        "repair": 0.001
+        "repair": 0.0
       }
     },
     {
@@ -746,7 +755,7 @@
       "latency": {
         "extraction": 0.0,
         "delta": 0.0,
-        "witness": 0.0
+        "witness": 0.001
       }
     },
     {
@@ -813,7 +822,7 @@
       "status": "CORRECTLY_ESCALATED",
       "expects_escalation": true,
       "latency": {
-        "extraction": 0.0
+        "extraction": 0.002
       },
       "delta": null,
       "witness": null,
@@ -864,6 +873,7 @@
         "cost_ok": true,
         "validation": "12/12",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -885,7 +895,7 @@
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
-        "repair": 0.001
+        "repair": 0.0
       }
     },
     {
@@ -932,6 +942,7 @@
         "cost_ok": true,
         "validation": "12/12",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -1000,6 +1011,7 @@
         "cost_ok": true,
         "validation": "3/3",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",
@@ -1068,6 +1080,7 @@
         "cost_ok": true,
         "validation": "8/8",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "ADD_NODE",
@@ -1141,6 +1154,7 @@
         "cost_ok": true,
         "validation": "7/7",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",
@@ -1177,7 +1191,7 @@
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
-        "repair": 0.002
+        "repair": 0.0
       }
     },
     {
@@ -1224,6 +1238,7 @@
         "cost_ok": true,
         "validation": "5/5",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",
@@ -1299,6 +1314,7 @@
         "cost_ok": true,
         "validation": "4/4",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "MOVE_NODE",
@@ -1342,7 +1358,7 @@
         "delta": 0.0,
         "witness": 0.0,
         "localize": 0.0,
-        "repair": 0.0
+        "repair": 0.001
       }
     },
     {
@@ -1389,6 +1405,7 @@
         "cost_ok": true,
         "validation": "12/12",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -1408,7 +1425,7 @@
       "latency": {
         "extraction": 0.0,
         "delta": 0.0,
-        "witness": 0.0,
+        "witness": 0.001,
         "localize": 0.0,
         "repair": 0.0
       }
@@ -1530,6 +1547,7 @@
         "cost_ok": true,
         "validation": "11/11",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_CONDITION",
@@ -1615,6 +1633,7 @@
         "cost_ok": true,
         "validation": "5/5",
         "preservation_ok": true,
+        "provenance_coverage": 1.0,
         "ops": [
           {
             "op": "CHANGE_REQUIRED_FLAG",

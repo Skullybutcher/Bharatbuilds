@@ -14,7 +14,11 @@ Amplify hosting you need a GitHub token in `AMPLIFY_TOKEN` (used once as the
 Validator, Impact, Govern; Python 3.12, X-Ray tracing), HttpApi, S3 source +
 artifact buckets (private, encrypted, versioned; EventBridge notifications),
 DynamoDB single-table registry (on-demand + PITR + GSI1 for idempotency),
-Step Functions state machine (31 states, logging + tracing, task-token human
+Step Functions state machine (40 states: ingest, hash, build-id, extract,
+validate, idempotency, review gates, compile, diff, witnesses, localize,
+patch, validate, impact-after-validation, certificate, persist, approval
+wait, fetch-candidate, activation wait, activate, mark-active, plus
+terminals; logging + tracing, task-token human
 gates), EventBridge S3→SFN rule, CloudWatch alarms + dashboard, Amplify
 frontend auto-built from `main`.
 

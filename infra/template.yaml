@@ -15,8 +15,11 @@ Parameters:
     Description: Public repo backing the Amplify frontend branch.
   ModelId:
     Type: String
-    Default: amazon.nova-micro-v1:0
-    Description: Approved AWS model runtime for semantic extraction ONLY.
+    Default: apac.amazon.nova-micro-v1:0
+    Description: >-
+      Approved AWS model runtime for semantic-extraction fallback ONLY.
+      ap-south-1 reaches Nova Micro via the APAC cross-region inference
+      profile; us-east-1 deployments may use amazon.nova-micro-v1:0 directly.
   AmplifyBranch:
     Type: String
     Default: main
@@ -110,12 +113,21 @@ Resources:
       Handler: services.aws_handlers.api_handler
       CodeUri: ../
       Timeout: 15
+      Environment:
+        Variables:
+          STATEMACHINE_ARN: !Ref BuildStateMachine
       Policies:
-        - DynamoDBReadPolicy: { TableName: !Ref RegistryTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+        - S3WritePolicy: { BucketName: !Ref SourceBucket }
+        - Statement:
+            - Effect: Allow
+              Action: states:StartExecution
+              Resource: !Ref BuildStateMachine
         - Statement:
             - Effect: Allow
               Action: states:SendTaskSuccess
-              Resource: !Ref BuildStateMachine
+              Resource: '*'
+              # SendTaskSuccess supports no resource types (service auth reference).
       Events:
         Proxy:
           Type: HttpApi
@@ -136,7 +148,9 @@ Resources:
         - Statement:
             - Effect: Allow
               Action: bedrock:InvokeModel
-              Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${ModelId}'
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${ModelId}'
+                - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-micro-v1:0'
 
   CompilerFn:
     Type: AWS::Serverless::Function
@@ -236,7 +250,11 @@ Resources:
   NewPolicyEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Description: S3 policy upload -> start ProcessPatch build.
+      State: DISABLED
+      Description: >-
+        Future event-driven trigger (S3 upload -> build). DISABLED for the
+        hackathon: the API starts executions with a complete envelope
+        (workspace/procedure/policy ids), which a bare S3 key cannot supply.
       EventPattern:
         source: [aws.s3]
         detail-type: [Object Created]
@@ -313,10 +331,15 @@ Resources:
       Name: !Sub 'processpatch-${EnvName}'
       Repository: !Ref GitHubRepo
       AccessToken: !Ref AmplifyAccessToken
+      EnvironmentVariables:
+        API_URL: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod'
       BuildSpec: |
         version: 1
         frontend:
           phases:
+            preBuild:
+              commands:
+                - echo "window.PROCESSPATCH_API=\"${API_URL:-http://localhost:8000}\";" > frontend/config.js
             build:
               commands: []
           artifacts:
