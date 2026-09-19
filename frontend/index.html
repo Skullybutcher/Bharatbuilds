@@ -3,218 +3,31 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="description" content="ProcessPatch — operational rule compiler. CI for real-world procedures: compile amendments, verify witnesses, approve hash-bound patches."/>
 <title>ProcessPatch — CI for real-world procedures</title>
 <script src="./config.js"></script>
-<style>
-:root{--green:#16a34a;--green-bg:#052e16;--red:#dc2626;--red-bg:#3f0d0d;--amber:#d97706;--amber-bg:#451a03;--grey:#6b7280;--blue:#2563eb;--blue-bg:#172554;--bg:#0b0f14;--card:#111827;--line:#1f2937;--txt:#e5e7eb;--mut:#9ca3af}
-*{box-sizing:border-box}body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--txt)}
-header.top{display:flex;gap:12px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-header.top .title{font-size:19px;font-weight:800}
-.badge{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
-.fail{background:var(--red-bg);color:#fecaca;border-color:#7f1d1d}.pass{background:var(--green-bg);color:#bbf7d0;border-color:#14532d}
-.warn{background:var(--amber-bg);color:#fed7aa;border-color:#9a3412}.info{background:var(--blue-bg);color:#bfdbfe;border-color:#1e40af}
-.tag{font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);margin:2px 4px 2px 0;display:inline-block}
-.shell{display:flex;min-height:calc(100vh - 57px)}
-nav.side{width:210px;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px}
-nav.side button{background:none;border:0;color:var(--txt);text-align:left;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:14px}
-nav.side button.active,nav.side button:hover{background:#1f2937}
-nav.side .sec{font-size:11px;color:var(--mut);padding:10px 12px 2px;text-transform:uppercase;letter-spacing:.06em}
-main{flex:1;padding:20px 26px;max-width:1180px;min-width:0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
-.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.cols2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.cols4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-@media(max-width:900px){.cols,.cols2,.cols4{grid-template-columns:1fr}.shell{flex-direction:column}nav.side{width:100%;flex-direction:row;flex-wrap:wrap}}
-.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap;word-break:break-word}
-.btn{background:#1d4ed8;border:0;color:#fff;padding:10px 16px;border-radius:9px;font-weight:700;cursor:pointer;margin:2px}
-.btn.ghost{background:#0f172a;border:1px solid var(--line)}.btn.danger{background:#991b1b}.btn.ok{background:#15803d}.btn:disabled{opacity:.45;cursor:not-allowed}
-table{width:100%;border-collapse:collapse;font-size:14px}td,th{border:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
-input,select,textarea{background:#0f172a;border:1px solid var(--line);color:#fff;padding:9px 10px;border-radius:8px}
-small,.mut{color:var(--mut)}
-.hero3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;align-items:stretch;margin:8px 0}
-.hero3 .hcol{border:1px solid var(--line);padding:14px;text-align:center}
-.hero3 .hcol:first-child{border-radius:12px 0 0 12px}.hero3 .hcol:last-child{border-radius:0 12px 12px 0}
-.vs{text-align:center;padding:10px;font-weight:800}
-.diff-add{color:#bbf7d0}.diff-del{color:#fca5a5}
-.bar{height:12px;border-radius:6px;background:#1f2937;margin:4px 0;overflow:hidden}
-.bar>div{height:100%}
-.drawer{position:fixed;top:0;right:0;width:min(430px,94vw);height:100vh;background:#0f172a;border-left:1px solid var(--line);padding:20px;overflow-y:auto;z-index:40}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:39}
-.judgebar{position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid var(--line);padding:12px 20px;z-index:30;display:flex;gap:10px;align-items:center}
-.suite{border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden}
-.suite>button{width:100%;background:#0f172a;border:0;color:var(--txt);padding:10px 14px;text-align:left;cursor:pointer;font-size:14px}
-.suite .detail{display:none;padding:10px 14px}.suite.open .detail{display:block}
-.stepdot{display:inline-block;width:26px;height:26px;border-radius:50%;text-align:center;line-height:26px;font-weight:800;margin-right:8px;border:1px solid var(--line)}
-svg.graph text{fill:var(--txt);font-size:12px}svg.graph .node{cursor:pointer}
-.loading{color:var(--mut);padding:20px}.err{color:#fca5a5;padding:12px}
-</style>
+<link rel="stylesheet" href="./styles.css"/>
 </head>
 <body>
+<a class="skip-link" href="#view">Skip to content</a>
 <header class="top">
-<div><div class="title">ProcessPatch</div><small>Operational Rule Compiler · CI for real-world procedures</small></div>
-<div id="buildBadge" class="badge">no build yet</div>
-<span id="hdrControls">
-<select id="domain"><option value="research_grant">research_grant</option><option value="reimbursement">reimbursement</option></select>
-<button class="btn" onclick="runBuild()">Compile Amendment</button>
-<button class="btn ghost" onclick="cloudRun()">Run Cloud Execution</button>
-<small>API <input id="apiBase" value="http://localhost:8000" style="width:180px"/></small>
-<button class="btn ghost" onclick="toggleJudge()">Judge Mode</button>
+<div class="brand"><div class="title">ProcessPatch</div><div class="sub">Operational Rule Compiler · CI for real-world procedures</div></div>
+<div id="buildBadge" class="badge" role="status">no build yet</div>
+<span id="hdrControls" class="top-actions">
+<label class="field">Domain <select id="domain"><option value="research_grant">research_grant</option><option value="reimbursement">reimbursement</option></select></label>
+<button class="btn sm" onclick="runBuild()">Compile Amendment</button>
+<button class="btn ghost sm" onclick="cloudRun()">Run Cloud Execution</button>
+<small class="api-inline">API <input id="apiBase" value="http://localhost:8000" style="width:180px" aria-label="API base URL"/></small>
+<button class="btn ghost sm" onclick="toggleJudge()">Judge Mode</button>
+<button id="authBtn" class="btn ghost sm" onclick="authToggle()">Sign in</button>
 </span>
 </header>
 <div class="shell">
-<nav class="side" id="tabs"></nav>
-<main id="view"></main>
+<nav class="side" id="tabs" aria-label="Build sections"></nav>
+<main id="view" tabindex="-1"></main>
 </div>
-<div id="judgebar" class="judgebar" style="display:none"></div>
+<div id="judgebar" class="judgebar" style="display:none" aria-label="Judge mode guide"></div>
 <div id="drawerRoot"></div>
-<script>
-let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null, JUDGE=false, JSTEP=0;
-try{if(window.PROCESSPATCH_API){API=window.PROCESSPATCH_API;}}catch(e){}
-const TABS=['Overview','Impact','Witnesses','Procedure','Patch','Tests','Approval','Benchmarks','Builds'];
-let active='Overview';
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-const api=()=>{const el=document.getElementById('apiBase');if(el&&!el.value)el.value=API;return (el&&el.value||API).replace(/\/$/,'');};
-async function get(p){const r=await fetch(api()+p);if(!r.ok)throw new Error('GET '+p+' -> '+r.status);return r.json();}
-async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});let d=null;try{d=await r.json();}catch(e){}return {code:r.status,data:d};}
-function setView(h){document.getElementById('view').innerHTML=h;}
-function loading(msg){setView('<div class=card><div class=loading>'+esc(msg||'Loading…')+'</div></div>');}
-function showErr(e){setView('<div class=card><div class=err>Request failed: '+esc(e.message||e)+'<br/><small>Start the API with <span class=mono>python -m services.api.server</span>.</small></div></div>');}
-function renderTabs(){const t=document.getElementById('tabs');t.innerHTML='<div class=sec>Build</div>'+TABS.map(x=>`<button class="${x===active?'active':''}" onclick="go('${x}')">${esc(x)}</button>`).join('')+'<div class=sec>AWS</div><div class=mut style="padding:0 12px;font-size:12px" id=awsBox></div>';const ab=document.getElementById('awsBox');if(ab)ab.textContent=EXECArn?('exec: '+EXECArn.slice(0,42)+'…'):'no cloud execution';}
-function go(x){active=x;renderTabs();render();}
-function badge(){const b=document.getElementById('buildBadge');if(!BUILD){b.textContent='no build yet';b.className='badge';return;}const n=(BUILD.witnesses||[]).length;const st=BUILD.status||'?';b.textContent=`${BUILD.build_id} · ${st} · ${n} witnesses`;b.className='badge '+(st==='PATCH_VALIDATED'||st==='PATCH_ACTIVE'?'pass':(n?'fail':'warn'));}
-function trust(t){if(t==='FIXTURE')return '<span class="tag info">FIXTURE · hand-authored gold Rule IR</span>';if(t==='DETERMINISTIC_PARSER')return '<span class="tag info">DETERMINISTIC_PARSER · bounded language</span>';if(t==='BEDROCK_CANDIDATE')return '<span class="tag warn">BEDROCK_CANDIDATE · requires human review</span>';return t==='VERIFIED'?'<span class="tag fail">VERIFIED · witness reproduces</span>':t==='VALIDATED'?'<span class="tag pass">VALIDATED · patch passed checks</span>':t==='HUMAN'?'<span class="tag warn">HUMAN-APPROVED</span>':`<span class=tag>${esc(t)}</span>`;}
-function backendBadge(){const b=(BUILD&&BUILD.extraction_backend)||'fixture';if((b||'').startsWith('bedrock:'))return trust('BEDROCK_CANDIDATE');return trust(b==='fixture'?'FIXTURE':'DETERMINISTIC_PARSER');}
-function render(){badge();if(!BUILD){setView(`<div class=card><h2>A policy changed. Which procedure steps are wrong now?</h2><p>Pick a domain and click <b>Compile Amendment</b> (local pipeline) or <b>Run Cloud Execution</b> (Step Functions via the API).</p><p class=mono>Policy change → Compile → Witness → Localized patch → Regression tests → Validated procedure → Human approval</p><div class=card><h3>Policy input</h3><textarea id=policyText rows=4 style="width:100%" placeholder="Paste policy text, or upload a .md file"></textarea><br/><input type=file accept=".md,.txt" onchange="loadPolicyFile(this)"/> <button class=btn onclick="submitPolicy()">Compile pasted policy</button></div><p><small>Software gets regression tests when code changes. Real-world procedures should get them when rules change.</small></p></div>`);return;}
-try{({Overview:vOverview,Impact:vImpact,Witnesses:vWit,Procedure:vProc,Patch:vPatch,Tests:vTests,Approval:vApproval,Benchmarks:vBench,Builds:vHist})[active]();}catch(e){showErr(e);}}
-/* ---------- actions ---------- */
-async function runBuild(){const d=document.getElementById('domain').value;loading('Compiling amendment (deterministic pipeline)…');try{BUILD=await get('/demo/canonical?domain='+d);}catch(e){showErr(e);return;}drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
-async function refreshBuild(){if(BUILD){try{BUILD=await get('/builds/'+BUILD.build_id);}catch(e){}render();}}
-async function loadHistory(){try{HISTORY=(await get('/builds')).builds||[];}catch(e){}}
-async function cloudRun(){const d=document.getElementById('domain').value;loading('Registering DRAFT → starting Step Functions execution…');try{
-const b=await post('/builds',{domain:d,defer:true});const ex=await post(`/builds/${b.data.build_id}/execute`,{});EXECArn=ex.data.executionArn;
-setView(`<div class=card><h3>Cloud execution</h3><div class=mono>${esc(EXECArn)}\nstatus: ${esc(ex.data.status)}\n${esc(ex.data.note||'')}</div><div id=execPoll class=mono>polling…</div></div>`);
-for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,3000));try{const s=await get('/executions/'+encodeURIComponent(EXECArn));const el=document.getElementById('execPoll');if(el)el.textContent='status: '+s.status;if(s.status!=='RUNNING')break;}catch(e){break;}}
-BUILD=await get('/builds/'+ex.data.build_id);}catch(e){showErr(e);return;}drilled=null;CANDIDATE=null;active='Overview';renderTabs();render();loadHistory();}
-async function submitPolicy(){const t=document.getElementById('policyText').value;if(!t.trim()){alert('paste policy text first');return;}const d=document.getElementById('domain').value;loading('Extracting + compiling pasted policy…');const r=await post('/builds',{domain:d,policy_text:t,policy_version_id:'POLICY-UPLOAD'});
-if(r.data.status==='NEEDS_REVIEW'||r.data.status==='CONFLICT'||r.data.status==='EXTRACTION_UNAVAILABLE'){BUILD=r.data;active='Approval';renderTabs();render();alert('Extraction needs review: '+r.data.status+' — see Gate 1.');return;}
-BUILD=r.data;drilled=null;CANDIDATE=null;active='Overview';renderTabs();render();}
-function loadPolicyFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('policyText').value=r.result;};r.readAsText(f);}
-function isCloud(){return EXECArn&&!EXECArn.startsWith('local:');}
-async function checkPortal(p){const g=id=>{const el=document.getElementById(id);return el?el.value:'';};const q=`cgpa=${encodeURIComponent(g('cgpa')||7.8)}&amount=${encodeURIComponent(g('amt')||40000)}&patched=${p?1:0}&domain=${document.getElementById('domain').value}`;const j=await get('/portal?'+q);
-document.getElementById('portalOut').textContent=`Expected: eligible=${j.expected.eligible} required=${JSON.stringify(j.expected.required)}\nActual:   eligible=${j.actual.eligible} required=${JSON.stringify(j.actual.required)}\n`+((j.expected.eligible!==j.actual.eligible||JSON.stringify(j.expected.required)!==JSON.stringify(j.actual.required))?'DISAGREEMENT — PROCEDURAL DRIFT CONFIRMED':'agree');}
-/* ---------- Overview (hero) ---------- */
-function heroCase(){const w=(BUILD.witnesses||[])[0];if(!w)return null;const c=w.case;const numKey=Object.keys(c).find(k=>typeof c[k]==='number'&&k!=='year'&&k!=='backlogs')||'cgpa';return {w,numKey};}
-function vOverview(){const w=BUILD.witnesses||[];const v=BUILD.validation||{failed:'—',total:'—',status:BUILD.status};const h=heroCase();
-const hero=h?`<div class=card><div class=mut>POLICY × PERSON × PROCEDURE</div><div class=hero3>
-<div class=hcol><b>POLICY</b><div class=mono>${esc(JSON.stringify((BUILD.semantic_delta||{}).notes||[]).slice(0,160)||(BUILD.semantic_delta||{}).type||'')}</div></div>
-<div class=hcol><b>PERSON</b><div class=mono>${esc(h.numKey)} = ${esc(h.w.case[h.numKey])}</div><div>Expected: <b>${esc(JSON.stringify(h.w.expected.eligible!=null?h.w.expected.eligible:h.w.expected))}</b><br/>Actual: <b>${esc(JSON.stringify(h.w.actual.eligible!=null?h.w.actual.eligible:h.w.actual))}</b></div></div>
-<div class=hcol><b>PROCEDURE (stale)</b><div class=mono>${esc((BUILD.faults||[]).map(f=>(f.affected_nodes||[]).join(',')).join('; ').slice(0,160))}</div></div></div>
-<div class=vs>▼&nbsp;&nbsp;DISAGREEMENT — ${esc(h.w.kind)}&nbsp;&nbsp;▼</div></div>`:`<div class=card><b>No drift.</b> Procedure matches the active rules.</div>`;
-setView(`<div class=card><h2>Research Grant Workflow · ${esc(BUILD.build_id)} <span class="badge ${w.length?'fail':'pass'}">${esc(BUILD.status||'?')}</span></h2>
-<p>${esc((BUILD.semantic_delta||{}).type||'no compiled delta yet')} · ${w.length} witnesses · ${(BUILD.faults||[]).length} fault regions · ${esc(v.failed)} failing checks</p>
-<p>Extraction: ${backendBadge()} · Review: <span class=tag>${esc(BUILD.review_state||'—')}</span> ${EXECArn?`<span class=tag>exec ${esc(EXECArn.slice(0,20))}…</span>`:''}</p>
-<div class=cols4>${[['Semantic changes',(BUILD.impact||{}).semantic_changes||((BUILD.semantic_delta||{}).affected_rule_ids||[]).length||'—'],['Verified witnesses',w.length],['Affected nodes',((BUILD.impact||{}).artifacts||{}).nodes_affected||'—'],['Patch checks',`${v.passed||'—'}/${v.total||'—'}`]].map(([k,n])=>`<div class=card style="text-align:center"><div style="font-size:26px;font-weight:800">${esc(n)}</div><div class=mut>${esc(k)}</div></div>`).join('')}</div></div>`
-+hero+`<div class=card><h3>Synthetic portal — driven by procedure JSON</h3><label>CGPA <input id=cgpa value="7.80"/></label> <label>Amount <input id=amt value="40000"/></label>
-<button class=btn onclick="checkPortal(false)">Check (current portal)</button><button class=btn ghost onclick="checkPortal(true)">Check (patched preview)</button><div id=portalOut class=mono style="margin-top:10px"></div></div>
-<div class=card><h3>Policy input</h3><textarea id=policyText rows=4 style="width:100%" placeholder="Paste policy text, or upload a .md file"></textarea><br/><input type=file accept=".md,.txt" onchange="loadPolicyFile(this)"/> <button class=btn onclick="submitPolicy()">Compile pasted policy</button> <small>Unparseable or qualified input stays PENDING at Gate 1.</small></div>`);}
-/* ---------- Impact ---------- */
-function vImpact(){const im=BUILD.impact||{};const b=im.behavioral||{},tc=im.test_cohort||{},v=im.verification||{};const max=Math.max(1,...Object.values(b));
-const rows=Object.entries(b).map(([k,n])=>`<tr><td><a href="#" onclick="drill('${esc(k)}');return false;">${esc(k)} (${n})</a></td><td><div class=bar><div style="width:${Math.round(100*n/max)}%;background:var(--red)"></div></div></td></tr>`).join('');
-const tcrows=[['unchanged',tc.unchanged,'var(--grey)'],['shorter journeys',tc.shorter_journeys,'var(--green)'],['newly eligible',tc.newly_eligible,'var(--blue)'],['longer journeys',tc.longer_journeys,'var(--amber)']].map(([k,n,c])=>`<div>${esc(k)}: <b>${esc(n||0)}</b><div class=bar><div style="width:${Math.round(100*(n||0)/Math.max(1,tc.cohort_size))}%;background:${c}"></div></div></div>`).join('');
-setView(`<div class=card><h3>Impact — what changed, where it propagated, who is affected</h3>
-<div class=cols><div class=card><b>What changed?</b><div class=mono>${esc((im.semantic_breakdown||{}).delta_type||'')}</div><div class=mono>rules: ${esc(((im.artifacts||{}).affected_rules||[]).join(', '))}</div></div>
-<div class=card><b>Blast radius</b><div class=mono>workflows: ${esc((im.artifacts||{}).workflows_affected)} · nodes: ${esc((im.artifacts||{}).nodes_affected)}\n${esc(((im.artifacts||{}).affected_nodes||[]).join(', '))}\nfields: ${esc(((im.artifacts||{}).fields_affected||[]).join(', ')||'—')}</div></div>
-<div class=card><b>Human impact</b><div class=mono>Generated test cohort (synthetic, n=${esc(tc.cohort_size)})</div>${tcrows}<small>Never imply population prevalence from synthetic cases. Behavioral counts are representative verified witnesses, not headcounts.</small></div></div>
-<div class=cols2><div class=card><b>Behavioral counts (click to drill down)</b><table><tr><th>kind</th><th></th></tr>${rows}</table><div id=drill class=mono></div></div>
-<div class=card><b>Regression + trust</b><div class=mono>Before: ${(v.tests_before||{}).failed} failing\nAfter: ${(v.tests_after||{}).failed||0} failing / ${(v.tests_after||{}).total||0}\nprovenance: ${esc(v.provenance_coverage)}\nRule review: ${esc(BUILD.review_state)}\nMachine: ${esc((v.tests_after?'COMPLETE':'—'))}\nHuman: ${esc(((im.approval||{}).human_status||'AWAITING_APPROVAL'))}</div></div></div></div>`);}
-function drill(kind){const map={wrong_rejections:'wrong_rejection',wrong_acceptances:'wrong_acceptance',unnecessary_burdens:'unnecessary_burden',missing_safeguards:'missing_safeguard',wrong_orderings:'wrong_journey',deadline_mismatches:'deadline_mismatch',prohibition_breaches:'prohibition_breach'};const k=map[kind];const list=(BUILD.witnesses||[]).filter(w=>w.kind===k);
-document.getElementById('drill').textContent=list.map(w=>`${w.witness_id} ${JSON.stringify(w.case)}`).join('\n')||'none';}
-/* ---------- Witnesses (debugger) ---------- */
-function vWit(){const w=BUILD.witnesses||[];if(!w.length){setView('<div class=card><b>No witnesses</b> — semantics equivalent.</div>');return;}
-setView(w.map((x,i)=>{const rows=Object.entries(x.case).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
-return `<div class=card><h3>${esc(x.witness_id)} · ${esc(x.kind)} <span class="tag fail">VERIFIED · reproduces</span></h3>
-<p class=mut>Who gets the wrong outcome? One representative case per failure mode.</p>
-<div class=cols2><div><b>Applicant</b><table>${rows}</table></div>
-<div><b>Expected vs actual path</b><div class=cols2><div><div class=mut>EXPECTED</div><div class=mono>${esc(x.trace_expected.join('\n'))}</div></div><div><div class=mut>ACTUAL</div><div class=mono>${esc(x.trace_actual.join('\n'))}</div></div></div></div></div>
-<div id=bx-${i} class=mono></div><button class=btn ghost onclick="replay('${esc(x.witness_id)}')">Replay witness</button> <button class=btn ghost onclick="boundaryX(${i})">Boundary explorer</button><div id=rp-${esc(x.witness_id)} class=mono></div></div>`;}).join(''));}
-async function replay(wid){const j=await post(`/builds/${BUILD.build_id}/witnesses/${wid}/replay`,{});document.getElementById('rp-'+wid).textContent='after-patch eligible='+j.data.actual_after.eligible+' required='+JSON.stringify(j.data.actual_after.required);}
-async function boundaryX(i){const x=BUILD.witnesses[i];const nums=Object.entries(x.case).filter(([k,v])=>typeof v==='number');if(!nums.length){document.getElementById('bx-'+i).textContent='no numeric fields';return;}
-let out='field | value | expected | actual\n';
-for(const [f,v] of nums){for(const d of [-0.02,-0.01,0,0.01,0.02]){const val=Math.round((v+d)*100)/100;const q={...x.case,[f]:val};const qs=`cgpa=${encodeURIComponent(q.cgpa??7.8)}&amount=${encodeURIComponent(q.amount??40000)}&patched=0&domain=${document.getElementById('domain').value}`;try{const j=await get('/portal?'+qs);out+=`${f} ${val} elig=${j.expected.eligible} elig=${j.actual.eligible}\n`;}catch(e){}}}
-document.getElementById('bx-'+i).textContent=out;}
-/* ---------- Procedure (SVG graph + drawer) ---------- */
-function nodeStatus(n,beforeIds,afterIds,changedIds,faultIds){if(!beforeIds.has(n.node_id))return 'added';if(!afterIds.has(n.node_id))return 'removed';if(changedIds.has(n.node_id))return 'changed';if(faultIds.has(n.node_id))return 'stale';return 'same';}
-function vProc(){const showPatched=window._showPatched!==false;const wf=showPatched?(BUILD.patched_workflow||BUILD.procedure):BUILD.procedure;if(!wf){setView('<div class=card>no procedure</div>');return;}
-const before=BUILD.procedure||{nodes:[]};const after=BUILD.patched_workflow||before;
-const bmap={};before.nodes.forEach(n=>bmap[n.node_id]=n);const amap={};after.nodes.forEach(n=>amap[n.node_id]=n);
-const changed=new Set();Object.keys(amap).forEach(id=>{if(bmap[id]&&JSON.stringify(bmap[id].implementation)!==JSON.stringify(amap[id].implementation))changed.add(id);});
-const fault=new Set();(BUILD.faults||[]).forEach(f=>(f.affected_nodes||[]).forEach(n=>fault.add(n)));
-const order={};wf.nodes.forEach(n=>order[n.node_id]=n);
-const indeg={};wf.nodes.forEach(n=>indeg[n.node_id]=0);(wf.edges||[]).forEach(e=>{if(indeg[e.to]!=null)indeg[e.to]++;});
-const levels={};let frontier=wf.nodes.filter(n=>indeg[n.node_id]===0).map(n=>n.node_id);let lv=0;const seen=new Set();
-while(frontier.length&&lv<12){const next=[];frontier.forEach(id=>{if(seen.has(id))return;seen.add(id);levels[id]=lv;(wf.edges||[]).filter(e=>e.from===id).forEach(e=>next.push(e.to));});frontier=next;lv++;}
-wf.nodes.forEach(n=>{if(!(n.node_id in levels))levels[n.node_id]=lv;});
-const W=1100,rowH=86,colW=200;const byLv={};Object.entries(levels).forEach(([id,l])=>{(byLv[l]=byLv[l]||[]).push(id);});
-let svg=`<svg class=graph width="100%" viewBox="0 0 ${W} ${Math.max(140,(lv+1)*rowH)}">`;
-const pos={};Object.entries(byLv).forEach(([l,ids])=>{ids.forEach((id,i)=>{const x=40+i*Math.min(colW,(W-80)/Math.max(1,ids.length));const y=30+Number(l)*rowH;pos[id]={x,y};});});
-(wf.edges||[]).forEach(e=>{const a=pos[e.from],b=pos[e.to];if(!a||!b)return;svg+=`<line x1="${a.x+70}" y1="${a.y+22}" x2="${b.x+70}" y2="${b.y-4}" stroke="#4b5563" stroke-width="2" marker-end="url(#ah)"/>`;});
-const col={added:'#16a34a',removed:'#dc2626',changed:'#d97706',stale:'#dc2626',same:'#4b5563'};
-wf.nodes.forEach(n=>{const p=pos[n.node_id];const st=nodeStatus(n,new Set(Object.keys(bmap)),new Set(Object.keys(amap)),changed,fault);
-svg+=`<g class=node onclick="drawer('${esc(n.node_id)}')"><rect x="${p.x}" y="${p.y-4}" width="140" height="30" rx="8" fill="#0f172a" stroke="${col[st]}" stroke-width="2.5"/><text x="${p.x+70}" y="${p.y+15}" text-anchor="middle">${esc(n.label.slice(0,20))}</text></g>`;});
-svg+=`<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#4b5563" stroke-width="1.5"/></marker></defs></svg>`;
-setView(`<div class=card><h3>Procedure ${showPatched?'(patched preview)':'(stale)'} <span class=mut>${esc(wf.procedure_version_id||'')}</span></h3>
-<button class=btn ghost onclick="window._showPatched=false;render()">Before</button><button class=btn ghost onclick="window._showPatched=true;render()">After</button>
-<span class=mut>grey unchanged · red stale · green added · amber changed</span>${svg}
-<table><tr><th>node</th><th>config</th><th>provenance</th></tr>${wf.nodes.map(n=>`<tr><td>${esc(n.node_id)}<br/><small>${esc(n.label)}</small></td><td class=mono>${esc(JSON.stringify(n.implementation))}</td><td class=mono>${esc(JSON.stringify(n.provenance_links))}</td></tr>`).join('')}</table></div>`);}
-function drawer(nid){const wf=BUILD.patched_workflow||BUILD.procedure;const n=(wf.nodes||[]).find(x=>x.node_id===nid);if(!n)return;
-const rules={};(BUILD.new_rules||[]).forEach(r=>rules[r.rule_id]=r);
-const chain=(n.provenance_links||[]).map(l=>{const r=rules[l.target]||{};const p=r.provenance||{};return `<div><span class=tag>WHY THIS STEP EXISTS</span><div class=mono>${esc(l.target)}\n${esc(p.source_text||'')}\nPolicy ${esc(p.policy_version_id||'')} §${esc(p.section||'')}</div></div>`;}).join('')||'<div class=mut>structural node</div>';
-const wit=(BUILD.witnesses||[]).filter(w=>JSON.stringify(w).includes(nid)).map(w=>w.witness_id).join(', ');
-const ops=((BUILD.patch||{}).operations||[]).filter(o=>o.node_id===nid);
-document.getElementById('drawerRoot').innerHTML=`<div class=overlay onclick="closedrawer()"></div><div class=drawer><h3>${esc(n.label)}</h3><div class=mono>${esc(n.node_id)}</div>${chain}<p><b>Witnesses touching this node:</b> ${esc(wit||'—')}</p><p><b>Patch ops:</b></p><div class=mono>${esc(JSON.stringify(ops,null,2))}</div><button class=btn ghost onclick="closedrawer()">Close</button></div>`;}
-function closedrawer(){document.getElementById('drawerRoot').innerHTML='';}
-/* ---------- Patch (git diff) ---------- */
-function vPatch(){const pt=BUILD.patch||{};const ops=pt.operations||[];
-const blocks=ops.map(o=>{let body='';if(o.op==='CHANGE_CONDITION')body=`- ${esc(o.field||'condition')}: ${esc(JSON.stringify(o.old))}\n+ ${esc(o.field||'condition')}: ${esc(JSON.stringify(o.new))}`;else if(o.op==='CHANGE_REQUIRED_FLAG')body=`- required: ${esc(JSON.stringify((o.old||{}).required))}\n+ required: ${esc(JSON.stringify((o.new||{}).required))}${o.new&&o.new.required_condition?'\n+ required_if: '+esc(JSON.stringify(o.new.required_condition)):''}`;else body=`${esc(o.op)} ${esc(o.node_id||o.from||'')}`;
-return `<div class=card><b>${esc(o.node_id||o.op)}</b><div class=mono>${body}\nReason: ${esc(o.rationale||'—')}</div></div>`;}).join('');
-setView(`<div class=card><h3>Candidate patch ${esc(pt.patch_id||'')} — ${ops.length} workflow edits · cost ${esc(pt.cost)} · <span class="tag pass">VALIDATED</span></h3><p class=mut>${esc(pt.strategy||'')}</p>${blocks||'<p>No operations (semantics already equivalent).</p>'}</div>`);}
-/* ---------- Tests (actions style) ---------- */
-function vTests(){const v=BUILD.validation||{results:[]};const groups={};(v.results||[]).forEach(r=>{(groups[r.suite]=groups[r.suite]||[]).push(r);});
-const names={witness:'Witness replay',boundary:'Boundary behavior',unchanged:'Preservation',integrity:'Workflow integrity',ordering:'Ordering',metamorphic:'Metamorphic',provenance:'Provenance'};
-setView(`<div class=card><h3>Regression — ${esc(v.passed)}/${esc(v.total)} passing · ${esc(v.status)}</h3><p class=mut>Never COMPLIANCE GUARANTEED. Only VALIDATED_WITHIN_TESTED_MODEL.</p>${Object.entries(groups).map(([s,rs])=>{const ok=rs.filter(r=>r.pass).length;return `<div class=suite id=sq-${esc(s)}><button onclick="document.getElementById('sq-${esc(s)}').classList.toggle('open')">${ok===rs.length?'✓':'✕'} ${esc(names[s]||s)} — ${ok}/${rs.length}</button><div class=detail><table>${rs.map(r=>`<tr><td class=mono>${esc(JSON.stringify(r.case)).slice(0,120)}</td><td>${r.pass?'PASS':'FAIL'}</td><td>${esc(r.detail||'')}</td></tr>`).join('')}</table></div></div>`;}).join('')}</div>`);}
-/* ---------- Approval (protected merge) ---------- */
-async function vApproval(){loading('Loading governance state…');let rev,appr,g,log;try{[rev,appr,g,log]=await Promise.all([get(`/builds/${BUILD.build_id}/rule-reviews`),get(`/builds/${BUILD.build_id}/approvals`),get(`/builds/${BUILD.build_id}/guardrails`),get(`/builds/${BUILD.build_id}/audit`)]);}catch(e){showErr(e);return;}
-const dis=(g.blockers||[]).length>0;const steps=[['Rule interpretation reviewed',(g.checks||{}).unresolved_rule_review===0],['Patch tests pass',(g.checks||{}).patch_validation==='VALIDATED_WITHIN_TESTED_MODEL'],['Preservation passed',(g.checks||{}).preservation==='PASS'],['Provenance 100%',(g.checks||{}).provenance_coverage>=1],['Candidate hash unchanged',!(g.blockers||[]).some(b=>String(b).includes('hash'))]];
-setView(`<div class=card><h3>Merge protection — what exactly am I being asked to accept?</h3>
-<div class=card>${steps.map(([k,ok],i)=>`<div><span class=stepdot style="background:${ok?'var(--green-bg)':'var(--red-bg)'}">${ok?'✓':'✕'}</span>${esc(k)}</div>`).join('')}</div>
-<div class=cols2><div class=card><b>Gate 1 · Rules</b><table><tr><th>rule</th><th>decision</th><th></th></tr>${(rev.reviews||[]).map(r=>`<tr><td class=mono>${esc(r.rule_id)}</td><td>${esc(r.decision)}</td><td><button class=btn ghost onclick="revDecide('${esc(r.rule_id)}','accept')">Accept</button> <button class=btn ghost onclick="revDecide('${r.rule_id}','reject')">Reject</button></td></tr>`).join('')}</table></div>
-<div class=card><b>Gate 2 · Patch</b><div class=mono>${esc(JSON.stringify(g.checks))}\nblockers: ${esc(JSON.stringify(g.blockers))}</div>
-<label>Reviewer <input id=revName value="Demo Reviewer"/></label> <label>Reason <input id=revReason value="Matches policy; all checks pass." style="width:240px"/></label><br/>
-<button class=btn ok ${dis?'disabled':''} onclick="patchDecide('approve')">Approve candidate</button><button class=btn danger onclick="patchDecide('reject')">Request changes</button><button class=btn ghost onclick="patchDecide('revision')">Request revision</button>
-${dis?'<p><small>Approve disabled by merge protection above.</small></p>':''}</div></div>
-<div class=cols2><div class=card><b>Gate 3 · Activation</b><p><small>Activates the exact candidate id from approval (hash-verified server-side).</small></p><button class=btn ok onclick="activate()">Activate candidate</button><div id=actOut class=mono></div></div>
-<div class=card><b>Approvals + audit</b><div class=mono>${esc(JSON.stringify(appr.approvals))}\n---\n${(log.audit||[]).map(e=>`${new Date(e.ts*1000).toISOString()} ${esc(e.event)}`).join('\n')}</div></div></div>
-<div class=card><h3>Patch certificate</h3><div class=mono>${esc(JSON.stringify(BUILD.certificate))}</div></div></div>`);}
-async function revDecide(rid,how){if(isCloud()){await post(`/builds/${BUILD.build_id}/resume`,{gate:'rule_review',decisions:{[rid]:how.toUpperCase()},reviewer:{reviewer_id:'USR-001'}});}else{await post(`/builds/${BUILD.build_id}/rules/${rid}/${how}`,{reason:'UI review'});}vApproval();}
-async function patchDecide(how){const map={approve:'APPROVE_CANDIDATE',reject:'REJECT_PATCH',revision:'REQUEST_REVISION'};let r;
-if(isCloud()){r=await post(`/builds/${BUILD.build_id}/resume`,{gate:'patch_approval',decision:map[how],reviewer:{reviewer_id:'USR-001',display_name:(document.getElementById('revName')||{}).value||'Demo Reviewer'},reason:(document.getElementById('revReason')||{}).value||'ok',role:'PROCEDURE_OWNER'});}
-else{const m2={approve:'patch/approve',reject:'patch/reject',revision:'patch/request-revision'};r=await post(`/builds/${BUILD.build_id}/${m2[how]}`,{reviewer:{reviewer_id:'USR-001',display_name:(document.getElementById('revName')||{}).value||'Demo Reviewer'},reason:(document.getElementById('revReason')||{}).value||'ok',role:'PROCEDURE_OWNER'});}
-if(r.code!==200){alert('Blocked: '+JSON.stringify(r.data));}else{if(r.data&&r.data.candidate_version_id){CANDIDATE=r.data.candidate_version_id;}BUILD=await get('/builds/'+BUILD.build_id);vApproval();render();}}
-async function activate(){if(isCloud()){const r=await post(`/builds/${BUILD.build_id}/resume`,{gate:'activation',decision:'APPROVE',reviewer:{reviewer_id:'USR-001',display_name:'Demo Reviewer'},reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data).slice(0,800);return;}const r=await post(`/procedures/${CANDIDATE}/activate`,{build_id:BUILD.build_id,reviewer:{reviewer_id:'USR-001',display_name:'Demo Reviewer'},reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data).slice(0,800);}
-/* ---------- Benchmarks ---------- */
-async function vBench(){loading('Loading benchmark…');try{BENCH=await get('/benchmark-runs/latest');}catch(e){setView('<div class=card>No benchmark run yet — run <span class=mono>make benchmark</span>.</div>');return;}
-const m={};(BENCH.cases||[]).forEach(c=>{const f=c.case_id.split('-')[0];m[f]=m[f]||{};m[f][c.status]=(m[f][c.status]||0)+1;});
-const st={};(BENCH.cases||[]).forEach(c=>{st[c.status]=(st[c.status]||0)+1;});
-const cards=[['scenarios',(BENCH.cases||[]).length],['auto repaired',st.AUTO_REPAIRED||0],['correct no-op',st.CORRECTLY_NO_OP||0],['correctly escalated',st.CORRECTLY_ESCALATED||0],['unsupported (boundary shown)',st.UNSUPPORTED||0]];
-setView(`<div class=card><h3>ProcessPatchBench — more than one scripted demo?</h3><div class=cols4 style="grid-template-columns:repeat(5,1fr)">${cards.map(([k,n])=>`<div class=card style="text-align:center"><div style="font-size:24px;font-weight:800">${esc(n)}</div><div class=mut>${esc(k)}</div></div>`).join('')}</div>
-<table><tr><th>family</th><th>results</th></tr>${Object.entries(m).map(([k,v])=>`<tr><td>${esc(k)}</td><td class=mono>${esc(JSON.stringify(v))}</td></tr>`).join('')}</table>
-<table><tr><th>case</th><th>split</th><th>status</th></tr>${(BENCH.cases||[]).map(c=>`<tr><td>${esc(c.case_id)}</td><td>${esc(c.split||'')}</td><td>${esc(c.status)}</td></tr>`).join('')}</table>
-<p><small>Downstream repair uses gold Rule IR; the eval split is authored/frozen, not an external real-world benchmark.</small></p></div>`);}
-function vHist(){setView(`<div class=card><h3>Build history</h3>${EXECArn?`<p class=mut>active execution: ${esc(EXECArn)}</p>`:''}<table><tr><th>build</th><th>status</th><th></th></tr>${HISTORY.map(b=>`<tr><td class=mono>${esc(b.build_id||b)}</td><td>${esc(b.status||'')}</td><td><button class=btn ghost onclick="openBuild('${esc(b.build_id||b)}')">Open</button></td></tr>`).join('')}</table></div>`);}
-async function openBuild(id){try{BUILD=await get('/builds/'+id);}catch(e){showErr(e);return;}CANDIDATE=null;active='Overview';renderTabs();render();}
-/* ---------- Judge mode ---------- */
-const JSTEPS=[['See the stale portal','Overview','Enter CGPA 7.80 and check: the portal rejects a student the policy calls eligible.'],['Compile the amendment','Overview','Click Compile Amendment (or Run Cloud Execution for the Step Functions path).'],['Meet the person who proves the bug','Witnesses','Each card is a verified failing case with expected vs actual paths.'],['Inspect the localized repair','Procedure','Click any node: why it exists, witnesses, patch ops. Red = stale, green = added.'],['Run regression tests','Tests','12+ checks: witnesses, boundaries, preservation, integrity.'],['Approve and replay','Approval','Review exact hashes, approve the candidate, activate, replay the portal.']];
-function toggleJudge(){JUDGE=!JUDGE;const hc=document.getElementById('hdrControls');if(hc)hc.style.display=JUDGE?'none':'';const jb=document.getElementById('judgebar');if(JUDGE){JSTEP=0;go('Overview');judgeShow();jb.style.display='flex';}else{jb.style.display='none';}}
-function judgeShow(){const [t,tab,txt]=JSTEPS[JSTEP];document.getElementById('judgebar').innerHTML=`<b>JUDGE MODE ${JSTEP+1}/6 · ${esc(t)}</b><span class=mut>${esc(txt)}</span><span style="flex:1"></span><button class=btn ghost onclick="JSTEP=Math.max(0,JSTEP-1);judgeShow()">Back</button><button class=btn onclick="JSTEP=Math.min(5,JSTEP+1);go(JSTEPS[JSTEP][1]);judgeShow()">Next</button><button class=btn ghost onclick="toggleJudge()">Exit</button>`;if(active!==tab)go(tab);}
-renderTabs();render();loadHistory();
-</script>
+<script src="./lib/app.js"></script>
 </body>
 </html>

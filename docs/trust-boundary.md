@@ -14,3 +14,7 @@ Deterministic code owns: constraints, witness search, localization, regression,
 impact aggregation, certificates. Human owns: rule acceptance, patch approval,
 activation. UI labels every result AI-EXTRACTED vs VERIFIED vs VALIDATED vs
 HUMAN-APPROVED — never merged into one confidence number.
+
+API auth boundary: HttpApi Cognito JWT authorizer rejects unverified tokens
+before Lambda; `services/api/authz.py` re-checks claims and stamps verified
+identity into every gate action (docs/auth.md).

@@ -75,7 +75,10 @@ def semantic_rule_delta(old_rules: list[dict], new_rules: list[dict]) -> dict:
         fam = (r.get("kind"), r.get("action"))
         o = old_by_fam.get((r.get("kind"), r.get("action")))
         c = r.get("condition") or {}
-        if r.get("kind") == "threshold" and o and o.get("kind") == "threshold":
+        if r.get("kind") == "threshold" and o and o.get("kind") == "threshold" \
+                and (o.get("condition") or {}).get("field") == c.get("field"):
+            # Pair thresholds only within the SAME field — comparing a cgpa
+            # bound with an amount bound is not a threshold change.
             oc = o.get("condition") or {}
             t = _threshold_cmp(oc.get("value"), oc.get("operator"), c.get("value"), c.get("operator"))
             changes.append(t)

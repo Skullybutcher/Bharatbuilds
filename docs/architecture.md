@@ -37,3 +37,8 @@ WitnessFn remains a documented future step, not a current claim.
 
 Why no Neptune: ~20–100 nodes/workflow. DynamoDB/JSON + in-memory traversal is
 simpler and cheaper; Neptune only if cross-workflow scale justifies it.
+
+Auth: Cognito UserPool + hosted-UI PKCE, HttpApi JWT authorizer (health/demo/auth-config
+public), verified identity stamped by `services/api/authz.py` (docs/auth.md).
+Trace ingestion: `POST /traces`, read-only `GET /builds/{id}/trace-compare` (docs/traces.md).
+Multi-procedure workspaces: `POST /workspaces`, `POST /procedures` (docs/workspaces.md).

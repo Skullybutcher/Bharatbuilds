@@ -6,7 +6,7 @@
   "behavioral_change": true,
   "repairable": false,
   "requires_human_review": false,
-  "benchmark_version": "v0.2.0",
+  "benchmark_version": "v0.3.0",
   "variables": {
     "cgpa": {
       "type": "decimal",

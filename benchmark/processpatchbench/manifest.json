@@ -1,6 +1,6 @@
 {
-  "benchmark_version": "v0.2.0",
-  "total": 29,
+  "benchmark_version": "v0.3.0",
+  "total": 31,
   "families": [
     "ambiguity",
     "compound_amendment",
@@ -10,6 +10,7 @@
     "deadline_tightened",
     "exception_added",
     "exception_removed",
+    "exclusion_added",
     "irrelevant_edit",
     "ordering_change",
     "prerequisite_added",
@@ -25,7 +26,7 @@
   ],
   "splits": {
     "dev": 15,
-    "eval": 14
+    "eval": 16
   },
   "cases": [
     "THRESH-RELAX-001",
@@ -56,6 +57,8 @@
     "EXC-ADD-002",
     "PROH-001",
     "UNSUP-TEMP-001",
-    "UNSUP-NEST-001"
+    "UNSUP-NEST-001",
+    "EXC-LIST-001",
+    "ENUM-EXCL-001"
   ]
 }

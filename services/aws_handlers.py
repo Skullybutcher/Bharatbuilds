@@ -252,6 +252,21 @@ def api_handler(event, context):
     except Exception:
         body = {}
 
+    # --- auth: Cognito authorizer claims (or self-verified bearer token).
+    # `off` mode (default) keeps the legacy credential-free behavior.
+    from services.api import authz as _authz
+    if _authz.mode() != "off" and not _authz.is_public(method, raw_path):
+        identity = _authz.claims_from_event(event)
+        if not identity:
+            try:
+                identity = _authz.authenticate({(k or "").lower(): v for k, v in (event.get("headers") or {}).items()})
+            except _authz.AuthzError as e:
+                return _out(event, {"error": e.args[0]}, e.status)
+        try:
+            body = _authz.authorize(method, raw_path, identity, body)
+        except _authz.AuthzError as e:
+            return _out(event, {"error": e.args[0]}, e.status)
+
     def call(fn, *a):
         try:
             return _out(event, fn(*a))
@@ -262,6 +277,8 @@ def api_handler(event, context):
 
     if method == "GET" and raw_path in ("/", "/health"):
         return _out(event, A.health())
+    if method == "GET" and raw_path == "/auth/config":
+        return _out(event, A.auth_config())
     if method == "GET" and raw_path == "/demo/canonical":
         return _out(event, A.canonical((qs.get("domain") or ["research_grant"])[0]))
     if method == "GET" and raw_path == "/builds":
@@ -277,6 +294,18 @@ def api_handler(event, context):
         return _out(event, {"error": "use the local API for nested benchmark drill-downs"}, 400)
     if method == "GET" and raw_path.startswith("/procedures") and not raw_path.endswith("/activate"):
         return _out(event, A.procedure_versions((qs.get("workflow_id") or [None])[0]))
+    if method == "GET" and raw_path == "/workspaces":
+        return _out(event, A.list_workspaces())
+    if method == "POST" and raw_path == "/workspaces":
+        return _out(event, A.create_workspace(body))
+    if method == "POST" and raw_path == "/procedures":
+        return _out(event, A.register_procedure(body))
+    if method == "GET" and raw_path == "/traces":
+        return _out(event, A.list_traces((qs.get("workflow_id") or [None])[0]))
+    if method == "POST" and raw_path == "/traces":
+        return _out(event, A.ingest_trace(body))
+    if method == "GET" and raw_path.startswith("/traces/"):
+        return call(A.get_trace, raw_path.split("/")[2])
     if method == "GET" and raw_path.startswith("/portal"):
         return _out(event, A.portal({k: v[0] for k, v in qs.items()}))
     seg = raw_path.split("/")
@@ -290,6 +319,8 @@ def api_handler(event, context):
             return call(A.witnesses, bid)
         if method == "GET" and tail == "impact/artifacts":
             return call(A.impact_artifacts, bid)
+        if method == "GET" and tail == "trace-compare":
+            return call(A.compare_traces, bid)
         if method == "GET" and tail in simple:
             return call(simple[tail], bid)
         if method == "POST" and tail.startswith("rules/"):

@@ -1,14 +1,19 @@
 # Deployment runbook
 
 0. Make the GitHub repo **public** (First Commit judges only score public repos).
-1. `make verify` — 176/176 local assertions.
+1. `make verify` — 178/178 local assertions.
 2. `make benchmark` — reference run matches committed metrics.
 3. `make infra-validate` — IaC checks pass.
 4. Deploy (`infra/deploy.sh` or `deploy.ps1` — needs `AMPLIFY_TOKEN` set); note ApiUrl output.
-5. `scripts/smoke.sh <api-url>` — health, canonical build, guardrails.
+   The script does a second pass to wire Cognito into the API and lock CORS to
+   the Amplify origin, then prints the admin-bootstrap commands — create your
+   `pp-admins` user there (docs/auth.md).
+5. `scripts/smoke.sh <api-url>` — health, auth config, canonical build, and a
+   401 check proving protected routes reject anonymous access.
 6. Open the Amplify URL (Outputs.AmplifyAppId → branch URL); set the UI's API
-   field to the ApiUrl; COMPILE AMENDMENT; walk Impact → Witnesses → Patch →
-   Tests → Approval (approve + activate).
+   field to the ApiUrl; SIGN IN (hosted UI, groups gate the actions);
+   COMPILE AMENDMENT; walk Impact → Witnesses → Patch → Tests → Approval
+   (approve + activate).
 7. Record the 3-minute demo from this flow; screenshot the CloudWatch
    dashboard (name in Outputs) for the write-up.
 

@@ -14,7 +14,7 @@ builds, amendments are commits, affected people are failing tests.
 
 NL rules → Rule IR → constraints → verified witnesses → localized patch →
 regression + impact + certificate → hash-bound human approval → new procedure
-version. 26-scenario heterogeneous benchmark; full AWS orchestration.
+version. 31-scenario heterogeneous benchmark; full AWS orchestration.
 
 ## Why it is trustworthy
 

@@ -84,8 +84,17 @@ def shift_date(value: str, days: int) -> str:
 
 
 def neighbors(field: str, literals: set, eps: float = 0.01):
-    """Deterministic boundary candidates around literals for one field."""
+    """Deterministic boundary candidates around literals for one field.
+    List literals (IN/NOT_IN membership) contribute each member as a
+    candidate so enum-boundary witnesses are reachable."""
     cands: set = set()
+    expanded: set = set()
+    for l in literals:
+        if isinstance(l, (list, tuple, set)):
+            cands.update(l)
+        else:
+            expanded.add(l)
+    literals = expanded
     dates = [l for l in literals if is_date_literal(l)]
     nums = [float(l) for l in literals if isinstance(l, (int, float)) or (isinstance(l, str) and not is_date_literal(l) and str(l).replace(",", "").replace(".", "").strip("-").isdigit())]
     texts = [l for l in literals if isinstance(l, str) and not is_date_literal(l) and l not in {str(n) for n in nums}]

@@ -238,8 +238,8 @@ def main() -> int:
     for r in results:
         check("Benchmark", f"{r['case_id']} {r['status']}",
               r["status"] in ("AUTO_REPAIRED", "CORRECTLY_NO_OP", "CORRECTLY_ESCALATED", "UNSUPPORTED"), r.get("error", "")[:120])
-    check("Benchmark", "29 scenarios", len(results) == 29, str(len(results)))
-    check("Benchmark", "20 auto-repaired", by_status.get("AUTO_REPAIRED") == 20, str(by_status))
+    check("Benchmark", "31 scenarios", len(results) == 31, str(len(results)))
+    check("Benchmark", "22 auto-repaired", by_status.get("AUTO_REPAIRED") == 22, str(by_status))
     check("Benchmark", "3 no-op", by_status.get("CORRECTLY_NO_OP") == 3, str(by_status))
     check("Benchmark", "4 escalated", by_status.get("CORRECTLY_ESCALATED") == 4, str(by_status))
     check("Benchmark", "2 unsupported", by_status.get("UNSUPPORTED") == 2, str(by_status))
