@@ -85,21 +85,22 @@ sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IA
 echo "API: $API"
 
 # Demo admin: the template creates demo-admin@processpatch.demo (SUPPRESS,
-# pp-admins) but CloudFormation cannot set a password. Do it here with a
-# random one and print it exactly once — it is never written to disk or git.
+# pp-admins). CloudFormation cannot set a password. We NEVER rotate an
+# existing password automatically (T40: an auto-rotate silently clobbered
+# the human-set password on every deploy). Set it explicitly:
+#   DEMO_PASSWORD='...' bash infra/deploy.sh          (this deploy)
+#   aws cognito-idp admin-set-user-password --user-pool-id <pool> \
+#     --username demo-admin@processpatch.demo --password '<pass>' --permanent
 DEMO_USER="demo-admin@processpatch.demo"
 if aws cognito-idp admin-get-user --user-pool-id "$POOL" --username "$DEMO_USER" --region "$REGION" >/dev/null 2>&1; then
-  DEMO_PASS="Pp-Demo-$(openssl rand -hex 12)Aa1!"
-  if aws cognito-idp admin-set-user-password --user-pool-id "$POOL" --username "$DEMO_USER" --password "$DEMO_PASS" --permanent --region "$REGION" >/dev/null 2>&1; then
-    echo ""
-    echo "==================== DEMO LOGIN (print-once, do not share) ===================="
-    echo "  URL:      $BRANCH_URL"
-    echo "  User:     $DEMO_USER"
-    echo "  Password: $DEMO_PASS"
-    echo "================================================================================"
+  if [ -n "${DEMO_PASSWORD:-}" ]; then
+    if aws cognito-idp admin-set-user-password --user-pool-id "$POOL" --username "$DEMO_USER" --password "$DEMO_PASSWORD" --permanent --region "$REGION" >/dev/null 2>&1; then
+      echo "DEMO LOGIN: $DEMO_USER / password set from DEMO_PASSWORD env"
+    else
+      echo "WARNING: could not set demo-admin password from DEMO_PASSWORD (policy?)" >&2
+    fi
   else
-    echo "WARNING: could not set demo-admin password (permissions?) — set it manually:" >&2
-    echo "  aws cognito-idp admin-set-user-password --user-pool-id $POOL --username $DEMO_USER --password '<pass>' --permanent --region $REGION" >&2
+    echo "DEMO LOGIN: $DEMO_USER exists — password unchanged (set via DEMO_PASSWORD env or admin-set-user-password)"
   fi
 else
   echo "NOTE: demo user $DEMO_USER not found in pool (pre-existing stack?) — create manually."
