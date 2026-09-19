@@ -74,9 +74,10 @@ STACK=processpatch-demo REGION=ap-south-1 bash infra/deploy.sh
 ```
 
 Parameters live in `infra/parameters.json` (EnvName, GitHubRepo, ModelId,
-AmplifyBranch). The template uses a valid HTTPS bootstrap origin for the first
-CloudFormation pass because Cognito rejects `*` callback URLs; the deploy
-script replaces it with the real Amplify branch URL on the second pass. The
+AmplifyBranch). The deploy script explicitly passes a valid HTTPS bootstrap
+origin on the first CloudFormation pass because existing stacks retain old
+parameter values and Cognito rejects `*` callback URLs; it replaces that value
+with the real Amplify branch URL on the second pass. The
 `AmplifyAccessToken` secret is passed via
 `$AMPLIFY_TOKEN` — `sam deploy --parameter-overrides` takes explicit
 `ParameterKey=…,ParameterValue=…` pairs (not `file://…`), which the deploy

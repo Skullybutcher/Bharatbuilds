@@ -3,7 +3,7 @@
   "GitHubRepo": "https://github.com/Skullybutcher/Bharatbuilds.git",
   "ModelId": "apac.amazon.nova-micro-v1:0",
   "AmplifyBranch": "main",
-  "FrontendOrigin": "*",
+  "FrontendOrigin": "https://main.dummy.amplifyapp.com",
   "PP_USER_POOL_ID": "",
   "PP_CLIENT_ID": "",
   "PP_AUTH_DOMAIN": ""

@@ -14,11 +14,12 @@ command -v aws >/dev/null || { echo "install AWS CLI first"; exit 1; }
 # Auth params are passed explicitly below (resolved from stack outputs), so
 # exclude them here to avoid duplicate --parameter-overrides keys.
 OVERRIDES=$(python3 -c "import json;print(' '.join(f\"ParameterKey={k},ParameterValue={v}\" for k,v in json.load(open('$PARAMS')).items() if k not in ('FrontendOrigin','PP_USER_POOL_ID','PP_CLIENT_ID','PP_AUTH_DOMAIN')))")
+BOOTSTRAP_ORIGIN="https://main.dummy.amplifyapp.com"
 # shellcheck disable=SC2086
 sam build --template-file infra/template.yaml
 # shellcheck disable=SC2086
 sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IAM \
-  --parameter-overrides $OVERRIDES \
+  --parameter-overrides $OVERRIDES ParameterKey=FrontendOrigin,ParameterValue="$BOOTSTRAP_ORIGIN" \
   --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
 
 API=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
