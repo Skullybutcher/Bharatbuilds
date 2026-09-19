@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RuntimeTrace",
+  "description": "One recorded execution of a procedure for one case. Evidence only: never auto-accepted as ground truth (docs/traces.md).",
+  "type": "object",
+  "required": ["trace_id", "case", "outcome", "ingested_at"],
+  "additionalProperties": true,
+  "properties": {
+    "trace_id": { "type": "string", "pattern": "^TRC-" },
+    "workflow_id": { "type": ["string", "null"] },
+    "procedure_version_id": { "type": ["string", "null"] },
+    "case": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Scalar case fields (the applicant/approval facts) the engine replays.",
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+    },
+    "outcome": {
+      "type": "object",
+      "description": "What the deployed procedure actually did (boolean-like fields; coerced at ingestion).",
+      "properties": {
+        "eligible": { "type": "boolean" },
+        "on_time": { "type": "boolean" },
+        "prohibited": { "type": "boolean" },
+        "required": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "completed_actions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "steps_done": { "type": "array", "items": { "type": "string" } },
+    "source": { "type": "string", "description": "Origin tag: manual, runtime-log, incident-export, ..." },
+    "source_ref": { "type": "string", "description": "Opaque pointer into the source system." },
+    "occurred_at": { "type": ["number", "string", "null"] },
+    "ingested_at": { "type": "number" }
+  }
+}

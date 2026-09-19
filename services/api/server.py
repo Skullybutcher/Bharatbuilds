@@ -4,10 +4,19 @@ The same actions back the Lambda entry point, so both surfaces stay identical.
 """
 from __future__ import annotations
 import json
+import os
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from services.api import actions
+from services.api import authz
+
+
+class _AuthzHTTP(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+        self.message = message
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -19,7 +28,10 @@ class Handler(BaseHTTPRequestHandler):
             code = 500
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = os.environ.get("FRONTEND_ORIGIN", "*")
+        self.send_header("Access-Control-Allow-Origin", origin)
+        if origin != "*":
+            self.send_header("Vary", "Origin")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -37,14 +49,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", os.environ.get("FRONTEND_ORIGIN", "*"))
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def _route(self, method: str, path: str, qs: dict, body: dict):
         if method == "GET" and path in ("/", "/health"):
             return 200, actions.health()
+        if method == "GET" and path == "/auth/config":
+            return 200, actions.auth_config()
         if method == "GET" and path == "/demo/canonical":
             return 200, actions.canonical(qs.get("domain", ["research_grant"])[0])
         if method == "GET" and path == "/builds":
@@ -67,6 +81,21 @@ class Handler(BaseHTTPRequestHandler):
             return 404, {"error": "not found"}
         if method == "GET" and path.startswith("/procedures"):
             return 200, actions.procedure_versions(qs.get("workflow_id", [None])[0])
+        if method == "GET" and path == "/workspaces":
+            return 200, actions.list_workspaces()
+        if method == "POST" and path == "/workspaces":
+            return 200, actions.create_workspace(body)
+        if method == "POST" and path == "/procedures":
+            return 200, actions.register_procedure(body)
+        if method == "GET" and path == "/traces":
+            return 200, actions.list_traces(qs.get("workflow_id", [None])[0])
+        if method == "POST" and path == "/traces":
+            return 200, actions.ingest_trace(body)
+        if method == "GET" and path.startswith("/traces/"):
+            try:
+                return 200, actions.get_trace(path.split("/")[2])
+            except KeyError:
+                return 404, {"error": "unknown trace"}
         if method == "GET" and path.startswith("/portal"):
             flat = {k: v[0] for k, v in qs.items()}
             return 200, actions.portal(flat)
@@ -96,6 +125,11 @@ class Handler(BaseHTTPRequestHandler):
             if method == "GET" and tail == "impact/artifacts":
                 try:
                     return 200, actions.impact_artifacts(bid)
+                except KeyError:
+                    return 404, {"error": "unknown build"}
+            if method == "GET" and tail == "trace-compare":
+                try:
+                    return 200, actions.compare_traces(bid)
                 except KeyError:
                     return 404, {"error": "unknown build"}
             if method == "POST" and tail.startswith("rules/"):
@@ -155,13 +189,39 @@ class Handler(BaseHTTPRequestHandler):
                 return 409 if "blocked" in str(e).lower() or "invalidated" in str(e).lower() else 400, {"error": str(e)}
         return 404, {"error": "not found", "path": path}
 
+    def _guard(self, method: str, path: str, body: dict):
+        """Enforce auth when enabled; returns (code, body) to route with.
+        `off` mode (default) keeps the legacy credential-free behavior."""
+        if authz.mode() == "off":
+            return 200, body
+        try:
+            if authz.is_public(method, path):
+                return 200, body
+            identity = authz.authenticate(dict(self.headers))
+            return 200, authz.authorize(method, path, identity, body)
+        except authz.AuthzError as e:
+            raise _AuthzHTTP(e.status, e.args[0])
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        try:
+            _, _ = self._guard("GET", parsed.path, {})
+        except _AuthzHTTP as e:
+            self._send(e.status, {"error": e.message})
+            return
         code, obj = self._route("GET", parsed.path, urllib.parse.parse_qs(parsed.query), {})
         self._send(code, obj)
 
     def do_POST(self):
-        code, obj = self._route("POST", urllib.parse.urlparse(self.path).path, {}, self._body())
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        body = self._body()
+        try:
+            _, body = self._guard("POST", path, body)
+        except _AuthzHTTP as e:
+            self._send(e.status, {"error": e.message})
+            return
+        code, obj = self._route("POST", path, {}, body)
         self._send(code, obj)
 
     def log_message(self, *a):
@@ -171,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
 def main(port: int = 8000):
     print(f"ProcessPatch API on http://localhost:{port}")
     print("GET /demo/canonical  -> full governed build (Gate-1 reviews via real path)")
+    if authz.mode() != "off":
+        print(f"auth: {authz.mode()} (writes need pp-reviewers, activation pp-admins)")
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()
 
 

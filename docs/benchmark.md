@@ -1,4 +1,4 @@
-# ProcessPatchBench (57C) — v0.2.0, 29 scenarios (15 dev / 14 eval)
+# ProcessPatchBench (57C) — v0.3.0, 31 scenarios (15 dev / 16 eval)
 
 ## Methodology (read before citing numbers)
 
@@ -18,7 +18,7 @@ IR so extraction errors do not contaminate repair metrics. Do NOT claim "raw
 natural-language policies achieve 100% end-to-end repair" — that is not what
 this benchmark demonstrates.
 
-The 13-case eval split is a **held-out authored (frozen) evaluation split**,
+The 16-case eval split is a **held-out authored (frozen) evaluation split**,
 authored by the same process as dev — not an independent external dataset of
 unseen real-world policies. Later, external policies can become a stronger test.
 
@@ -41,7 +41,7 @@ preservation, then classifies each case: AUTO_REPAIRED | CORRECTLY_NO_OP |
 CORRECTLY_ESCALATED | UNSUPPORTED | FAILED_*. Artifacts:
 `benchmark_runs/<id>/{manifest,results,metrics,report}.json|md` + failures/.
 
-Reference: 20 auto-repaired, 3 correct no-ops, 4 correct escalations,
+Reference: 22 auto-repaired, 3 correct no-ops, 4 correct escalations,
 2 correctly-flagged unsupported (temporal/nested language the bounded
 grammar refuses);
 extraction/delta/witness/localization/repair/preservation all 1.0 (see

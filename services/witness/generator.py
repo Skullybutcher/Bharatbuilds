@@ -30,7 +30,14 @@ DEFAULTS = {"cgpa": [7.8, 8.2], "amount": [40000, 60000], "year": [3],
 def _literals_per_field(model, workflow) -> dict:
     lits: dict[str, set] = {}
     def add(field, value):
-        lits.setdefault(field, set()).add(value() if callable(value) else value)
+        vals = value() if callable(value) else value
+        # Membership lists (IN/NOT_IN) contribute each member as a literal;
+        # raw lists are unhashable and must never enter the candidate set.
+        if isinstance(vals, (list, tuple, set)):
+            for v in vals:
+                lits.setdefault(field, set()).add(v)
+        else:
+            lits.setdefault(field, set()).add(vals)
     for c in model.eligibility:
         for leaf in iter_comparisons(c):
             add(leaf["field"], leaf["value"])

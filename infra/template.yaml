@@ -101,15 +101,85 @@ Resources:
             - { AttributeName: GSI_SK, KeyType: RANGE }
           Projection: { ProjectionType: ALL }
 
+  # ---------------- Auth (Cognito; see docs/auth.md) ----------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub 'processpatch-${EnvName}'
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - { Name: verified_email, Priority: 1 }
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+
+  # Invite-only governance: admins approve/activate, reviewers review rules and
+  # patches, everyone else is read-only. No self-signup.
+  AdminsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: pp-admins
+      UserPoolId: !Ref UserPool
+      Description: May approve candidates and activate procedure versions (Gates 2/3).
+
+  ReviewersGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: pp-reviewers
+      UserPoolId: !Ref UserPool
+      Description: May review rules (Gate 1) and decide patches (Gate 2).
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub 'processpatch-${EnvName}-${AWS::AccountId}'  # hosted UI prefix; globally unique
+      UserPoolId: !Ref UserPool
+
+  WebClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: processpatch-web
+      GenerateSecret: false  # public client; PKCE (no implicit flow)
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows: [ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH, ALLOW_USER_PASSWORD_AUTH]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs:
+        - !Sub 'https://main.${FrontendApp.AppId}.amplifyapp.com/'
+        - 'http://localhost:8000/'
+      AccessTokenValidity: 8
+      IdTokenValidity: 8
+      TokenValidityUnits: { AccessToken: hours, IdToken: hours }
+
   # ---------------- API ----------------
   Api:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: prod
+      Auth:
+        # JWT authorizer on every route; public paths opt out per-route below
+        # (health, canonical demo build, auth config). See docs/auth.md.
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsOptions: false
+        Authorizers:
+          CognitoAuthorizer:
+            AuthorizationScopes: [openid, email]
+            JwtConfig:
+              Audience: [!Ref WebClient]
+              Issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
       CorsConfiguration:
         AllowOrigins: [!Ref FrontendOrigin]
         AllowMethods: ['GET', 'POST', 'OPTIONS']
-        AllowHeaders: ['Content-Type']
+        AllowHeaders: ['Content-Type', 'Authorization']
 
   ApiFn:
     Type: AWS::Serverless::Function
@@ -120,6 +190,10 @@ Resources:
       Environment:
         Variables:
           STATEMACHINE_ARN: !Ref BuildStateMachine
+          PROCESSPATCH_AUTH: cognito
+          PP_USER_POOL_ID: !Ref UserPool
+          PP_CLIENT_ID: !Ref WebClient
+          PP_AUTH_DOMAIN: !Sub '${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
         - S3WritePolicy: { BucketName: !Ref SourceBucket }
@@ -138,7 +212,13 @@ Resources:
           Properties: { ApiId: !Ref Api, Path: '/{proxy+}', Method: ANY }
         Health:
           Type: HttpApi
-          Properties: { ApiId: !Ref Api, Path: /, Method: GET }
+          Properties: { ApiId: !Ref Api, Path: /, Method: GET, Auth: { Authorizer: NO_AUTH } }
+        Canonical:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: /demo/canonical, Method: GET, Auth: { Authorizer: NO_AUTH } }
+        AuthConfig:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: /auth/config, Method: GET, Auth: { Authorizer: NO_AUTH } }
 
   # ---------------- Pipeline Lambdas ----------------
   ExtractorFn:
@@ -364,6 +444,14 @@ Outputs:
   ApiUrl:
     Description: HTTP API base URL.
     Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  UserPoolId:
+    Description: Cognito user pool (invite-only; groups pp-admins/pp-reviewers).
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref WebClient
+  AuthDomain:
+    Description: Cognito hosted UI domain (login page lives here).
+    Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
   StateMachineArn:
     Value: !Ref BuildStateMachine
   RegistryTable:

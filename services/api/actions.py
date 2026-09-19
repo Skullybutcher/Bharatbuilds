@@ -47,6 +47,19 @@ def health():
     return {"service": "processpatch-api", "status": "ok"}
 
 
+def auth_config():
+    """Public auth bootstrap for the UI — non-secret hosted-UI params only.
+    Local dev (auth off) returns enabled=False and the UI stays in demo mode.
+    The browser derives redirect_uri from its own origin (see docs/auth.md)."""
+    import os as _os
+    enabled = (_os.environ.get("PROCESSPATCH_AUTH") or "off").strip().lower() != "off"
+    if not enabled:
+        return {"enabled": False}
+    return {"enabled": True,
+            "client_id": _os.environ.get("PP_CLIENT_ID", ""),
+            "domain": _os.environ.get("PP_AUTH_DOMAIN", "")}
+
+
 def canonical(domain: str = "research_grant"):
     from services.api.pipeline import run_build
     from services.governance.store import open_rule_reviews, review_rule
@@ -66,12 +79,22 @@ def canonical(domain: str = "research_grant"):
 
 def create_build(body: dict):
     from services.api.pipeline import run_build
-    from services.registry.store import find_build_by_key, compile_key
+    from services.registry.store import (find_build_by_key, compile_key,
+                                         list_procedure_versions)
     domain = body.get("domain", "research_grant")
     old, new, proc = _demo(domain)
     old = body.get("old_rules", old)
     new = body.get("new_rules", new)
-    proc = body.get("procedure", proc)
+    # Multi-procedure workspaces: procedure_version_id targets ANY registered
+    # procedure version (docs/workspaces.md); demo domains stay the default.
+    if body.get("procedure_version_id"):
+        vers = [v for v in list_procedure_versions()
+                if v.get("procedure_version_id") == body["procedure_version_id"]]
+        if not vers:
+            raise KeyError(f"unknown procedure_version_id {body['procedure_version_id']}")
+        proc = vers[-1].get("graph_json", {})
+    else:
+        proc = body.get("procedure", proc)
     policy_text = body.get("policy_text")
     backend = "fixture"
     if policy_text:
@@ -280,6 +303,65 @@ def portal(params: dict):
 def procedure_versions(workflow_id=None):
     from services.registry.store import list_procedure_versions as _lpv
     return {"versions": _lpv(workflow_id)}
+
+
+# ---- multi-procedure workspaces (any registered procedure can be built)
+def list_workspaces():
+    from services.registry.store import _load
+    return {"workspaces": _load("workspaces.json", [])}
+
+
+def create_workspace(body: dict):
+    from services.registry.store import create_workspace as _cw, audit
+    name = (body or {}).get("name", "").strip()
+    if not name:
+        raise ValueError("workspace name required")
+    rec = _cw(name)
+    audit("WORKSPACE_CREATED", {"workspace_id": rec["workspace_id"], "name": name})
+    return rec
+
+
+def register_procedure(body: dict):
+    """Register a procedure graph as an immutable active version. The graph is
+    validated (INVALID_WORKFLOW fails closed) before it can be built against."""
+    from services.registry.store import save_procedure_version, audit
+    from services.workflow.interpreter import validate_dag
+    wf = (body or {}).get("procedure")
+    if not isinstance(wf, dict) or not (wf.get("procedure_version_id") or body.get("procedure_version_id")):
+        raise ValueError("procedure (with procedure_version_id) required")
+    if body.get("procedure_version_id"):
+        wf = {**wf, "procedure_version_id": body["procedure_version_id"]}
+    if body.get("workflow_id"):
+        wf = {**wf, "workflow_id": body["workflow_id"]}
+    validate_dag(wf)  # raises INVALID_WORKFLOW -> 409 fail-closed
+    rec = save_procedure_version(wf, status="active")
+    audit("PROCEDURE_REGISTERED", {"procedure_version_id": rec["procedure_version_id"],
+                                   "workflow_id": rec.get("workflow_id")})
+    return rec
+
+
+def ingest_trace(body: dict):
+    from services.traces.store import ingest_trace as _ingest
+    return _ingest(body or {})
+
+
+def list_traces(workflow_id=None):
+    from services.traces.store import list_traces as _lt
+    return {"traces": _lt(workflow_id)}
+
+
+def get_trace(trace_id: str):
+    from services.traces.store import get_trace as _gt
+    t = _gt(trace_id)
+    if not t:
+        raise KeyError(trace_id)
+    return t
+
+
+def compare_traces(bid: str):
+    """Read-only comparison: replay trace cases vs the build's graphs."""
+    from services.traces.store import compare_traces as _cmp
+    return _cmp(_need(bid))
 
 
 def start_execution(body: dict):

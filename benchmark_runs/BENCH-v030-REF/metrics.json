@@ -1,0 +1,34 @@
+{
+  "total": 31,
+  "by_status": {
+    "AUTO_REPAIRED": 22,
+    "CORRECTLY_NO_OP": 3,
+    "CORRECTLY_ESCALATED": 4,
+    "UNSUPPORTED": 2
+  },
+  "auto_repair_rate": 0.71,
+  "correct_noop_rate": 1.0,
+  "correct_escalation_rate": 1.0,
+  "extraction_accuracy": {
+    "kind": 0.968,
+    "operator": 0.952,
+    "value": 0.952,
+    "condition": 0.952,
+    "source_span": 0.952
+  },
+  "delta_classification_accuracy": 1.0,
+  "witness_validity": 1.0,
+  "witness_completeness": 1.0,
+  "localization_recall": 1.0,
+  "repair_success": 1.0,
+  "preservation_rate": 1.0,
+  "median_patch_cost": 3.0,
+  "median_latency_ms": {
+    "extraction_ms": 0.17,
+    "delta_ms": 0.02,
+    "witness_ms": 0.2,
+    "localize_ms": 0.01,
+    "repair_ms": 0.52
+  },
+  "provenance_coverage": 1.0
+}

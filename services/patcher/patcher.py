@@ -262,6 +262,37 @@ def propose(model, workflow: dict, faults: list[dict]) -> dict:
                                      "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": d["rule_id"]}]})
             _splice_before(patched, ops, anchor="NODE-START", new_id=nid, target_role="submit")
 
+    # 4b. exclusion membership (NOT_IN eligibility): synthesize a gate that
+    # rejects when the field IS a listed value. (expr has no chained "not",
+    # so the gate asserts the excluded membership directly.)
+    if kinds & {"wrong_acceptance"}:
+        have_gates: dict = {}
+        for n in patched.get("nodes", []):
+            impl = n.get("implementation", {}) or {}
+            if impl.get("kind") == "threshold_gate" and impl.get("field"):
+                have_gates.setdefault(impl["field"], set()).add((impl.get("operator"), impl.get("value")))
+        for c in model.eligibility:
+            if c.get("operator") != "NOT_IN":
+                continue
+            field = c.get("field")
+            members = c.get("value") if isinstance(c.get("value"), list) else [c.get("value")]
+            if field in have_gates and any(op == "NOT_IN" for op, _v in have_gates[field]):
+                continue
+            nid = f"NODE-EXCLUDE-{str(field).upper()}"
+            ops.append({"op": "ADD_GATE", "node_id": nid,
+                        "label": f"Exclude {field}",
+                        "implementation": {"kind": "threshold_gate", "field": field,
+                                           "operator": "NOT_IN", "value": members},
+                        "rationale": f"IMPLEMENTS_RULE {c.get('_rule')}"})
+            patched["nodes"].append({"node_id": nid, "workflow_id": patched.get("workflow_id"),
+                                     "type": "gate", "label": f"Exclude {field}",
+                                     "preconditions": [], "postconditions": ["exclusion_checked = true"],
+                                     "implementation": {"kind": "threshold_gate", "field": field,
+                                                        "operator": "NOT_IN", "value": members},
+                                     "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": c.get("_rule")}]})
+            _splice_before(patched, ops, anchor="NODE-START", new_id=nid, target_role="submit")
+            have_gates.setdefault(field, set()).add(("NOT_IN", tuple(members)))
+
     # 5. prohibitions: add an enforcement gate that BLOCKS (not rejects) when
     # the forbidden condition holds. Never touches eligibility semantics.
     breached = [f for f in faults if f.get("kind") == "prohibition_breach"]

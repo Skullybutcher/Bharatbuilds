@@ -1,0 +1,7 @@
+{
+  "type": "THRESHOLD_ADDED",
+  "field": "category",
+  "affected_rule_ids": [
+    "R-EXC-V2"
+  ]
+}

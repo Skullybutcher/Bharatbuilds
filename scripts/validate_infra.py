@@ -44,7 +44,8 @@ def main():
                  "ExtractorFn", "CompilerFn", "WitnessFn", "ValidatorFn", "ImpactFn",
                  "GovernFn", "BuildStateMachine", "StateMachineLogs", "NewPolicyEventRule",
                  "EventBridgeToSfnRole", "ExecutionsFailedAlarm", "FunctionErrorsAlarm",
-                 "Dashboard", "FrontendApp", "FrontendBranch"):
+                 "Dashboard", "FrontendApp", "FrontendBranch",
+                 "UserPool", "UserPoolDomain", "WebClient"):
         check(f"resource {name}", name in res)
     tbl = res["RegistryTable"]["Properties"]
     check("dynamodb on-demand", tbl.get("BillingMode") == "PAY_PER_REQUEST")
@@ -54,6 +55,25 @@ def main():
     check("source bucket versioned", res["SourceBucket"]["Properties"]["VersioningConfiguration"]["Status"] == "Enabled")
     check("source bucket eventbridge", res["SourceBucket"]["Properties"]["NotificationConfiguration"]["EventBridgeConfiguration"]["EventBridgeEnabled"] is True)
     check("storage=dynamodb env", "PROCESSPATCH_STORAGE" in str(tpl))
+    # --- auth (Cognito): see docs/auth.md ---------------------------------
+    tpl_raw = (INFRA / "template.yaml").read_text()
+    api_auth = res["Api"]["Properties"].get("Auth", {})
+    check("api default authorizer is Cognito JWT",
+          api_auth.get("DefaultAuthorizer") == "CognitoAuthorizer" and "JwtConfig" in str(api_auth))
+    noauth = str(res["ApiFn"]["Properties"].get("Events", {}))
+    for pub in ("/demo/canonical", "/auth/config"):
+        check(f"public route {pub} (NO_AUTH)", pub in noauth and "NO_AUTH" in noauth)
+    apifn_env = res["ApiFn"]["Properties"]["Environment"]["Variables"]
+    check("apifn auth=cognito", apifn_env.get("PROCESSPATCH_AUTH") == "cognito")
+    check("apifn pool+client wired",
+          apifn_env.get("PP_USER_POOL_ID") == {"Ref": "UserPool"} and apifn_env.get("PP_CLIENT_ID") == {"Ref": "WebClient"})
+    check("cognito client is public PKCE (no secret)",
+          res["WebClient"]["Properties"].get("GenerateSecret") is False
+          and res["WebClient"]["Properties"].get("AllowedOAuthFlows") == ["code"])
+    check("governance groups defined", "pp-admins" in tpl_raw and "pp-reviewers" in tpl_raw)
+    check("cors allows Authorization header", "Authorization" in str(res["Api"]["Properties"].get("CorsConfiguration", {})))
+    for out in ("UserPoolId", "UserPoolClientId", "AuthDomain"):
+        check(f"output {out}", out in str(tpl.get("Outputs", {})))
     for fn in ("ApiFn", "ExtractorFn", "CompilerFn", "WitnessFn", "ValidatorFn", "ImpactFn", "GovernFn"):
         h = res[fn]["Properties"]["Handler"]
         mod, func = h.rsplit(".", 1)

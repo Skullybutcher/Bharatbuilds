@@ -127,6 +127,23 @@ def _check_effect(patched: dict, model, effect: dict) -> tuple[bool, str]:
     if "order_ok" in effect:
         ok = execute(patched, {"cgpa": 9.0, "amount": 10000}, model.ordering)["order_ok"]
         return ok, "order_ok" if ok else "order violated"
+    if "exclusion_gate" in effect:
+        # NOT_IN eligibility gate (v0.3 language): the patched graph must
+        # carry the same member list AND actually reject an excluded member.
+        g = effect["exclusion_gate"]
+        found = [n for n in patched.get("nodes", [])
+                 if (n.get("implementation", {}) or {}).get("kind") == "threshold_gate"
+                 and (n.get("implementation", {}) or {}).get("field") == g["field"]
+                 and (n.get("implementation", {}) or {}).get("operator") == "NOT_IN"]
+        if not found:
+            return False, "exclusion gate missing"
+        members = found[0]["implementation"].get("value")
+        ok_cfg = isinstance(members, list) and \
+            {str(x) for x in members} == {str(x) for x in g["value"]}
+        blocked = execute(patched, {"cgpa": 9.0, "amount": 10000, "year": 3, "backlogs": 0,
+                                    "category": g["value"][0], "submission_date": "2026-09-28"},
+                          model.ordering).get("eligible")
+        return bool(ok_cfg and blocked is False), f"exclusion {members} probe_eligible={blocked}"
     if "prohibition_gate" in effect:
         g = effect["prohibition_gate"]
         found = [n for n in patched.get("nodes", [])

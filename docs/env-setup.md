@@ -19,7 +19,15 @@ python -m services.api.server 8000
    `Get-Content .env | ForEach-Object { if ($_ -match '^\w+=') { $k,$v = $_ -split '=',2; Set-Item "env:$k" $v } }`
 3. `bash infra/deploy.sh` (or `infra/deploy.ps1`). The script writes the
    `ApiUrl` output — put it in `.env` as `API_URL` for smoke tests and UI config.
-4. CI (`.github/workflows/ci.yml`) needs **no AWS secrets**: verify, pytest,
+   It also wires Cognito automatically: a second deploy pass sets
+   `PP_USER_POOL_ID` / `PP_CLIENT_ID` / `PP_AUTH_DOMAIN` on the API Lambda and
+   locks CORS to the Amplify origin (see `docs/auth.md`). Create the first
+   admin with the `admin-create-user` + `admin-add-user-to-group` commands the
+   script prints at the end.
+4. Auth is off locally by default (`PROCESSPATCH_AUTH=off` in `.env.example`).
+   To exercise enforcement without Cognito:
+   `PROCESSPATCH_AUTH=hs256-test PP_DEV_HS256_SECRET=dev-secret python -m services.api.server 8000`.
+5. CI (`.github/workflows/ci.yml`) needs **no AWS secrets**: verify, pytest,
    benchmark, and infra-validate all run credential-free.
 
 ## Key hygiene

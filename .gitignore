@@ -10,3 +10,13 @@ benchmark_runs/BENCH-LOCAL-*
 !.gitkeep
 
 *.egg-info/
+
+# Session/context notes are local-only by design — NEVER commit
+ProcessPatch_Session_Context.md
+
+# Environments, logs, OS junk
+.venv/
+venv/
+*.log
+Thumbs.db
+desktop.ini

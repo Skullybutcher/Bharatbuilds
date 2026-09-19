@@ -1,0 +1,14 @@
+{
+  "kinds": [
+    "wrong_acceptance"
+  ],
+  "domains": {
+    "wrong_acceptance": [
+      {
+        "field": "category",
+        "operator": "==",
+        "value": "STAFF"
+      }
+    ]
+  }
+}

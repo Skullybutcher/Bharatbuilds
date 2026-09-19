@@ -49,6 +49,23 @@ MUST_NOT_AFTER_RE = re.compile(r"must not[^\n.]*after\s+(\d{4}-\d{2}-\d{2})", re
 MUST_PROVIDE_RE = re.compile(r"all\s+\w+[^\n.]*must\s+(?:provide|upload|submit|complete|receive)\s+([a-z ]+?)[\.\n]", re.I)
 SEC_RE = re.compile(r"(?:sec\.?|section|§)\s*(\d+\.\d+)", re.I)
 MONTHDAY_RE = re.compile(r"(?:by|no later than|not later than|before)\s+(September|October|August)\s+(\d{1,2})", re.I)
+# --- bounded-language extension (v0.3): enum lists + intervals -------------
+# Waiver with an explicit membership LIST (>= 2 values): expands to IN.
+# Single-value waivers stay on WAIVE_RE (==) so existing semantics are stable.
+EXC_IN_RE = re.compile(
+    r"([a-z ]+?)\s+is\s+(?:also\s+)?waived\s+(?:if|when)\s+([a-z ]+?)\s+is\s+"
+    r"((?:[A-Za-z0-9_-]+)(?:\s*,?\s*(?:or|and)\s+[A-Za-z0-9_-]+)+)\s*[\.\n]", re.I)
+# Exclusion membership: "category must not be STAFF or VISITOR" -> NOT_IN.
+NOTIN_RE = re.compile(
+    r"([A-Za-z_][\w ]*?)\s+must not be\s+((?:[A-Za-z0-9_-]+)(?:\s*,?\s*(?:or|and)\s+[A-Za-z0-9_-]+)+)\s*[\.\n]", re.I)
+# Numeric interval: "age must be between 18 and 25" -> two bounds (>=, <=).
+BETWEEN_RE = re.compile(
+    r"([A-Za-z_][\w ]*?)\s+(?:must be\s+)?between\s+([\d,]+(?:\.\d+)?)\s+and\s+([\d,]+(?:\.\d+)?)", re.I)
+
+
+def _val_list(s: str) -> list[str]:
+    parts = re.split(r"\s*,?\s*(?:or|and)\s+", (s or "").strip(), flags=re.I)
+    return [p.strip() for p in parts if p.strip()]
 
 AMBIGUOUS_TERMS = ["strong academic standing", "suitable", "appropriate", "timely manner",
                    "sufficient merit", "good standing", "as needed", "may receive",
@@ -157,6 +174,17 @@ def extract(policy_text: str, policy_version_id: str = "POLICY-VX",
                                    i, 0.93))
             matched_lines.add(i)
             continue
+        m = EXC_IN_RE.search(ln)
+        if m:
+            vals = _val_list(m.group(3))
+            fid, _ = _field(m.group(2))
+            if fid == "value":
+                fid = "category"
+            rules.append(base_rule(new_id("EXC"), "exception", "applicant", _action(m.group(1)),
+                                   {"field": fid, "operator": "IN", "value": vals, "datatype": "enum"},
+                                   f"waive {_action(m.group(1))} IF {fid} IN {vals}", i, 0.90))
+            matched_lines.add(i)
+            continue
         m = WAIVE_RE.search(ln)
         if m and ("if" in ln.lower() or "exempt" in ln.lower()):
             cat_m = CATEGORY_RE.search(ln)
@@ -170,6 +198,30 @@ def extract(policy_text: str, policy_version_id: str = "POLICY-VX",
             rules.append(base_rule(new_id("EXC"), "exception", "applicant", _action(m.group(1)),
                                    {"field": fid, "operator": "==", "value": val, "datatype": "enum"},
                                    f"waive {_action(m.group(1))} IF {fid} == {val}", i, 0.90))
+            matched_lines.add(i)
+            continue
+        m = BETWEEN_RE.search(ln)
+        if m and REQUIREMENT_VERBS_RE.search(ln):
+            fid, dt = _field(m.group(1))
+            lo = float(m.group(2).replace(",", ""))
+            hi = float(m.group(3).replace(",", ""))
+            rules.append(base_rule(new_id("ELIG"), "threshold", "applicant", "eligible",
+                                   {"field": fid, "operator": ">=", "value": lo, "datatype": dt},
+                                   f"{fid} >= {m.group(2)}", i, 0.93))
+            rules.append(base_rule(new_id("ELIG"), "threshold", "applicant", "eligible",
+                                   {"field": fid, "operator": "<=", "value": hi, "datatype": dt},
+                                   f"{fid} <= {m.group(3)}", i, 0.93))
+            matched_lines.add(i)
+            continue
+        m = NOTIN_RE.search(ln)
+        if m:
+            vals = _val_list(m.group(2))
+            fid, dt = _field(m.group(1))
+            if fid == "value":
+                fid = "category"
+            rules.append(base_rule(new_id("ELIG"), "threshold", "applicant", "eligible",
+                                   {"field": fid, "operator": "NOT_IN", "value": vals, "datatype": "enum"},
+                                   f"{fid} NOT_IN {vals}", i, 0.93))
             matched_lines.add(i)
             continue
         m = THRESH_RE.search(ln)

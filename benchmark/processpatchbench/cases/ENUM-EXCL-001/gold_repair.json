@@ -1,0 +1,14 @@
+{
+  "required_effect": {
+    "exclusion_gate": {
+      "field": "category",
+      "operator": "NOT_IN",
+      "value": [
+        "STAFF",
+        "VISITOR"
+      ]
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 12.0
+}

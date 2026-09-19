@@ -9,7 +9,7 @@ import pathlib
 
 HERE = pathlib.Path(__file__).parent
 CASES_DIR = HERE / "cases"
-VERSION = "v0.2.0"
+VERSION = "v0.3.0"
 
 
 def R(rid, kind, action, cond, expr, sec, text, pv, sup=None, conf=0.95,
@@ -535,6 +535,50 @@ case("UNSUP-NEST-001", "unsupported_nested", "university_application", "eval",
      {"type": "NEEDS_REVIEW", "affected_rule_ids": []},
      {"unsupported": True}, {"must_include_nodes": [], "may_include_nodes": [], "must_not_include_nodes": []},
      {"required_effect": {}, "forbidden_operations": [], "max_locality_cost": 0.0})
+
+# ---------------- EXC-LIST-001 (eval, v0.3 language: list-waiver -> IN) ----------------
+_L1 = "Sec 4.2 All applicants must provide a transcript."
+_L2A = "Sec 4.2 All applicants must provide a transcript."
+_L2B = "Sec 4.5 A transcript is waived if applicant category is STAFF or VISITOR."
+case("EXC-LIST-001", "exception_added", "university_application", "eval",
+     _L1, _L2A + "\n" + _L2B,
+     [R("R-TR-V1", "obligation", "upload_transcript", None, "transcript = true", "4.2", _L1, "PV1")],
+     [R("R-TR-V1", "obligation", "upload_transcript", None, "transcript = true", "4.2", _L2A, "PV1"),
+      R("R-EXC-V2", "exception", "upload_transcript",
+        {"field": "category", "operator": "IN", "value": ["STAFF", "VISITOR"], "datatype": "enum"},
+        "waive upload_transcript IF category IN ['STAFF', 'VISITOR']", "4.5", _L2B, "PV2")],
+     WF("WF-L1", "WF-L1-V1", [START("WF-L1"),
+        STEP("WF-L1", "upload_transcript", "transcript_file", True, None, "R-TR-V1"), SUBMIT("WF-L1")],
+        linear(["NODE-START", "NODE-STEP", "NODE-SUBMIT"])),
+     {"type": "EXCEPTION_ADDED", "action": "upload_transcript",
+      "exception_condition": {"field": "category", "operator": "IN", "value": ["STAFF", "VISITOR"]},
+      "affected_rule_ids": ["R-EXC-V2"]},
+     {"kinds": ["unnecessary_burden"],
+      "domains": {"unnecessary_burden": [{"field": "category", "operator": "==", "value": "STAFF"}]}},
+     {"must_include_nodes": ["NODE-STEP"], "may_include_nodes": [], "must_not_include_nodes": ["NODE-SUBMIT"]},
+     {"required_effect": {"required_probe": {"action": "upload_transcript",
+                                             "case_true": {"category": "general"}, "case_false": {"category": "STAFF"}}},
+      "forbidden_operations": [], "max_locality_cost": 9.0})
+
+# ---------------- ENUM-EXCL-001 (eval, v0.3 language: must-not-be list -> NOT_IN) ----------------
+_X1 = "Sec 2.1 Claims up to amount <= 50000 are accepted."
+_X2A = "Sec 2.1 Claims up to amount <= 50000 are accepted."
+_X2B = "Sec 2.2 Claimant category must not be STAFF or VISITOR."
+case("ENUM-EXCL-001", "exclusion_added", "reimbursement", "eval",
+     _X1, _X2A + "\n" + _X2B,
+     [R("R-LIM-V1", "threshold", "eligible", {"field": "amount", "operator": "<=", "value": 50000}, "amount <= 50000", "2.1", _X1, "PV1")],
+     [R("R-LIM-V1", "threshold", "eligible", {"field": "amount", "operator": "<=", "value": 50000}, "amount <= 50000", "2.1", _X2A, "PV1"),
+      R("R-EXC-V2", "threshold", "eligible",
+        {"field": "category", "operator": "NOT_IN", "value": ["STAFF", "VISITOR"], "datatype": "enum"},
+        "category NOT_IN ['STAFF', 'VISITOR']", "2.2", _X2B, "PV2")],
+     WF("WF-L2", "WF-L2-V1", [START("WF-L2"), GATE("WF-L2", "amount", "<=", 50000, "R-LIM-V1"), SUBMIT("WF-L2")],
+        linear(["NODE-START", "NODE-GATE", "NODE-SUBMIT"])),
+     {"type": "THRESHOLD_ADDED", "field": "category", "affected_rule_ids": ["R-EXC-V2"]},
+     {"kinds": ["wrong_acceptance"],
+      "domains": {"wrong_acceptance": [{"field": "category", "operator": "==", "value": "STAFF"}]}},
+     {"must_include_nodes": [], "may_include_nodes": ["NODE-GATE", "NODE-SUBMIT"], "must_not_include_nodes": []},
+     {"required_effect": {"exclusion_gate": {"field": "category", "operator": "NOT_IN", "value": ["STAFF", "VISITOR"]}},
+      "forbidden_operations": [], "max_locality_cost": 12.0})
 
 
 def main():

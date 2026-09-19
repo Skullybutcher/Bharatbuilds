@@ -1,0 +1,15 @@
+{
+  "type": "EXCEPTION_ADDED",
+  "action": "upload_transcript",
+  "exception_condition": {
+    "field": "category",
+    "operator": "IN",
+    "value": [
+      "STAFF",
+      "VISITOR"
+    ]
+  },
+  "affected_rule_ids": [
+    "R-EXC-V2"
+  ]
+}

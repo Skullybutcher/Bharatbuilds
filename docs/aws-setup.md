@@ -11,7 +11,10 @@ Amplify hosting you need a GitHub token in `AMPLIFY_TOKEN` (used once as the
 ## What deploys
 
 `infra/template.yaml` (SAM): 7 Lambdas (Api, Extractor, Compiler, Witness,
-Validator, Impact, Govern; Python 3.12, X-Ray tracing), HttpApi, S3 source +
+Validator, Impact, Govern; Python 3.12, X-Ray tracing), HttpApi (Cognito JWT
+authorizer by default; health/canonical/auth-config are public), Cognito
+user pool + hosted-UI domain + public PKCE client with pp-admins/pp-reviewers
+groups (docs/auth.md), S3 source +
 artifact buckets (private, encrypted, versioned; EventBridge notifications),
 DynamoDB single-table registry (on-demand + PITR + GSI1 for idempotency),
 Step Functions state machine (40 states: ingest, hash, build-id, extract,

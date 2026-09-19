@@ -35,9 +35,9 @@ deadline) validates 20/20.
 
 ```bash
 pip install -e ".[dev]"        # pytest + pyyaml (clean-machine repro)
-python scripts/verify.py        # 176 assertions, no network/LLM/AWS
+python scripts/verify.py        # 178 assertions, no network/LLM/AWS
 make verify                     # same
-make benchmark                  # ProcessPatchBench v0.2.0, 29 scenarios
+make benchmark                  # ProcessPatchBench v0.3.0, 31 scenarios
 make infra-validate             # SAM/ASL/dashboard checks, no credentials
 python scripts/demo.py          # terminal person-first demo
 python -m services.api.server 8000   # REST API (§45 + §57E)
@@ -50,6 +50,10 @@ rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,
 `POST .../patch/{approve,reject,request-revision}`, witness replay,
 `POST /procedures/{v}/activate` (hash-verified), `POST /builds/{id}/resume`
 (server-side Step Functions resume — clients never hold task tokens),
+runtime-trace ingestion `POST /traces` + `GET /builds/{id}/trace-compare`
+(real-world evidence, read-only comparison — docs/traces.md),
+multi-procedure workspaces `POST /procedures` + build against any registered
+version by `procedure_version_id` (fail-closed DAG validation — docs/workspaces.md),
 benchmark endpoints. The local server and the Lambda `ApiFn` share one
 implementation (`services/api/actions.py`) so both surfaces stay identical.
 
@@ -57,16 +61,19 @@ implementation (`services/api/actions.py`) so both surfaces stay identical.
 
 `services/` deterministic pipeline + impact/governance/registry/bench/aws_handlers ·
 `shared/schemas/` all contracts · `demo/` two domains · `frontend/` 11-tab UI ·
-`benchmark/processpatchbench/` 29 heterogeneous cases + manifest ·
+`benchmark/processpatchbench/` 31 heterogeneous cases + manifest ·
 `benchmark_runs/` reference runs · `tests/` 8 suites · `infra/` full SAM setup ·
-`docs/` 12 notes · `scripts/` verify/demo/benchmark/smoke/infra-validate.
+`docs/` 16 notes (incl. auth, traces, workspaces) · `scripts/` verify/demo/benchmark/smoke/infra-validate/judge_demo.
 
 ## Trust
 
 A deterministic parser extracts the bounded rule language into typed candidates
 with source spans; a Bedrock model fallback engages only when the parser yields
 nothing usable (and is schema-validated + Gate-1 reviewed like everything
-else). Deterministic code decides correctness. Humans approve exact hashes. Ambiguity → NEEDS_REVIEW, conflict →
+else). Deterministic code decides correctness. Humans approve exact hashes —
+and are authenticated while doing it: Cognito groups gate reviews (pp-reviewers)
+and activation (pp-admins), and verified identities are stamped into the audit
+trail (docs/auth.md). Ambiguity → NEEDS_REVIEW, conflict →
 COMPILATION BLOCKED. Patches are VALIDATED_WITHIN_TESTED_MODEL, never
 "compliance guaranteed".
 
