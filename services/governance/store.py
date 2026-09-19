@@ -346,7 +346,7 @@ def resume_callback(build_id: str, gate: str, body: dict) -> dict:
         try:
             import boto3  # lazy
             boto3.client("stepfunctions").send_task_success(
-                taskToken=cb["task_token"], taskOutput=_json.dumps(output, default=str))
+                taskToken=cb["task_token"], output=_json.dumps(output, default=str))
             sent = True
         except Exception as e:  # noqa: BLE001
             output["resume_error"] = f"{type(e).__name__}: {e}"[:200]
