@@ -40,6 +40,40 @@ def required_for_action(model, oblig: dict, action: str) -> bool:
     return False
 
 
+def _splice_before(patched: dict, ops: list, anchor: str | None, new_id: str, target_role: str = "submit"):
+    """Insert new_id immediately before the first node matching target_role
+    (default: submit): preds(target) -> new -> target. Mandatory steps must
+    never dangle after the terminal node."""
+    from services.workflow.interpreter import _ordered_nodes, _find_node
+    order = _ordered_nodes(patched)
+    target = _find_node(order, target_role)
+    node_ids = {n["node_id"] for n in patched.get("nodes", [])}
+    if anchor is not None and anchor not in node_ids:
+        # anchor is a conventional name; fall back to an actual start node —
+        # never the new node itself (that would be a self-loop).
+        indeg = {nid: 0 for nid in node_ids}
+        for e in patched.get("edges", []):
+            if e.get("to") in indeg:
+                indeg[e["to"]] += 1
+        starts = sorted(nid for nid, d in indeg.items() if d == 0 and nid != new_id)
+        anchor = starts[0] if starts else None
+    if target is None:
+        if anchor:
+            ops.append({"op": "ADD_EDGE", "from": anchor, "to": new_id})
+            patched["edges"].append({"from": anchor, "to": new_id, "type": "NEXT", "condition": None})
+        return
+    tid = target["node_id"]
+    preds = [e["from"] for e in patched.get("edges", []) if e["to"] == tid and e["from"] != new_id]
+    patched["edges"] = [e for e in patched.get("edges", [])
+                        if not (e["from"] in preds and e["to"] == tid)]
+    for p in preds:
+        patched["edges"].append({"from": p, "to": new_id, "type": "NEXT", "condition": None})
+        ops.append({"op": "ADD_EDGE", "from": p, "to": new_id})
+        ops.append({"op": "REMOVE_EDGE", "from": p, "to": tid})
+    patched["edges"].append({"from": new_id, "to": tid, "type": "NEXT", "condition": None})
+    ops.append({"op": "ADD_EDGE", "from": new_id, "to": tid})
+
+
 def _retarget_links(node: dict, rule_id: str | None):
     if not rule_id:
         return
@@ -83,18 +117,20 @@ def propose(model, workflow: dict, faults: list[dict]) -> dict:
             oblig = (model.obligations or {}).get(action)
             if oblig is None:
                 continue
-            # fold exceptions into the required condition
+            # fold exceptions into the required condition: waived when ANY
+            # exception holds -> required iff base AND NOT(e1 OR e2 ...).
             excs = [e["condition"] for e in model.exceptions if e.get("action") in (action, "*", None) and e.get("condition")]
             if oblig["mode"] == "always_true" and not excs:
                 new_req, new_cond = True, None
             elif oblig["mode"] == "always_false" and not excs:
                 new_req, new_cond = False, None
             else:
-                base = oblig.get("condition") if oblig["mode"] == "conditional" else None
-                if oblig["mode"] == "always_true" and excs:
-                    base = {"not": {"and": excs} if len(excs) > 1 else excs[0]}
+                base = oblig.get("condition") if oblig.get("mode") == "conditional" else None
+                exc_or = excs[0] if len(excs) == 1 else {"or": excs}
+                if oblig["mode"] == "always_true":
+                    base = {"not": exc_or}
                 elif excs:
-                    base = {"and": ([base] if base else []) + [{"not": e} for e in excs]}
+                    base = {"and": ([base] if base else []) + [{"not": exc_or}]}
                 new_req, new_cond = True, base
             if impl.get("required") != new_req or impl.get("required_condition") != new_cond:
                 ops.append({"op": "CHANGE_REQUIRED_FLAG", "node_id": n["node_id"],
@@ -155,8 +191,8 @@ def propose(model, workflow: dict, faults: list[dict]) -> dict:
                                      "implementation": {"form_field": action + "_file", "action": action,
                                                         "required": True, "required_condition": oblig.get("condition")},
                                      "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": oblig.get("rule_id")}]})
-            anchor = patched["nodes"][-2]["node_id"] if len(patched["nodes"]) > 1 else "NODE-START"
-            ops.append({"op": "ADD_EDGE", "from": anchor, "to": nid})
+            # Structural placement: mandatory steps go BEFORE submit, never after.
+            _splice_before(patched, ops, anchor=None, new_id=nid, target_role="submit")
 
     # 3. ordering: move prerequisite before target; add node if prerequisite missing
     if "wrong_journey" in kinds:
@@ -204,7 +240,8 @@ def propose(model, workflow: dict, faults: list[dict]) -> dict:
                                          "preconditions": [], "postconditions": [],
                                          "implementation": {"approver": o.get("before")},
                                          "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": o.get("rule_id")}]})
-                ops.append({"op": "ADD_EDGE", "from": nid, "to": b["node_id"]})
+                _splice_before(patched, ops, anchor=None, new_id=nid,
+                               target_role=o.get("after", "submit"))
                 ops.append({"op": "ADD_PREREQUISITE", "prerequisite": o["before"], "target": o["after"]})
 
     # 4. deadlines: add a deadline gate when the workflow has none for the field
@@ -223,7 +260,37 @@ def propose(model, workflow: dict, faults: list[dict]) -> dict:
                                      "implementation": {"kind": "deadline_gate", "field": d["field"],
                                                         "operator": d["operator"], "value": d["value"]},
                                      "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": d["rule_id"]}]})
-            ops.append({"op": "ADD_EDGE", "from": "NODE-START", "to": nid})
+            _splice_before(patched, ops, anchor="NODE-START", new_id=nid, target_role="submit")
+
+    # 5. prohibitions: add an enforcement gate that BLOCKS (not rejects) when
+    # the forbidden condition holds. Never touches eligibility semantics.
+    breached = [f for f in faults if f.get("kind") == "prohibition_breach"]
+    if breached:
+        from services.workflow.expr import iter_comparisons
+        have_pg = {(n.get("implementation", {}) or {}).get("field")
+                   for n in patched.get("nodes", [])
+                   if (n.get("implementation", {}) or {}).get("kind") == "prohibition_gate"}
+        for p in model.prohibitions:
+            leaves = list(iter_comparisons(p.get("condition")))
+            if len(leaves) != 1:
+                continue  # compound prohibitions need human design
+            leaf = leaves[0]
+            if leaf.get("field") in have_pg:
+                continue
+            nid = f"NODE-PROHIBIT-{str(leaf.get('field')).upper()}"
+            ops.append({"op": "ADD_NODE", "node_id": nid, "label": f"Enforce {p['rule_id']}",
+                        "implementation": {"kind": "prohibition_gate", "field": leaf.get("field"),
+                                           "operator": leaf.get("operator"), "value": leaf.get("value"),
+                                           "rule": p["rule_id"]},
+                        "rationale": f"IMPLEMENTS_RULE {p['rule_id']}"})
+            patched["nodes"].append({"node_id": nid, "workflow_id": patched.get("workflow_id"),
+                                     "type": "gate", "label": f"Enforce {p['rule_id']}",
+                                     "preconditions": [], "postconditions": ["prohibition_checked = true"],
+                                     "implementation": {"kind": "prohibition_gate", "field": leaf.get("field"),
+                                                        "operator": leaf.get("operator"), "value": leaf.get("value"),
+                                                        "rule": p["rule_id"]},
+                                     "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": p["rule_id"]}]})
+            _splice_before(patched, ops, anchor="NODE-START", new_id=nid, target_role="submit")
 
     patched["procedure_version_id"] = (patched.get("procedure_version_id", "WF") or "WF") + "-PATCHED"
     return {"patch_id": "PATCH-0001", "operations": ops, "cost": _cost(ops),

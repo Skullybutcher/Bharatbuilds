@@ -90,7 +90,7 @@
   },
   {
    "op": "ADD_EDGE",
-   "from": "NODE-START",
+   "from": "NODE-CLAIM-START",
    "to": "NODE-DEADLINE-GATE"
   }
  ],

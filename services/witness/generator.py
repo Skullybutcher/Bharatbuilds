@@ -19,6 +19,7 @@ LABELS = {
     "missing_safeguard": "Who misses a required safeguard? Missing safeguard.",
     "wrong_journey": "Whose journey violates ordering? Wrong journey.",
     "deadline_mismatch": "Whose submission timing disagrees? Deadline mismatch.",
+    "prohibition_breach": "Who bypasses a prohibition? Missing safeguard.",
 }
 
 DEFAULTS = {"cgpa": [7.8, 8.2], "amount": [40000, 60000], "year": [3],

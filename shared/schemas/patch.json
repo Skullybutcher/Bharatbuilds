@@ -1,10 +1,33 @@
 {
- "$schema": "http://json-schema.org/draft-07/schema#",
- "type": "object",
- "title": "Patch",
- "required": [
-  "patch_id",
-  "operations",
-  "cost"
- ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Patch",
+  "type": "object",
+  "required": ["patch_id", "operations", "cost"],
+  "properties": {
+    "patch_id": {"type": "string"},
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["op"],
+        "properties": {
+          "op": {"enum": ["ADD_NODE", "REMOVE_NODE", "ADD_EDGE", "REMOVE_EDGE", "MOVE_NODE", "CHANGE_CONDITION", "ADD_GATE", "CHANGE_REQUIRED_FLAG", "ADD_PREREQUISITE", "REMOVE_PREREQUISITE"]},
+          "node_id": {"type": "string"},
+          "from": {"type": "string"},
+          "to": {"type": "string"},
+          "field": {"type": "string"},
+          "old": {"type": "object"},
+          "new": {"type": "object"},
+          "condition": {"type": "object"},
+          "label": {"type": "string"},
+          "implementation": {"type": "object"},
+          "anchor": {"type": "object"},
+          "prerequisite": {"type": "string"},
+          "target": {"type": "string"},
+          "rationale": {"type": "string"}
+        }
+      }
+    },
+    "cost": {"type": "number", "minimum": 0}
+  }
 }

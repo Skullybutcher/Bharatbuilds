@@ -55,6 +55,9 @@ def validate(patch, witnesses_before: list[dict], model, old_model,
         check("ordering", {"constraint": o}, order_ok,
               f"{o['before']} before {o['after']} {'PASS' if order_ok else 'FAIL'}")
 
+    for name, ok, detail in _integrity(patched_workflow, model):
+        check("integrity", {"check": name}, ok, detail)
+
     for name, ok, detail in _metamorphic(delta, old_model, model, patched_workflow, original_workflow):
         check("metamorphic", {"property": name}, ok, detail)
 
@@ -75,6 +78,51 @@ def validate(patch, witnesses_before: list[dict], model, old_model,
     return {"results": results, "passed": passed, "failed": len(results) - passed,
             "total": len(results),
             "status": "VALIDATED_WITHIN_TESTED_MODEL" if passed == len(results) else "FAILED"}
+
+
+def _integrity(patched_workflow, model) -> list:
+    """Structural contract on the repaired graph (independent of any case)."""
+    from services.workflow.interpreter import validate_dag, _ordered_nodes, _find_node
+    out = []
+    try:
+        stats = validate_dag(patched_workflow)
+        out.append(("dag_valid", True, f"DAG {stats['nodes']}n/{stats['edges']}e"))
+    except ValueError as e:
+        return [("dag_valid", False, str(e))]
+    order = _ordered_nodes(patched_workflow)
+    ids = [n["node_id"] for n in order]
+    submits = [n["node_id"] for n in order
+               if (n.get("implementation", {}) or {}).get("action") == "submit"]
+    # mandatory document nodes occur before submit
+    bad = [n["node_id"] for n in order
+           if (n.get("implementation", {}) or {}).get("required")
+           and submits and ids.index(n["node_id"]) > min(ids.index(s) for s in submits)]
+    out.append(("mandatory_before_submit", not bad,
+                "all required steps precede submit" if not bad else f"after submit: {bad}"))
+    # every node can reach a terminal (no dead-end branches)
+    succ = {}
+    for e in patched_workflow.get("edges", []):
+        succ.setdefault(e["from"], []).append(e["to"])
+    terminals = {nid for nid in ids if nid not in succ}
+    def reaches_term(nid, seen=None):
+        seen = seen or set()
+        if nid in terminals:
+            return True
+        if nid in seen:
+            return False
+        return any(reaches_term(s, seen | {nid}) for s in succ.get(nid, []))
+    dead = [nid for nid in ids if not reaches_term(nid)]
+    out.append(("branches_reach_terminal", not dead,
+                "all branches terminate" if not dead else f"dead ends: {dead}"))
+    # new prerequisites precede their targets
+    for o in (model.ordering or []):
+        a = _find_node(order, o.get("before"))
+        b = _find_node(order, o.get("after"))
+        if a and b:
+            ok = ids.index(a["node_id"]) < ids.index(b["node_id"])
+            out.append((f"prereq_{o.get('before')}_before_{o.get('after')}", ok,
+                        "ordered" if ok else "MISORDERED"))
+    return out
 
 
 def _boundary_values(model, workflow) -> dict:
@@ -116,6 +164,16 @@ def _metamorphic(delta, old_model, model, patched, original):
                 if old_req is not None and new_req is not None and old_req != new_req:
                     ok = False
         out.append(("Exception carve-out valid", ok, "exception holds" if ok else "METAMORPHIC FAIL"))
+    elif dtype == "PROHIBITION_ADDED":
+        # forbidden ELIGIBLE cases must now be blocked (prohibited) by the
+        # repaired graph (unreachable cases cannot bypass enforcement)
+        ok = True
+        for c in cohort:
+            exp_c = evaluate_expected(model, c)
+            if exp_c["prohibitions_violated"] and exp_c["eligible"]:
+                if not execute(patched, c, model.ordering).get("prohibited"):
+                    ok = False
+        out.append(("Prohibited cases blocked", ok, "enforcement holds" if ok else "METAMORPHIC FAIL"))
     elif dtype in ("SEMANTICS_UNCHANGED", "PROVENANCE_ONLY"):
         ok = all(diff_case({**evaluate_expected(old_model, c), "order_ok": True},
                            {**evaluate_expected(model, c), "order_ok": True}, c) is None for c in cohort)

@@ -1,12 +1,17 @@
 {
- "$schema": "http://json-schema.org/draft-07/schema#",
- "type": "object",
- "title": "Witness",
- "required": [
-  "witness_id",
-  "case",
-  "kind",
-  "expected",
-  "actual"
- ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Witness",
+  "type": "object",
+  "required": ["witness_id", "case", "kind", "expected", "actual", "verified"],
+  "properties": {
+    "witness_id": {"type": "string"},
+    "case": {"type": "object"},
+    "kind": {"enum": ["wrong_rejection", "wrong_acceptance", "unnecessary_burden", "missing_safeguard", "wrong_journey", "deadline_mismatch", "prohibition_breach"]},
+    "key": {"type": "string"},
+    "expected": {"type": "object"},
+    "actual": {"type": "object"},
+    "trace_expected": {"type": "array"},
+    "trace_actual": {"type": "array"},
+    "verified": {"type": "boolean"}
+  }
 }

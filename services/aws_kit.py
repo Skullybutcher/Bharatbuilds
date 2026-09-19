@@ -1,17 +1,13 @@
-"""AWS kit: DynamoDB persistence layer with the same interface as the local
-file-backed registry (services.registry.store). boto3 is imported lazily so
-local runs and unit tests never require AWS credentials.
+"""AWS kit: CloudWatch EMF metrics + table reference.
 
-Table design (single table, on-demand):
-  PK                    SK                        item
-  WS#<id>               META                      workspace
-  POLICY#<ver>          META                      policy version (+ rules, sha)
-  PROC#<workflow>       VER#<version>             procedure version (+ graph, sha, status)
-  BUILD#<id>            META                      build (full artifact, compile_key)
-  BUILD#<id>            REVIEW#<rule>             rule review
-  BUILD#<id>            APPROVAL#<n>              approval record
-  AUDIT                 <ts>#<event>              audit event
-GSI1: GSI_PK=BUILDKEY / GSI_SK=compile_key  (idempotency lookup)
+Persistence lives in services.storage (JSON-string DynamoDB payloads, same
+interface as local files). boto3 is imported lazily so local runs and unit
+tests never require AWS credentials.
+
+Table design (single table, on-demand + PITR):
+  PK=COLL#<collection>  SK=item id | META     data_json (string)
+GSI1 on (GSI_PK, GSI_SK) exists for future keyed lookups; idempotency is
+enforced by deterministic compile_key + build_id addressing.
 """
 from __future__ import annotations
 import os

@@ -142,13 +142,13 @@ def main() -> int:
     from services.api.pipeline import run_build
     b = run_build("POLICY-V2", old, new, proc)
     check("Patch validation", "canonical PATCH_VALIDATED", b["status"] == "PATCH_VALIDATED", b["status"])
-    check("Patch validation", "canonical 12/12", b["validation"]["passed"] == b["validation"]["total"] == 12, str(b["validation"]["passed"]))
+    check("Patch validation", "canonical 16/16", b["validation"]["passed"] == b["validation"]["total"] == 16, str(b["validation"]["passed"]))
     check("Patch validation", "patch cost small", b["patch"]["cost"] <= 9.0, str(b["patch"]["cost"]))
     check("Patch validation", "patch ops constrained", all(o["op"] in ("CHANGE_CONDITION", "CHANGE_REQUIRED_FLAG", "ADD_GATE", "ADD_EDGE", "REMOVE_EDGE", "ADD_NODE", "REMOVE_NODE", "MOVE_NODE", "ADD_PREREQUISITE", "REMOVE_PREREQUISITE") for o in b["patch"]["operations"]))
     check("Patch validation", "certificate validated", (b["certificate"] or {}).get("status") == "VALIDATED_WITHIN_TESTED_MODEL")
     rb = run_build("REIMB-V2", rold, rnew, rproc)
     check("Patch validation", "reimb PATCH_VALIDATED", rb["status"] == "PATCH_VALIDATED", rb["status"])
-    check("Patch validation", "reimb 16/16", rb["validation"]["passed"] == rb["validation"]["total"] == 16)
+    check("Patch validation", "reimb 20/20", rb["validation"]["passed"] == rb["validation"]["total"] == 20)
     check("Patch validation", "reimb order fixed", rb["patched_workflow"] and __import__("services.workflow.interpreter", fromlist=["execute"]).execute(rb["patched_workflow"], {"amount": 1}, rm.ordering)["order_ok"])
     check("Patch validation", "reimb deadline gate added", _has_dl_gate(rb["patched_workflow"]))
     check("Patch validation", "metamorphic relaxation holds", any(r["suite"] == "metamorphic" and r["pass"] for r in b["validation"]["results"]))
@@ -191,14 +191,27 @@ def main() -> int:
     rec = decide_patch(b["build_id"], b, "APPROVE_CANDIDATE",
                        {"reviewer_id": "USR-001", "display_name": "Verify"}, "ok", "PROCEDURE_OWNER")
     check("Governance", "approval recorded", rec["approval_type"] == "PATCH_REVIEW")
-    check("Governance", "approval binds hashes", rec["artifacts"]["patch_hash"] == __import__("services.registry.store", fromlist=["sha"]).sha(b["patch"]["operations"]))
+    check("Governance", "approval binds hashes", rec["artifacts"]["patch_operations_sha256"] == __import__("services.registry.store", fromlist=["sha"]).sha(b["patch"]["operations"]))
     check("Governance", "approve mints candidate id", bool(rec.get("candidate_version_id")), str(rec.get("candidate_version_id")))
     from services.registry.store import list_procedure_versions as _lpv
     check("Governance", "candidate findable by id",
           any(v["procedure_version_id"] == rec.get("candidate_version_id") for v in _lpv()),
           str([v["procedure_version_id"] for v in _lpv()][:5]))
+    check("Governance", "candidate id unique per build", rec["candidate_version_id"].endswith(
+        __import__("services.registry.store", fromlist=["sha"]).sha(b.get("compile_key", b["build_id"]))[:8].upper()))
+    check("Governance", "duplicate review open idempotent",
+          len(open_rule_reviews(b["build_id"], new)) == 3
+          and len({r["review_id"] for r in open_rule_reviews(b["build_id"], new)}) == 3)
+    check("Governance", "version overwrite rejected", _immutable_versions())
     out = activate_procedure(b["build_id"], b, {"reviewer_id": "USR-001"}, "go")
     check("Governance", "activation creates version", out["procedure_version"]["status"] == "active")
+    check("Governance", "activated graph == validated graph",
+          out["procedure_version"]["graph_json"]["nodes"] == b["patched_workflow"]["nodes"]
+          and out["procedure_version"]["graph_json"]["edges"] == b["patched_workflow"]["edges"])
+    check("Governance", "procedure_after hash matches validated graph",
+          __import__("services.registry.store", fromlist=["sha"]).sha(
+              {"nodes": b["patched_workflow"]["nodes"], "edges": b["patched_workflow"]["edges"]})
+          == rec["artifacts"]["procedure_after_sha256"])
     check("Governance", "audit timeline grows", len(audit_for(b["build_id"])) >= 5, str(len(audit_for(b["build_id"]))))
     check("Governance", "reject flow blocks activation", _reject_blocks())
     check("Governance", "stale hash invalidates", _stale_hash(b))
@@ -224,11 +237,12 @@ def main() -> int:
         by_status[r["status"]] = by_status.get(r["status"], 0) + 1
     for r in results:
         check("Benchmark", f"{r['case_id']} {r['status']}",
-              r["status"] in ("AUTO_REPAIRED", "CORRECTLY_NO_OP", "CORRECTLY_ESCALATED"), r.get("error", "")[:120])
-    check("Benchmark", "26 scenarios", len(results) == 26, str(len(results)))
-    check("Benchmark", "19 auto-repaired", by_status.get("AUTO_REPAIRED") == 19, str(by_status))
+              r["status"] in ("AUTO_REPAIRED", "CORRECTLY_NO_OP", "CORRECTLY_ESCALATED", "UNSUPPORTED"), r.get("error", "")[:120])
+    check("Benchmark", "29 scenarios", len(results) == 29, str(len(results)))
+    check("Benchmark", "20 auto-repaired", by_status.get("AUTO_REPAIRED") == 20, str(by_status))
     check("Benchmark", "3 no-op", by_status.get("CORRECTLY_NO_OP") == 3, str(by_status))
     check("Benchmark", "4 escalated", by_status.get("CORRECTLY_ESCALATED") == 4, str(by_status))
+    check("Benchmark", "2 unsupported", by_status.get("UNSUPPORTED") == 2, str(by_status))
 
     # ---- Infra ----
     import yaml
@@ -236,11 +250,33 @@ def main() -> int:
     check("Infra", "7 lambdas", sum(1 for v in tpl["Resources"].values() if v.get("Type") == "AWS::Serverless::Function") == 7)
     check("Infra", "single-table registry", "RegistryTable" in tpl["Resources"])
     sm = json.loads((ROOT / "infra/statemachine.asl.json").read_text())
-    check("Infra", "40 pipeline states", len(sm["States"]) == 40, str(len(sm["States"])))
+    states = sm["States"]
+    check("Infra", "statemachine parses", isinstance(states, dict) and sm["StartAt"] in states)
+    order = list(states)
+    for req in ("INGEST", "LOAD_BUILD_CONTEXT", "HASH_ARTIFACT", "SET_BUILD_ID", "EXTRACT_RULES",
+                "VALIDATE_RULE_IR", "CHECK_IDEMPOTENT", "COMPILE_CONSTRAINTS", "FIND_WITNESSES",
+                "LOCALIZE_PATCH", "VALIDATE_PATCH", "COMPUTE_IMPACT", "GENERATE_CERTIFICATE",
+                "PERSIST_BUILD", "WAIT_FOR_PATCH_APPROVAL", "FETCH_CANDIDATE",
+                "WAIT_FOR_ACTIVATION_APPROVAL", "ACTIVATE", "MARK_ACTIVE", "READY"):
+        check("Infra", f"state {req}", req in states)
+    refs = set()
+    for st in states.values():
+        if "Next" in st:
+            refs.add(st["Next"])
+        if st.get("Type") == "Choice":
+            for c in st.get("Choices", []):
+                refs.add(c["Next"])
+            if "Default" in st:
+                refs.add(st["Default"])
+    check("Infra", "all transitions resolve", refs <= set(states), str(refs - set(states)))
+    terms = [n for n, s in states.items() if s.get("Type") in ("Succeed", "Fail") or s.get("End")]
+    check("Infra", "terminals valid", len(terms) >= 4, str(terms))
     check("Infra", "3 task-token gates", sum("waitForTaskToken" in json.dumps(s) for s in sm["States"].values()) == 3)
-    order = list(sm["States"])
     check("Infra", "context loads before extract", order.index("LOAD_BUILD_CONTEXT") < order.index("EXTRACT_RULES"))
     check("Infra", "impact after validation", order.index("COMPUTE_IMPACT") > order.index("CHECK_VALIDATION"))
+    check("Infra", "persist before approval wait", order.index("PERSIST_BUILD") < order.index("WAIT_FOR_PATCH_APPROVAL"))
+    check("Infra", "activation after approval", order.index("ACTIVATE") > order.index("PATCH_APPROVED?"))
+    check("Infra", "fetch not create candidate", "FETCH_CANDIDATE" in sm["States"] and "CREATE_PROCEDURE_VERSION" not in sm["States"])
     check("Infra", "idempotent cached terminal", "READY_CACHED" in sm["States"])
     dash = json.loads((ROOT / "infra/cloudwatch-dashboard.json").read_text())
     check("Infra", "dashboard widgets", len(dash["widgets"]) >= 5)
@@ -324,7 +360,9 @@ def _reproduces(model, proc, w):
     from services.compiler.compiler import evaluate_expected as ee
     e = {**ee(model, w["case"]), "order_ok": True}
     a = execute(proc, w["case"], model.ordering)
-    return e["eligible"] != a["eligible"] or e["required"] != a["required"] or e["on_time"] != a["on_time"]
+    return (e["eligible"] != a["eligible"] or e["required"] != a["required"]
+            or e["on_time"] != a["on_time"]
+            or (bool(e.get("prohibitions_violated")) and not a.get("prohibited")))
 
 
 def _patched_copy(rules, proc):
@@ -354,6 +392,18 @@ def _expr(f, op, v):
     from services.workflow.expr import eval_condition
     return eval_condition({"field": f, "operator": op, "value": v},
                           {f: v, "amount": v, "cgpa": v}) is True
+
+
+def _immutable_versions():
+    from services.registry.store import save_procedure_version
+    try:
+        save_procedure_version({"procedure_version_id": "WF-IMMUT", "workflow_id": "W",
+                                "nodes": [], "edges": []}, status="active")
+        save_procedure_version({"procedure_version_id": "WF-IMMUT", "workflow_id": "W",
+                                "nodes": [], "edges": []}, status="active")
+        return False
+    except ValueError:
+        return True
 
 
 def _reject_blocks():

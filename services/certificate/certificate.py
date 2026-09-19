@@ -15,12 +15,17 @@ def build_certificate(*, build_id: str, policy_version: str, procedure_before: d
                       semantic_delta: dict, witnesses: list, impact: dict,
                       tests_before: dict, tests_after: dict,
                       approvals: list | None = None,
+                      policy_text: str | None = None,
+                      accepted_rule_ir: list | None = None,
                       compiler_version: str = "0.1.0") -> dict:
     cert = {
         "certificate": "PATCH CERTIFICATE",
         "build": build_id,
         "policy": policy_version,
-        "policy_sha256": sha(sources),
+        # Explicit hash names: each says exactly what it covers.
+        "source_document_sha256": sha(policy_text) if policy_text is not None else None,
+        "accepted_rule_ir_sha256": sha(accepted_rule_ir) if accepted_rule_ir is not None else sha(sources),
+        "source_clauses": sources,
         "procedure_before": procedure_before.get("procedure_version_id"),
         "procedure_before_sha256": sha(procedure_before),
         "procedure_after": (procedure_after or {}).get("procedure_version_id"),
@@ -46,7 +51,8 @@ def build_certificate(*, build_id: str, policy_version: str, procedure_before: d
 def render_text(cert: dict) -> str:
     lines = ["PATCH CERTIFICATE", "------------------------------------",
              f"Build: {cert.get('build')}", f"Policy: {cert.get('policy')}",
-             f"Policy SHA256: {cert.get('policy_sha256')}",
+             f"Source document SHA256: {cert.get('source_document_sha256')}",
+             f"Accepted Rule IR SHA256: {cert.get('accepted_rule_ir_sha256')}",
              f"Procedure before: {cert.get('procedure_before')} SHA256: {cert.get('procedure_before_sha256')}",
              f"Procedure after: {cert.get('procedure_after')} SHA256: {cert.get('procedure_after_sha256')}"]
     for r in cert.get("changed_rules", []):

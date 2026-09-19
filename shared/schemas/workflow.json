@@ -1,11 +1,69 @@
 {
- "$schema": "http://json-schema.org/draft-07/schema#",
- "type": "object",
- "title": "Workflow",
- "required": [
-  "workflow_id",
-  "procedure_version_id",
-  "nodes",
-  "edges"
- ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow",
+  "type": "object",
+  "required": ["workflow_id", "procedure_version_id", "nodes", "edges"],
+  "properties": {
+    "workflow_id": {"type": "string", "minLength": 1},
+    "procedure_version_id": {"type": "string", "minLength": 1},
+    "version_label": {"type": "string"},
+    "status": {"type": "string"},
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["node_id", "type", "label", "implementation"],
+        "properties": {
+          "node_id": {"type": "string", "minLength": 1},
+          "workflow_id": {"type": "string"},
+          "type": {"enum": ["start", "gate", "action", "approval"]},
+          "label": {"type": "string"},
+          "preconditions": {"type": "array"},
+          "postconditions": {"type": "array"},
+          "implementation": {
+            "type": "object",
+            "properties": {
+              "kind": {"enum": ["threshold_gate", "deadline_gate", "prohibition_gate"]},
+              "field": {"type": "string"},
+              "operator": {"enum": [">", ">=", "<", "<=", "==", "!="]},
+              "value": {},
+              "on_fail": {"type": "string"},
+              "form_field": {"type": "string"},
+              "action": {"type": "string"},
+              "required": {"type": "boolean"},
+              "required_condition": {"type": ["object", "null"]},
+              "approver": {"type": "string"},
+              "role": {"type": "string"},
+              "rule": {"type": "string"}
+            }
+          },
+          "provenance_links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "target"],
+              "properties": {
+                "type": {"enum": ["IMPLEMENTS_RULE", "DERIVED_FROM_POLICY", "MODIFIED_BY_AMENDMENT", "EVIDENCED_BY"]},
+                "target": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "type"],
+        "properties": {
+          "from": {"type": "string"},
+          "to": {"type": "string"},
+          "type": {"enum": ["NEXT", "BRANCH"]},
+          "condition": {}
+        }
+      }
+    }
+  }
 }

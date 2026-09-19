@@ -3,7 +3,8 @@
 Delta types: THRESHOLD_RELAXED | THRESHOLD_TIGHTENED | OBLIGATION_ADDED |
 OBLIGATION_REMOVED | CONDITION_CHANGED | EXCEPTION_ADDED | EXCEPTION_REMOVED |
 PREREQUISITE_ADDED | PREREQUISITE_REMOVED | PREREQUISITE_CHANGED |
-DEADLINE_EXTENDED | DEADLINE_TIGHTENED | DEADLINE_ADDED | SEMANTICS_UNCHANGED |
+DEADLINE_EXTENDED | DEADLINE_TIGHTENED | DEADLINE_ADDED | PROHIBITION_ADDED |
+SEMANTICS_UNCHANGED |
 PROVENANCE_ONLY | CONFLICT | NEEDS_REVIEW | COMPOUND
 """
 from __future__ import annotations
@@ -26,9 +27,14 @@ def validate_rule(r: dict) -> list[str]:
 
 
 def normalize(candidates: list[dict]) -> tuple[list[dict], list[dict]]:
+    from services.schemas import check as _scheck
     ok, bad = [], []
     for r in candidates:
         errs = validate_rule(r)
+        try:
+            _scheck("rule_ir", r, f"normalize/{r.get('rule_id')}")
+        except ValueError as e:
+            errs = errs + [str(e)]
         (ok if not errs else bad).append(r if not errs else {"rule_id": r.get("rule_id"), "errors": errs})
     return ok, bad
 
@@ -102,6 +108,9 @@ def semantic_rule_delta(old_rules: list[dict], new_rules: list[dict]) -> dict:
         elif r.get("kind") == "prerequisite":
             changes.append("PREREQUISITE_ADDED"); affected.append(r.get("rule_id"))
             notes.append(f"prerequisite {r.get('normalized_expression')}")
+        elif r.get("kind") == "prohibition":
+            changes.append("PROHIBITION_ADDED"); affected.append(r.get("rule_id"))
+            notes.append(f"prohibition {r.get('normalized_expression')}")
         elif r.get("kind") == "deadline":
             ro = next((x for x in removed if x.get("kind") == "deadline"), None)
             if ro and (ro.get("condition") or {}).get("value") != c.get("value"):

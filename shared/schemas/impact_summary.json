@@ -1,14 +1,29 @@
 {
- "$schema": "http://json-schema.org/draft-07/schema#",
- "type": "object",
- "title": "ImpactSummary",
- "required": [
-  "build_id",
-  "semantic_changes",
-  "artifacts",
-  "behavioral",
-  "test_cohort",
-  "verification",
-  "approval"
- ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ImpactSummary",
+  "type": "object",
+  "required": ["build_id", "semantic_changes", "artifacts", "behavioral", "test_cohort", "verification", "approval"],
+  "properties": {
+    "build_id": {"type": "string"},
+    "policy_version": {"type": "string"},
+    "procedure_version": {"type": "string"},
+    "semantic_changes": {"type": "integer", "minimum": 0},
+    "artifacts": {"type": "object"},
+    "behavioral": {
+      "type": "object",
+      "required": ["wrong_rejections", "wrong_acceptances", "unnecessary_burdens", "missing_safeguards", "wrong_orderings", "deadline_mismatches"],
+      "properties": {
+        "wrong_rejections": {"type": "integer", "minimum": 0},
+        "wrong_acceptances": {"type": "integer", "minimum": 0},
+        "unnecessary_burdens": {"type": "integer", "minimum": 0},
+        "missing_safeguards": {"type": "integer", "minimum": 0},
+        "wrong_orderings": {"type": "integer", "minimum": 0},
+        "deadline_mismatches": {"type": "integer", "minimum": 0},
+        "prohibition_breaches": {"type": "integer", "minimum": 0}
+      }
+    },
+    "test_cohort": {"type": "object"},
+    "verification": {"type": "object"},
+    "approval": {"type": "object"}
+  }
 }

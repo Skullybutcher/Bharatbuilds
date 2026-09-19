@@ -1,0 +1,11 @@
+{
+  "required_effect": {
+    "prohibition_gate": {
+      "field": "amount",
+      "operator": ">",
+      "value": 100000
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 12.0
+}

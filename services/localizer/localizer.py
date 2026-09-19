@@ -43,8 +43,15 @@ def localize(witness: dict, workflow: dict, model=None) -> dict:
                     f"workflow node implements it. Suspect region: missing step (ADD_NODE).")
     elif kind == "deadline_mismatch":
         affected = _gate_nodes(workflow) or [n["node_id"] for n in workflow.get("nodes", [])[:1]]
-        ops = ["CHANGE_CONDITION"]
+        ops = ["CHANGE_CONDITION", "ADD_NODE"]
         expl = f"Deadline divergence at {case}."
+    elif kind == "prohibition_breach":
+        # existing prohibition gates on the breached field, else the submit region
+        affected = [n["node_id"] for n in workflow.get("nodes", [])
+                    if (n.get("implementation", {}) or {}).get("kind") == "prohibition_gate"]
+        ops = ["ADD_NODE", "ADD_GATE", "CHANGE_CONDITION"]
+        expl = (f"Prohibition {key!r} holds at {case} but the procedure does not block it. "
+                f"Earliest divergence: enforcement gate ({affected or 'missing'}).")
     else:  # wrong_journey — resolve the constrained nodes via the model
         affected = []
         if model is not None:

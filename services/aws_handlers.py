@@ -97,7 +97,8 @@ def validator_handler(event, context):
             semantic_delta=event.get("semantic_delta", {}),
             witnesses=event.get("witnesses", [])[:4], impact=event.get("impact", {}),
             tests_before={"failed": len(event.get("witnesses", []))},
-            tests_after={"passed": validation["passed"], "total": validation["total"]})
+            tests_after={"passed": validation["passed"], "total": validation["total"]},
+            policy_text=event.get("policy_text"), accepted_rule_ir=event.get("new_rules", []))
     return _out(event, out)
 
 
@@ -160,9 +161,13 @@ def govern_handler(event, context):
         return _out(event, {"compile_key": key, "idempotent_reuse": bool(hit),
                             "build": hit})
     if op == "hash":
-        from services.registry.store import sha
+        from services.registry.store import sha, COMPILER_VERSION, SCHEMA_VERSION
+        from services.extractor.model_fallback import EXTRACTOR_VERSION
         digest = sha({"policy_text": event.get("policy_text", ""),
-                      "procedure": event.get("procedure", {})})
+                      "procedure": event.get("procedure", {}),
+                      "compiler_version": COMPILER_VERSION,
+                      "extractor_version": EXTRACTOR_VERSION,
+                      "schema_version": SCHEMA_VERSION})
         return _out(event, {"sha256": digest, "build_id": f"BUILD-{digest[:12].upper()}"})
     if op == "create_procedure_version":
         from services.registry.store import save_procedure_version

@@ -1,0 +1,22 @@
+{
+  "case_id": "UNSUP-NEST-001",
+  "family": "unsupported_nested",
+  "domain": "university_application",
+  "split": "eval",
+  "behavioral_change": true,
+  "repairable": false,
+  "requires_human_review": false,
+  "benchmark_version": "v0.2.0",
+  "variables": {
+    "cgpa": {
+      "type": "decimal",
+      "min": 0,
+      "max": 10
+    },
+    "amount": {
+      "type": "integer",
+      "min": 0,
+      "max": 200000
+    }
+  }
+}

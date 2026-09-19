@@ -151,6 +151,12 @@
    "to": "NODE-PAYMENT",
    "type": "NEXT",
    "condition": null
+  },
+  {
+   "from": "NODE-CLAIM-START",
+   "to": "NODE-DEADLINE-GATE",
+   "type": "NEXT",
+   "condition": null
   }
  ]
 }

@@ -9,7 +9,7 @@ import pathlib
 
 HERE = pathlib.Path(__file__).parent
 CASES_DIR = HERE / "cases"
-VERSION = "v0.1.0"
+VERSION = "v0.2.0"
 
 
 def R(rid, kind, action, cond, expr, sec, text, pv, sup=None, conf=0.95,
@@ -493,6 +493,48 @@ case("EXC-ADD-002", "exception_added", "university_application", "eval",
      {"required_effect": {"required_probe": {"action": "upload_transcript",
                                              "case_true": {"category": "general"}, "case_false": {"category": "STAFF"}}},
       "forbidden_operations": [], "max_locality_cost": 9.0})
+
+
+# ---------------- PROH-001 (dev, prohibition enforced by new gate) ----------------
+case("PROH-001", "prohibition_added", "reimbursement", "dev",
+     "Sec 1.1 Claims up to amount <= 200000 are accepted.",
+     "Sec 1.1 Claims up to amount <= 200000 are accepted.\nSec 1.6 Managers MUST NOT approve claims above amount 100000.",
+     [R("R-LIM-V1", "threshold", "eligible", {"field": "amount", "operator": "<=", "value": 200000}, "amount <= 200000", "1.1", "Claims up to amount <= 200000 are accepted.", "PV1")],
+     [R("R-LIM-V1", "threshold", "eligible", {"field": "amount", "operator": "<=", "value": 200000}, "amount <= 200000", "1.1", "Claims up to amount <= 200000 are accepted.", "PV1"),
+      R("R-PRO-V2", "prohibition", "approve_claim", {"field": "amount", "operator": ">", "value": 100000}, "FORBID approve_claim WHEN amount > 100000", "1.6", "Managers MUST NOT approve claims above amount 100000.", "PV2")],
+     WF("WF-P1", "WF-P1-V1", [START("WF-P1"), GATE("WF-P1", "amount", "<=", 200000, "R-LIM-V1"), SUBMIT("WF-P1")],
+        linear(["NODE-START", "NODE-GATE", "NODE-SUBMIT"])),
+     {"type": "PROHIBITION_ADDED", "affected_rule_ids": ["R-PRO-V2"]},
+     {"kinds": ["prohibition_breach"],
+      "domains": {"prohibition_breach": [{"field": "amount", "operator": ">", "value": 100000}, {"field": "amount", "operator": "<=", "value": 200000}]}},
+     {"must_include_nodes": [], "may_include_nodes": ["NODE-GATE", "NODE-SUBMIT"], "must_not_include_nodes": []},
+     {"required_effect": {"prohibition_gate": {"field": "amount", "operator": ">", "value": 100000}},
+      "forbidden_operations": [], "max_locality_cost": 12.0})
+
+# ---------------- UNSUP-TEMP-001 (dev, temporal phrase outside the language) ----------------
+case("UNSUP-TEMP-001", "unsupported_temporal", "reimbursement", "dev",
+     "Sec 1.1 Claims up to amount <= 50000 are accepted.",
+     "Sec 1.1 Claims up to amount <= 50000 are accepted.\nSec 1.7 Claims must be reviewed within three business days.",
+     [R("R-LIM-V1", "threshold", "eligible", {"field": "amount", "operator": "<=", "value": 50000}, "amount <= 50000", "1.1", "Claims up to amount <= 50000 are accepted.", "PV1")],
+     [R("R-LIM-V1", "threshold", "eligible", {"field": "amount", "operator": "<=", "value": 50000}, "amount <= 50000", "1.1", "Claims up to amount <= 50000 are accepted.", "PV1")],
+     WF("WF-U1", "WF-U1-V1", [START("WF-U1"), GATE("WF-U1", "amount", "<=", 50000, "R-LIM-V1"), SUBMIT("WF-U1")],
+        linear(["NODE-START", "NODE-GATE", "NODE-SUBMIT"])),
+     {"type": "NEEDS_REVIEW", "affected_rule_ids": []},
+     {"unsupported": True}, {"must_include_nodes": [], "may_include_nodes": [], "must_not_include_nodes": []},
+     {"required_effect": {}, "forbidden_operations": [], "max_locality_cost": 0.0})
+
+# ---------------- UNSUP-NEST-001 (eval, nested exception outside the language) ----------------
+case("UNSUP-NEST-001", "unsupported_nested", "university_application", "eval",
+     "Sec 4.2 All applicants must provide a transcript.",
+     "Sec 4.2 All applicants must provide a transcript unless exempt under clause 9 or clause 12.",
+     [R("R-TR-V1", "obligation", "upload_transcript", None, "transcript = true", "4.2", "All applicants must provide a transcript.", "PV1")],
+     [R("R-TR-V1", "obligation", "upload_transcript", None, "transcript = true", "4.2", "All applicants must provide a transcript.", "PV1")],
+     WF("WF-U2", "WF-U2-V1", [START("WF-U2"),
+        STEP("WF-U2", "upload_transcript", "transcript_file", True, None, "R-TR-V1"), SUBMIT("WF-U2")],
+        linear(["NODE-START", "NODE-STEP", "NODE-SUBMIT"])),
+     {"type": "NEEDS_REVIEW", "affected_rule_ids": []},
+     {"unsupported": True}, {"must_include_nodes": [], "may_include_nodes": [], "must_not_include_nodes": []},
+     {"required_effect": {}, "forbidden_operations": [], "max_locality_cost": 0.0})
 
 
 def main():

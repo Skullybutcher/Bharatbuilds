@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import os
 
+EXTRACTOR_VERSION = "processpatch-extractor/0.1.0"
+
 PROMPT = """You convert a short policy excerpt into typed operational Rule IR.
 Return ONLY a JSON list. Each item: {"kind": one of threshold, obligation, conditional_obligation, prohibition, prerequisite, exception, deadline,
 "subject": string, "action": snake_case verb phrase,
@@ -54,6 +56,13 @@ def model_extract(policy_text: str, policy_version_id: str = "POLICY-VX",
             needs_review.append({"code": "UNCOMPILABLE / NEEDS_REVIEW",
                                  "reason": str(it["unresolved"])[:300]})
             continue
+        quote = str(it.get("source_text", ""))
+        # Trust boundary: a model-claimed source quote must actually occur in
+        # the input policy. Hallucinated evidence becomes NEEDS_REVIEW.
+        if quote and quote not in policy_text:
+            needs_review.append({"code": "UNCOMPILABLE / NEEDS_REVIEW",
+                                 "reason": f"model source quote not found in policy: {quote[:120]}"})
+            continue
         r = {"rule_id": f"RULE-M-{i + 1:03d}", "kind": it.get("kind"),
              "subject": it.get("subject", "applicant"), "action": it.get("action"),
              "condition": it.get("condition"),
@@ -62,8 +71,11 @@ def model_extract(policy_text: str, policy_version_id: str = "POLICY-VX",
              "supersedes": None,
              "provenance": {"policy_version_id": policy_version_id,
                             "document_sha256": hashlib.sha256(policy_text.encode()).hexdigest()[:16],
-                            "page": 2, "section": str(it.get("section", "?")),
-                            "source_text": str(it.get("source_text", ""))[:500]},
+                            "page": None,
+                            "section": str(it.get("section", "?")),
+                            "source_text": quote[:500],
+                            "char_start": policy_text.find(quote) if quote else None,
+                            "source_verified": bool(quote)},
              "extraction": {"model": f"bedrock:{model_id}", "confidence": 0.0,
                             "review_state": "pending_review"}}
         errs = validate_rule(r)

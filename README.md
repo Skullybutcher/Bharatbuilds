@@ -25,19 +25,19 @@ Certificate → Human approval → New procedure version
 8.0 → 7.5 and makes recommendation required only when CGPA < 8.0. The stale portal
 still enforces V1. ProcessPatch returns witness A (CGPA 7.80: expected ELIGIBLE,
 portal INELIGIBLE) and witness B (CGPA 8.20: expected rec SKIP, portal REQUIRE),
-localizes `NODE-GATE` + `NODE-STEP`, proposes a localized patch, validates 12/12
-(witnesses, boundaries, unchanged, ordering, metamorphic, provenance), quantifies
+localizes `NODE-GATE` + `NODE-STEP`, proposes a localized patch, validates 16/16
+(witnesses, boundaries, unchanged, ordering, integrity, metamorphic, provenance), quantifies
 impact over a 100-case generated cohort, and mints a source-linked certificate.
 A second domain (reimbursement: tightened limit, conditional approval, ordering,
-deadline) validates 16/16.
+deadline) validates 20/20.
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"        # pytest + pyyaml (clean-machine repro)
-python scripts/verify.py        # 142 assertions, no network/LLM/AWS
+python scripts/verify.py        # 176 assertions, no network/LLM/AWS
 make verify                     # same
-make benchmark                  # ProcessPatchBench v0.1.0, 26 scenarios
+make benchmark                  # ProcessPatchBench v0.2.0, 29 scenarios
 make infra-validate             # SAM/ASL/dashboard checks, no credentials
 python scripts/demo.py          # terminal person-first demo
 python -m services.api.server 8000   # REST API (§45 + §57E)
@@ -57,8 +57,8 @@ implementation (`services/api/actions.py`) so both surfaces stay identical.
 
 `services/` deterministic pipeline + impact/governance/registry/bench/aws_handlers ·
 `shared/schemas/` all contracts · `demo/` two domains · `frontend/` 11-tab UI ·
-`benchmark/processpatchbench/` 26 heterogeneous cases + manifest ·
-`benchmark_runs/` reference run · `tests/` 7 suites · `infra/` full SAM setup ·
+`benchmark/processpatchbench/` 29 heterogeneous cases + manifest ·
+`benchmark_runs/` reference runs · `tests/` 8 suites · `infra/` full SAM setup ·
 `docs/` 12 notes · `scripts/` verify/demo/benchmark/smoke/infra-validate.
 
 ## Trust

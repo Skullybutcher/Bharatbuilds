@@ -2,11 +2,35 @@
  "certificate": "PATCH CERTIFICATE",
  "build": "BUILD-AD84652D8647",
  "policy": "REIMB-V2",
- "policy_sha256": "17b94532fc729f2b41e20d3a4704a4dc8d616c1f2c839c71f4248b0d3b71c332",
+ "source_document_sha256": null,
+ "accepted_rule_ir_sha256": "426fd0e0ad63e0f8c15d3afa737e22119bef07d66ff07c184966605bc4a3f07f",
+ "source_clauses": [
+  {
+   "policy_version_id": "REIMB-V2",
+   "document_sha256": "r2",
+   "page": 1,
+   "section": "2.1",
+   "source_text": "Claims up to amount <= 50000 are accepted without extra review."
+  },
+  {
+   "policy_version_id": "REIMB-V2",
+   "document_sha256": "r2",
+   "page": 1,
+   "section": "2.2",
+   "source_text": "Manager approval is required only when amount > 50000."
+  },
+  {
+   "policy_version_id": "REIMB-V2",
+   "document_sha256": "r2",
+   "page": 2,
+   "section": "2.4",
+   "source_text": "Claims MUST NOT be submitted after 2026-09-30."
+  }
+ ],
  "procedure_before": "REIMB-WF-V1",
  "procedure_before_sha256": "5c10073f3f213db8f10b4c6466d15708fda3f5fbd781cbd5dfa5fa06a082e145",
  "procedure_after": "REIMB-WF-V1-PATCHED",
- "procedure_after_sha256": "4c2fb5a38ba5f7310e81f2b42223d9e1c75ac95e41a22c5717adc0443da18428",
+ "procedure_after_sha256": "667e0970e057f27ed74ace387293eddb3b94da90100c060c95a1c9b3f7ce6c87",
  "changed_rules": [
   "REIMB-LIMIT-102",
   "REIMB-APPR-102",
@@ -215,17 +239,17 @@
      "manager_approval": true
     },
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibitions_violated": []
    },
    "actual": {
     "eligible": true,
     "required": {
-     "manager_approval": true,
-     "payment": false,
-     "verification": false
+     "manager_approval": true
     },
     "on_time": true,
-    "order_ok": false
+    "order_ok": false,
+    "prohibited": false
    },
    "trace_expected": [
     "eligibility -> False",
@@ -235,7 +259,7 @@
    "trace_actual": [
     "NODE-CLAIM-START: visit (File Claim)",
     "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> PASS",
-    "NODE-MGR-APPROVAL: visit (Manager Approval)",
+    "NODE-MGR-APPROVAL: do manager_approval (required=True)",
     "NODE-PAYMENT: visit (Release Payment)",
     "NODE-VERIFY: visit (Verify Claim)",
     "ORDER VIOLATION: verification after payment"
@@ -260,17 +284,15 @@
      "manager_approval": true
     },
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibitions_violated": []
    },
    "actual": {
     "eligible": false,
-    "required": {
-     "manager_approval": true,
-     "payment": false,
-     "verification": false
-    },
+    "required": {},
     "on_time": true,
-    "order_ok": false
+    "order_ok": false,
+    "prohibited": false
    },
    "trace_expected": [
     "eligibility -> False",
@@ -279,10 +301,7 @@
    ],
    "trace_actual": [
     "NODE-CLAIM-START: visit (File Claim)",
-    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> REJECT",
-    "NODE-MGR-APPROVAL: visit (Manager Approval)",
-    "NODE-PAYMENT: visit (Release Payment)",
-    "NODE-VERIFY: visit (Verify Claim)",
+    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> REJECT STOP",
     "ORDER VIOLATION: verification after payment"
    ],
    "witness_id": "W-002",
@@ -305,17 +324,15 @@
      "manager_approval": true
     },
     "on_time": false,
-    "order_ok": true
+    "order_ok": true,
+    "prohibitions_violated": []
    },
    "actual": {
     "eligible": false,
-    "required": {
-     "manager_approval": true,
-     "payment": false,
-     "verification": false
-    },
+    "required": {},
     "on_time": true,
-    "order_ok": false
+    "order_ok": false,
+    "prohibited": false
    },
    "trace_expected": [
     "eligibility -> False",
@@ -324,10 +341,7 @@
    ],
    "trace_actual": [
     "NODE-CLAIM-START: visit (File Claim)",
-    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> REJECT",
-    "NODE-MGR-APPROVAL: visit (Manager Approval)",
-    "NODE-PAYMENT: visit (Release Payment)",
-    "NODE-VERIFY: visit (Verify Claim)",
+    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> REJECT STOP",
     "ORDER VIOLATION: verification after payment"
    ],
    "witness_id": "W-003",
@@ -350,17 +364,17 @@
      "manager_approval": false
     },
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibitions_violated": []
    },
    "actual": {
     "eligible": true,
     "required": {
-     "manager_approval": true,
-     "payment": false,
-     "verification": false
+     "manager_approval": true
     },
     "on_time": true,
-    "order_ok": false
+    "order_ok": false,
+    "prohibited": false
    },
    "trace_expected": [
     "eligibility -> True",
@@ -370,7 +384,7 @@
    "trace_actual": [
     "NODE-CLAIM-START: visit (File Claim)",
     "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> PASS",
-    "NODE-MGR-APPROVAL: visit (Manager Approval)",
+    "NODE-MGR-APPROVAL: do manager_approval (required=True)",
     "NODE-PAYMENT: visit (Release Payment)",
     "NODE-VERIFY: visit (Verify Claim)",
     "ORDER VIOLATION: verification after payment"
@@ -386,13 +400,13 @@
   "total": 4
  },
  "tests_after": {
-  "passed": 16,
-  "total": 16
+  "passed": 20,
+  "total": 20
  },
  "approvals": [],
  "compiler": "0.1.0",
- "created_at": "2026-09-19T03:39:09.954021+00:00",
+ "created_at": "2026-09-19T05:29:12.519327+00:00",
  "status": "VALIDATED_WITHIN_TESTED_MODEL",
  "disclaimer": "Evidence-backed verification for the bounded model ProcessPatch supports; NOT a guarantee of full institutional compliance.",
- "certificate_sha256": "a561672f1222b41ba2a5e3f33696d9c26f88e17c1d6873f40ebd6c4346915842"
+ "certificate_sha256": "15b236838d7d30815b28f4ae13a48c0c912e2d76a02a1006db67b939b21ba365"
 }

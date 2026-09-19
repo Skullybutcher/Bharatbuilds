@@ -1,11 +1,54 @@
 {
- "$schema": "http://json-schema.org/draft-07/schema#",
- "type": "object",
- "title": "RuleIR",
- "required": [
-  "rule_id",
-  "kind",
-  "status",
-  "provenance"
- ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RuleIR",
+  "type": "object",
+  "required": ["rule_id", "kind", "status", "provenance"],
+  "properties": {
+    "rule_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["threshold", "obligation", "conditional_obligation", "prohibition", "prerequisite", "exception", "deadline"]},
+    "subject": {"type": "string"},
+    "action": {"type": "string"},
+    "condition": {
+      "type": ["object", "null"],
+      "properties": {
+        "field": {"type": "string"},
+        "operator": {"enum": [">", ">=", "<", "<=", "==", "!=", "IN", "NOT_IN"]},
+        "value": {},
+        "datatype": {"type": "string"},
+        "prerequisite": {"type": "string"},
+        "target": {"type": "string"},
+        "relation": {"type": "string"},
+        "and": {"type": "array"},
+        "or": {"type": "array"},
+        "not": {"type": "object"}
+      }
+    },
+    "normalized_expression": {"type": "string"},
+    "effective_from": {"type": "string"},
+    "effective_to": {"type": ["string", "null"]},
+    "status": {"enum": ["active", "superseded", "draft"]},
+    "supersedes": {"type": ["string", "null"]},
+    "provenance": {
+      "type": "object",
+      "required": ["policy_version_id", "section", "source_text"],
+      "properties": {
+        "policy_version_id": {"type": "string"},
+        "document_sha256": {"type": "string"},
+        "page": {"type": ["integer", "null"]},
+        "section": {"type": "string"},
+        "source_text": {"type": "string", "minLength": 1},
+        "line_start": {"type": ["integer", "null"]},
+        "char_start": {"type": ["integer", "null"]},
+        "source_verified": {"type": "boolean"}
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "properties": {
+        "model": {"type": "string"},
+        "confidence": {"type": "number"},
+        "review_state": {"type": "string"}
+      }
+    }
+  }
 }

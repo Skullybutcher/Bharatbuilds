@@ -1,12 +1,21 @@
 {
- "$schema": "http://json-schema.org/draft-07/schema#",
- "type": "object",
- "title": "Approval",
- "required": [
-  "approval_id",
-  "build_id",
-  "decision",
-  "artifacts",
-  "timestamp"
- ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Approval",
+  "type": "object",
+  "required": ["approval_id", "build_id", "decision", "artifacts", "timestamp"],
+  "properties": {
+    "approval_id": {"type": "string"},
+    "build_id": {"type": "string"},
+    "approval_type": {"type": "string"},
+    "reviewer": {"type": "object"},
+    "role": {"enum": ["POLICY_REVIEWER", "PROCEDURE_OWNER", "FINAL_APPROVER"]},
+    "decision": {"type": "string"},
+    "reason": {"type": "string"},
+    "artifacts": {
+      "type": "object",
+      "required": ["accepted_rule_ir_sha256", "procedure_before_sha256", "procedure_after_sha256", "patch_operations_sha256", "certificate_sha256"]
+    },
+    "candidate_version_id": {"type": "string"},
+    "timestamp": {"type": "number"}
+  }
 }

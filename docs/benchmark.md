@@ -1,4 +1,4 @@
-# ProcessPatchBench (57C) — v0.1.0, 26 scenarios (13 dev / 13 eval)
+# ProcessPatchBench (57C) — v0.2.0, 29 scenarios (15 dev / 14 eval)
 
 ## Methodology (read before citing numbers)
 
@@ -41,7 +41,9 @@ preservation, then classifies each case: AUTO_REPAIRED | CORRECTLY_NO_OP |
 CORRECTLY_ESCALATED | UNSUPPORTED | FAILED_*. Artifacts:
 `benchmark_runs/<id>/{manifest,results,metrics,report}.json|md` + failures/.
 
-Reference: 19 auto-repaired, 3 correct no-ops, 4 correct escalations;
+Reference: 20 auto-repaired, 3 correct no-ops, 4 correct escalations,
+2 correctly-flagged unsupported (temporal/nested language the bounded
+grammar refuses);
 extraction/delta/witness/localization/repair/preservation all 1.0 (see
 benchmark_runs reference run). Do not tune on eval and report it as
 independent; benchmark version is pinned in BENCHMARK_VERSION (never silently

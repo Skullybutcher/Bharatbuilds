@@ -1,0 +1,6 @@
+{
+  "type": "PROHIBITION_ADDED",
+  "affected_rule_ids": [
+    "R-PRO-V2"
+  ]
+}

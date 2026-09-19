@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-LIM-V1",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "amount",
+      "operator": "<=",
+      "value": 200000
+    },
+    "normalized_expression": "amount <= 200000",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.1",
+      "source_text": "Claims up to amount <= 200000 are accepted."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

@@ -101,6 +101,18 @@ def create_build(body: dict):
     hit = find_build_by_key(key) or MEMO.get(key)
     if hit and not body.get("force"):
         return {**hit, "idempotent_reuse": True}
+    if body.get("defer"):
+        # DRAFT registration only: Step Functions (or a later local execute)
+        # owns compilation. The synchronous pipeline does NOT run here.
+        from services.registry.store import sha
+        import time as _t
+        draft = {"build_id": f"DRAFT-{sha({'rules': new, 'proc': proc})[:8].upper()}",
+                 "status": "DRAFT", "compile_key": key,
+                 "policy_version_id": body.get("policy_version_id", "POLICY-V2"),
+                 "policy_text": policy_text, "old_rules": old, "new_rules": new,
+                 "procedure": proc, "extraction_backend": backend,
+                 "review_state": "REVIEW_PENDING", "created_at": _t.time()}
+        return _store(draft)
     build = run_build(body.get("policy_version_id", "POLICY-V2"), old, new, proc)
     build["policy_text"] = policy_text
     build["extraction_backend"] = backend
@@ -273,10 +285,11 @@ def procedure_versions(workflow_id=None):
 def start_execution(body: dict):
     """API-driven cloud execution (primary demo path).
 
-    Local (no STATEMACHINE_ARN): the synchronous pipeline already ran at build
-    creation, so record a READY_LOCAL execution. On AWS: upload the policy
-    text to the versioned source bucket for evidence, then StartExecution with
-    a complete inline envelope (LOAD_BUILD_CONTEXT passes it through).
+    The build is a DRAFT (or any stored build); Step Functions owns
+    compilation from here. Local (no STATEMACHINE_ARN): run the synchronous
+    pipeline now and record READY_LOCAL. On AWS: upload the policy text to
+    the versioned source bucket for evidence, then StartExecution with a
+    complete inline envelope (LOAD_BUILD_CONTEXT passes it through).
     """
     import os as _os
     import time as _t
@@ -286,12 +299,11 @@ def start_execution(body: dict):
     if not b:
         raise KeyError(bid or "missing build_id")
     arn = _os.environ.get("STATEMACHINE_ARN", "")
-    key = f"builds/{bid}/policy.md"
     if arn:
         import boto3  # lazy
         bucket = _os.environ.get("SOURCE_BUCKET", "")
         if bucket and b.get("policy_text"):
-            boto3.client("s3").put_object(Bucket=bucket, Key=key,
+            boto3.client("s3").put_object(Bucket=bucket, Key=f"builds/{bid}/policy.md",
                                           Body=b["policy_text"].encode())
         ex = boto3.client("stepfunctions").start_execution(
             stateMachineArn=arn, name=f"{bid}-{int(_t.time())}",
@@ -303,9 +315,24 @@ def start_execution(body: dict):
         rec = {"executionArn": ex["executionArn"], "build_id": bid,
                "status": "RUNNING", "started": _t.time()}
     else:
-        rec = {"executionArn": f"local:{bid}", "build_id": bid,
+        from services.api.pipeline import run_build as _run
+        full = _run(b.get("policy_version_id", "POLICY-V2"), b.get("old_rules", []),
+                    b.get("new_rules", []), b.get("procedure", {}))
+        full["policy_text"] = b.get("policy_text", "")
+        full["extraction_backend"] = b.get("extraction_backend", "fixture")
+        _store(full)
+        try:
+            from services.governance.store import open_rule_reviews as _open, review_rule as _rr
+            _open(full["build_id"], full.get("new_rules", []))
+            for r in full.get("new_rules", []):
+                _rr(full["build_id"], r["rule_id"], "ACCEPT", reviewer="USR-001")
+            full["review_state"] = "REVIEWED_VIA_API"
+            _store(full)
+        except Exception:
+            pass
+        rec = {"executionArn": f"local:{full['build_id']}", "build_id": full["build_id"],
                "status": "READY_LOCAL", "started": _t.time(),
-               "note": "local synchronous pipeline already executed at build creation"}
+               "note": "local synchronous pipeline executed for this DRAFT"}
     execs = [e for e in _load("executions.json", []) if e.get("executionArn") != rec["executionArn"]] + [rec]
     _save("executions.json", execs)
     return rec

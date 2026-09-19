@@ -2,7 +2,24 @@
  "certificate": "PATCH CERTIFICATE",
  "build": "BUILD-EA35E6F0FFB1",
  "policy": "POLICY-V2",
- "policy_sha256": "ee1dcc66c20b25ec90fcacc17a2475fa36cfb3879a36574abf2eabd7ecc0585f",
+ "source_document_sha256": null,
+ "accepted_rule_ir_sha256": "1baf123cf208a83568bffb155ab73123dec85f6b6e133cada26de6500a01387d",
+ "source_clauses": [
+  {
+   "policy_version_id": "POLICY-V2",
+   "document_sha256": "v2-placeholder",
+   "page": 2,
+   "section": "4.1",
+   "source_text": "Applicants must have CGPA >= 7.5."
+  },
+  {
+   "policy_version_id": "POLICY-V2",
+   "document_sha256": "v2-placeholder",
+   "page": 3,
+   "section": "4.2",
+   "source_text": "A faculty recommendation is required only when CGPA < 8.0."
+  }
+ ],
  "procedure_before": "WF-V3",
  "procedure_before_sha256": "dc382ca960c52af5488122564f58bc7447f80e68e51a28c6a19dc06fc570ea05",
  "procedure_after": "WF-V3-PATCHED",
@@ -174,15 +191,15 @@
      "upload_recommendation": true
     },
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibitions_violated": []
    },
    "actual": {
     "eligible": false,
-    "required": {
-     "upload_recommendation": true
-    },
+    "required": {},
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibited": false
    },
    "trace_expected": [
     "eligibility -> True",
@@ -191,10 +208,7 @@
    ],
    "trace_actual": [
     "NODE-START: visit (Start Application)",
-    "NODE-ELIGIBILITY: gate {'field': 'cgpa', 'operator': '>=', 'value': 8.0} -> REJECT",
-    "NODE-REC-UPLOAD: visit (Upload Recommendation)",
-    "NODE-DEPT-APPROVAL: visit (Department Approval)",
-    "NODE-SUBMIT: visit (Final Submission)"
+    "NODE-ELIGIBILITY: gate {'field': 'cgpa', 'operator': '>=', 'value': 8.0} -> REJECT STOP"
    ],
    "witness_id": "W-001",
    "label": "Who gets the wrong outcome? Wrongfully rejected.",
@@ -215,7 +229,8 @@
      "upload_recommendation": false
     },
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibitions_violated": []
    },
    "actual": {
     "eligible": true,
@@ -223,7 +238,8 @@
      "upload_recommendation": true
     },
     "on_time": true,
-    "order_ok": true
+    "order_ok": true,
+    "prohibited": false
    },
    "trace_expected": [
     "eligibility -> True",
@@ -233,7 +249,7 @@
    "trace_actual": [
     "NODE-START: visit (Start Application)",
     "NODE-ELIGIBILITY: gate {'field': 'cgpa', 'operator': '>=', 'value': 8.0} -> PASS",
-    "NODE-REC-UPLOAD: visit (Upload Recommendation)",
+    "NODE-REC-UPLOAD: do upload_recommendation (required=True)",
     "NODE-DEPT-APPROVAL: visit (Department Approval)",
     "NODE-SUBMIT: visit (Final Submission)"
    ],
@@ -248,13 +264,13 @@
   "total": 2
  },
  "tests_after": {
-  "passed": 12,
-  "total": 12
+  "passed": 16,
+  "total": 16
  },
  "approvals": [],
  "compiler": "0.1.0",
- "created_at": "2026-09-19T03:39:09.946473+00:00",
+ "created_at": "2026-09-19T05:29:12.491637+00:00",
  "status": "VALIDATED_WITHIN_TESTED_MODEL",
  "disclaimer": "Evidence-backed verification for the bounded model ProcessPatch supports; NOT a guarantee of full institutional compliance.",
- "certificate_sha256": "7cb88e0e6d08a1909e6f3ba05d1a9de5202aaea4cd5343c41178f7978d56e47f"
+ "certificate_sha256": "055f11044ad04b8e85c3a3079aae1e3b0566b4c5855afc32acb5e345236eb113"
 }

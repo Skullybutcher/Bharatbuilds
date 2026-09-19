@@ -1,9 +1,9 @@
-"""End-to-end build pipeline with governance states (mirrors Step Functions).
+"""End-to-end build pipeline with governance states (mirrors Step Functions;
+see infra/statemachine.asl.json for the 40-state cloud definition).
 
-INGEST -> HASH_ARTIFACT -> EXTRACT_TEXT -> EXTRACT_RULES -> VALIDATE_RULE_IR
--> RESOLVE_AUTHORITY -> RULE_REVIEW? -> COMPILE_CONSTRAINTS -> SEMANTIC_DIFF
--> FIND_WITNESSES -> COMPUTE_IMPACT -> LOCALIZE_FAULTS -> GENERATE_PATCH
--> RUN_REGRESSION -> GENERATE_CERTIFICATE -> WAIT_FOR_PATCH_APPROVAL -> READY
+Local order: HASH -> VALIDATE -> COMPILE -> DIFF -> WITNESSES -> LOCALIZE ->
+PATCH -> VALIDATE -> IMPACT -> CERTIFICATE (review gates enforced by
+services.governance via the API layer).
 """
 from __future__ import annotations
 import time
@@ -25,9 +25,12 @@ STATES = ["INGEST", "HASH_ARTIFACT", "EXTRACT_TEXT", "EXTRACT_RULES", "VALIDATE_
 
 def run_build(policy_version_id: str, old_rules: list[dict], new_rules: list[dict],
               procedure: dict, workflows_registry: list | None = None,
-              extraction: dict | None = None, auto_accept_reviews: bool = True) -> dict:
+              extraction: dict | None = None, auto_accept_reviews: bool = True,
+              policy_text: str | None = None) -> dict:
     t0 = time.time()
     log = list(STATES)
+    from services.schemas import check as _scheck, check_each as _scheck_each
+    _scheck("workflow", procedure, "run_build/procedure")
     key = compile_key(new_rules, procedure)
     build_id = key
 
@@ -49,8 +52,10 @@ def run_build(policy_version_id: str, old_rules: list[dict], new_rules: list[dic
                 "error": {"code": code, "details": str(e)}, "duration_s": round(time.time() - t0, 3)}
 
     witnesses = find_witnesses(model, procedure)
+    _scheck_each("witness", witnesses, "run_build/witnesses")
     faults = localize_all(witnesses, procedure, model)
     patch = propose(model, procedure, faults)
+    _scheck("patch", {k: patch[k] for k in ("patch_id", "operations", "cost")}, "run_build/patch")
     patched = patch["patched_workflow"]
     validation = validate(patch, witnesses, model, old_model, patched, procedure, delta, faults)
     impact = compute_impact_summary(
@@ -73,6 +78,7 @@ def run_build(policy_version_id: str, old_rules: list[dict], new_rules: list[dic
             semantic_delta=delta, witnesses=witnesses[:4], impact=impact,
             tests_before={"failed": len(witnesses), "total": len(witnesses)},
             tests_after={"passed": validation["passed"], "total": validation["total"]},
+            policy_text=policy_text, accepted_rule_ir=new_rules,
             compiler_version=COMPILER_VERSION)
 
     return {"build_id": build_id, "compile_key": key, "policy_version_id": policy_version_id,

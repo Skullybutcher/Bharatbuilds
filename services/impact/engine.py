@@ -64,7 +64,8 @@ def compute_impact_summary(*, build_id: str, policy_version: str, procedure_vers
                            cohort_size: int = 100) -> dict:
     verified = [w for w in witnesses if w.get("verified")]
     behavioral = {"wrong_rejections": 0, "wrong_acceptances": 0, "unnecessary_burdens": 0,
-                  "missing_safeguards": 0, "wrong_orderings": 0, "deadline_mismatches": 0}
+                  "missing_safeguards": 0, "wrong_orderings": 0, "deadline_mismatches": 0,
+                  "prohibition_breaches": 0}
     for w in verified:
         k = w.get("kind")
         if k == "wrong_rejection":
@@ -79,6 +80,8 @@ def compute_impact_summary(*, build_id: str, policy_version: str, procedure_vers
             behavioral["wrong_orderings"] += 1
         elif k == "deadline_mismatch":
             behavioral["deadline_mismatches"] += 1
+        elif k == "prohibition_breach":
+            behavioral["prohibition_breaches"] += 1
 
     affected_nodes = sorted({n for f in faults for n in f.get("affected_nodes", [])})
     affected_rules = (delta or {}).get("affected_rule_ids", [])
@@ -128,7 +131,7 @@ def compute_impact_summary(*, build_id: str, policy_version: str, procedure_vers
         by_suite[r.get("suite")]["passed" if r.get("pass") else "failed"] += 1
     cov = prov_coverage((procedure_after or procedure_before).get("nodes", []))
 
-    return {
+    summary = {
         "build_id": build_id, "policy_version": policy_version, "procedure_version": procedure_version,
         "semantic_changes": len(affected_rules),
         "semantic_breakdown": {"behavioral": bool((delta or {}).get("behavioral")),
@@ -150,6 +153,9 @@ def compute_impact_summary(*, build_id: str, policy_version: str, procedure_vers
         "approval": {"machine_status": (validation or {}).get("status", "UNKNOWN"),
                      "human_status": "AWAITING_APPROVAL"},
     }
+    from services.schemas import check as _scheck
+    _scheck("impact_summary", summary, f"impact/{build_id}")
+    return summary
 
 
 def before_after_table(impact: dict) -> list[dict]:

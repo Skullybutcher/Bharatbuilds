@@ -27,6 +27,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: GitHub personal access token for Amplify hosting (repo access). Export AMPLIFY_TOKEN locally; never commit it.
+  FrontendOrigin:
+    Type: String
+    Default: '*'
+    Description: Allowed CORS origin for the API. Keep '*' only for disposable demos; production deployments must set the Amplify URL.
 
 Globals:
   Function:
@@ -103,7 +107,7 @@ Resources:
     Properties:
       StageName: prod
       CorsConfiguration:
-        AllowOrigins: ['*']
+        AllowOrigins: [!Ref FrontendOrigin]
         AllowMethods: ['GET', 'POST', 'OPTIONS']
         AllowHeaders: ['Content-Type']
 

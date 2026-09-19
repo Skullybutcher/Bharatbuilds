@@ -27,22 +27,86 @@ class ConstraintModel:
     source_rules: list = field(default_factory=list)
 
 
+def _threshold_domain(conds: list[dict]) -> bool:
+    """Interval satisfiability for one field: lower/upper bounds, equality,
+    enum membership. Compatible ranges (e.g. >= 7.5 AND <= 10) are NOT
+    conflicts — only an empty domain is."""
+    import math
+    lo, lo_inc = -math.inf, True
+    hi, hi_inc = math.inf, True
+    eq = None
+    allowed = None
+    for c in conds:
+        op, v = c.get("operator"), c.get("value")
+        if op in ("IN", "NOT_IN"):
+            vals = set(v if isinstance(v, (list, tuple, set)) else [v])
+            if op == "IN":
+                allowed = vals if allowed is None else (allowed & vals)
+            continue
+        if op == "==":
+            eq = v if eq is None else (eq if str(eq) == str(v) else "!!conflict!!")
+            continue
+        if op == "!=":
+            continue
+        try:
+            f = float(str(v).replace(",", ""))
+        except (TypeError, ValueError):
+            continue  # dates handled lexicographically below
+        if op == ">":
+            if f > lo or (f == lo and lo_inc):
+                lo, lo_inc = f, False
+        elif op == ">=":
+            if f > lo or (f == lo and not lo_inc):
+                lo, lo_inc = f, True
+        elif op == "<":
+            if f < hi or (f == hi and hi_inc):
+                hi, hi_inc = f, False
+        elif op == "<=":
+            if f < hi or (f == hi and not hi_inc):
+                hi, hi_inc = f, True
+    if eq == "!!conflict!!":
+        return False
+    if eq is not None:
+        try:
+            f = float(str(eq).replace(",", ""))
+            ok = (f > lo or (f == lo and lo_inc)) and (f < hi or (f == hi and hi_inc))
+        except (TypeError, ValueError):
+            ok = True
+        if allowed is not None:
+            ok = ok and eq in allowed
+        return ok
+    if lo > hi or (lo == hi and not (lo_inc and hi_inc)):
+        # date strings compare lexicographically and never hit the float path
+        return True if isinstance(lo, str) or isinstance(hi, str) else False
+    if allowed is not None and not allowed:
+        return False
+    return True
+
+
 def compile_rules(rules: list[dict]) -> ConstraintModel:
     active = [r for r in rules if r.get("status", "active") == "active"]
     model = ConstraintModel(source_rules=[r.get("rule_id") for r in active])
 
-    # fail-closed: contradictory active thresholds, same field, no precedence
-    seen: dict = {}
+    # fail-closed: per-field constraint analysis.
+    #  - one lower + one upper bound = an interval, NOT a conflict;
+    #  - two DISTINCT lower bounds (or uppers, or equalities) with no
+    #    precedence = ambiguous authority -> BLOCK;
+    #  - an empty domain (e.g. >= 8 AND < 7.5) -> BLOCK.
+    by_field: dict = {}
     for r in active:
-        if r.get("kind") == "threshold":
-            c = r.get("condition") or {}
-            key = c.get("field")
-            sig = (c.get("operator"), c.get("value"))
-            if key in seen and seen[key] != sig:
-                raise ValueError(
-                    "CONFLICT / COMPILATION BLOCKED: contradictory thresholds for "
-                    f"{key!r} with no explicit precedence.")
-            seen[key] = sig
+        if r.get("kind") == "threshold" and (r.get("condition") or {}).get("field"):
+            by_field.setdefault((r.get("condition") or {})["field"], []).append(r.get("condition"))
+    for field, conds in by_field.items():
+        lowers = {(c.get("operator"), str(c.get("value"))) for c in conds if c.get("operator") in (">", ">=")}
+        uppers = {(c.get("operator"), str(c.get("value"))) for c in conds if c.get("operator") in ("<", "<=")}
+        if len(lowers) > 1 or len(uppers) > 1:
+            raise ValueError(
+                "CONFLICT / COMPILATION BLOCKED: ambiguous authority for "
+                f"{field!r} (multiple bounds, no precedence).")
+        if not _threshold_domain(conds):
+            raise ValueError(
+                "CONFLICT / COMPILATION BLOCKED: unsatisfiable constraints for "
+                f"{field!r} with no explicit precedence.")
 
     for r in active:
         kind, rid = r.get("kind"), r.get("rule_id")

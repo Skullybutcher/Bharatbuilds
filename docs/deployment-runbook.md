@@ -1,7 +1,7 @@
 # Deployment runbook
 
 0. Make the GitHub repo **public** (First Commit judges only score public repos).
-1. `make verify` — 142/142 local assertions.
+1. `make verify` — 176/176 local assertions.
 2. `make benchmark` — reference run matches committed metrics.
 3. `make infra-validate` — IaC checks pass.
 4. Deploy (`infra/deploy.sh` or `deploy.ps1` — needs `AMPLIFY_TOKEN` set); note ApiUrl output.

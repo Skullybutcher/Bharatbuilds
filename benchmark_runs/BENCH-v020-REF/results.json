@@ -1,0 +1,1848 @@
+{
+  "run_id": "BENCH-v020-REF",
+  "cases": [
+    {
+      "case_id": "THRESH-RELAX-001",
+      "family": "threshold_relaxation",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "COMPOUND",
+        "expected": "COMPOUND",
+        "match": true
+      },
+      "witness": {
+        "count": 2,
+        "kinds": [
+          "unnecessary_burden",
+          "wrong_rejection"
+        ],
+        "expected_kinds": [
+          "wrong_rejection",
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-GATE",
+          "NODE-STEP"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "gate >= 7.5",
+        "forbidden_hit": [],
+        "cost": 5.0,
+        "cost_ok": true,
+        "validation": "16/16",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-GATE",
+            "old": {
+              "operator": ">=",
+              "value": 8.0
+            },
+            "new": {
+              "operator": ">=",
+              "value": 7.5
+            }
+          },
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-STEP",
+            "field": "recommendation_file",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": true,
+              "required_condition": {
+                "field": "cgpa",
+                "operator": "<",
+                "value": 8.0
+              }
+            },
+            "rationale": "IMPLEMENTS_RULE R-REC-V2"
+          },
+          {
+            "op": "ADD_GATE",
+            "node_id": "NODE-STEP",
+            "condition": {
+              "field": "cgpa",
+              "operator": "<",
+              "value": 8.0
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.22,
+        "delta_ms": 0.02,
+        "witness_ms": 0.4,
+        "localize_ms": 0.01,
+        "repair_ms": 1.14
+      }
+    },
+    {
+      "case_id": "THRESH-TIGHTEN-001",
+      "family": "threshold_tightening",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "THRESHOLD_TIGHTENED",
+        "expected": "THRESHOLD_TIGHTENED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "wrong_acceptance"
+        ],
+        "expected_kinds": [
+          "wrong_acceptance"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-GATE"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "gate <= 50000",
+        "forbidden_hit": [],
+        "cost": 2.0,
+        "cost_ok": true,
+        "validation": "16/16",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-GATE",
+            "old": {
+              "operator": "<=",
+              "value": 100000
+            },
+            "new": {
+              "operator": "<=",
+              "value": 50000
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.08,
+        "delta_ms": 0.02,
+        "witness_ms": 0.19,
+        "localize_ms": 0.01,
+        "repair_ms": 0.66
+      }
+    },
+    {
+      "case_id": "REQ-REMOVE-001",
+      "family": "requirement_removed",
+      "split": "dev",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "OBLIGATION_REMOVED",
+        "expected": "OBLIGATION_REMOVED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "unnecessary_burden"
+        ],
+        "expected_kinds": [
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-STEP"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "required=False",
+        "forbidden_hit": [],
+        "cost": 1.0,
+        "cost_ok": true,
+        "validation": "6/6",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-STEP",
+            "field": "recommendation_file",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": false,
+              "required_condition": null
+            },
+            "rationale": "obligation removed in active rules"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.06,
+        "delta_ms": 0.01,
+        "witness_ms": 0.04,
+        "localize_ms": 0.01,
+        "repair_ms": 0.14
+      }
+    },
+    {
+      "case_id": "REQ-ADD-001",
+      "family": "requirement_added",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "OBLIGATION_ADDED",
+        "expected": "OBLIGATION_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "missing_safeguard"
+        ],
+        "expected_kinds": [
+          "missing_safeguard"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "required=True",
+        "forbidden_hit": [],
+        "cost": 6.0,
+        "cost_ok": true,
+        "validation": "10/10",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "ADD_NODE",
+            "node_id": "NODE-UPLOAD_TRANSCRIPT",
+            "label": "Upload Transcript",
+            "implementation": {
+              "form_field": "upload_transcript_file",
+              "action": "upload_transcript",
+              "required": true,
+              "required_condition": null
+            },
+            "rationale": "IMPLEMENTS_RULE R-TR-V2"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-UPLOAD_TRANSCRIPT"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-UPLOAD_TRANSCRIPT",
+            "to": "NODE-SUBMIT"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.07,
+        "delta_ms": 0.01,
+        "witness_ms": 0.12,
+        "localize_ms": 0.0,
+        "repair_ms": 0.36
+      }
+    },
+    {
+      "case_id": "COND-001",
+      "family": "conditional_requirement",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "CONDITION_CHANGED",
+        "expected": "CONDITION_CHANGED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "unnecessary_burden"
+        ],
+        "expected_kinds": [
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-APPR"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "probe true->True false->False",
+        "forbidden_hit": [],
+        "cost": 3.0,
+        "cost_ok": true,
+        "validation": "11/11",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-APPR",
+            "field": "manager_signoff",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": true,
+              "required_condition": {
+                "field": "amount",
+                "operator": ">",
+                "value": 50000
+              }
+            },
+            "rationale": "IMPLEMENTS_RULE R-AP-V2"
+          },
+          {
+            "op": "ADD_GATE",
+            "node_id": "NODE-APPR",
+            "condition": {
+              "field": "amount",
+              "operator": ">",
+              "value": 50000
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.07,
+        "delta_ms": 0.01,
+        "witness_ms": 0.11,
+        "localize_ms": 0.0,
+        "repair_ms": 0.28
+      }
+    },
+    {
+      "case_id": "EXC-ADD-001",
+      "family": "exception_added",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "EXCEPTION_ADDED",
+        "expected": "EXCEPTION_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "unnecessary_burden"
+        ],
+        "expected_kinds": [
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-STEP"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "probe true->True false->False",
+        "forbidden_hit": [],
+        "cost": 3.0,
+        "cost_ok": true,
+        "validation": "8/8",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-STEP",
+            "field": "recommendation_file",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": true,
+              "required_condition": {
+                "not": {
+                  "field": "category",
+                  "operator": "==",
+                  "value": "X"
+                }
+              }
+            },
+            "rationale": "IMPLEMENTS_RULE R-REC-V1"
+          },
+          {
+            "op": "ADD_GATE",
+            "node_id": "NODE-STEP",
+            "condition": {
+              "not": {
+                "field": "category",
+                "operator": "==",
+                "value": "X"
+              }
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.06,
+        "delta_ms": 0.01,
+        "witness_ms": 0.18,
+        "localize_ms": 0.0,
+        "repair_ms": 0.21
+      }
+    },
+    {
+      "case_id": "ORDER-001",
+      "family": "ordering_change",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "PREREQUISITE_ADDED",
+        "expected": "PREREQUISITE_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "wrong_journey"
+        ],
+        "expected_kinds": [
+          "wrong_journey"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-PAY",
+          "NODE-VERIFY"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "order_ok",
+        "forbidden_hit": [],
+        "cost": 11.0,
+        "cost_ok": true,
+        "validation": "8/8",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "MOVE_NODE",
+            "node_id": "NODE-VERIFY",
+            "anchor": {
+              "before": "NODE-PAY"
+            },
+            "rationale": "IMPLEMENTS_RULE R-ORD-V2"
+          },
+          {
+            "op": "ADD_PREREQUISITE",
+            "prerequisite": "verification",
+            "target": "payment",
+            "rationale": "IMPLEMENTS_RULE R-ORD-V2"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-PAY",
+            "to": "NODE-VERIFY"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-START",
+            "to": "NODE-VERIFY"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-START",
+            "to": "NODE-PAY"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-VERIFY",
+            "to": "NODE-PAY"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-PAY",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-VERIFY",
+            "to": "NODE-SUBMIT"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.06,
+        "delta_ms": 0.01,
+        "witness_ms": 0.05,
+        "localize_ms": 0.01,
+        "repair_ms": 0.21
+      }
+    },
+    {
+      "case_id": "PRE-ADD-001",
+      "family": "prerequisite_added",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "PREREQUISITE_ADDED",
+        "expected": "PREREQUISITE_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "wrong_journey"
+        ],
+        "expected_kinds": [
+          "wrong_journey"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-SUBMIT"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "order_ok",
+        "forbidden_hit": [],
+        "cost": 8.0,
+        "cost_ok": true,
+        "validation": "11/11",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "ADD_NODE",
+            "node_id": "NODE-DEPT_APPROVAL",
+            "label": "dept_approval",
+            "implementation": {
+              "approver": "dept_approval"
+            },
+            "rationale": "IMPLEMENTS_RULE R-ORD-V2"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-DEPT_APPROVAL"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-DEPT_APPROVAL",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_PREREQUISITE",
+            "prerequisite": "dept_approval",
+            "target": "final_submission"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.08,
+        "delta_ms": 0.01,
+        "witness_ms": 0.17,
+        "localize_ms": 0.01,
+        "repair_ms": 0.59
+      }
+    },
+    {
+      "case_id": "DL-EXT-001",
+      "family": "deadline_extended",
+      "split": "dev",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "DEADLINE_EXTENDED",
+        "expected": "DEADLINE_EXTENDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "deadline_mismatch"
+        ],
+        "expected_kinds": [
+          "deadline_mismatch"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-DL"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "deadline 2026-09-30",
+        "forbidden_hit": [],
+        "cost": 2.0,
+        "cost_ok": true,
+        "validation": "15/15",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-DL",
+            "old": {
+              "operator": "<=",
+              "value": "2026-09-25"
+            },
+            "new": {
+              "operator": "<=",
+              "value": "2026-09-30"
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.08,
+        "delta_ms": 0.01,
+        "witness_ms": 0.17,
+        "localize_ms": 0.0,
+        "repair_ms": 0.46
+      }
+    },
+    {
+      "case_id": "NOOP-PARA-001",
+      "family": "semantic_paraphrase",
+      "split": "dev",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "SEMANTICS_UNCHANGED",
+        "expected": "SEMANTICS_UNCHANGED",
+        "match": true
+      },
+      "status": "CORRECTLY_NO_OP",
+      "witness": {
+        "count": 0
+      },
+      "latency": {
+        "extraction_ms": 0.14,
+        "delta_ms": 0.01,
+        "witness_ms": 0.1
+      }
+    },
+    {
+      "case_id": "NOOP-RENUM-001",
+      "family": "section_renumbering",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "PROVENANCE_ONLY",
+        "expected": "PROVENANCE_ONLY",
+        "match": true
+      },
+      "status": "CORRECTLY_NO_OP",
+      "witness": {
+        "count": 0
+      },
+      "latency": {
+        "extraction_ms": 0.04,
+        "delta_ms": 0.01,
+        "witness_ms": 0.03
+      }
+    },
+    {
+      "case_id": "AMBIG-001",
+      "family": "ambiguity",
+      "split": "dev",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "status": "CORRECTLY_ESCALATED",
+      "expects_escalation": true,
+      "latency": {
+        "extraction_ms": 0.13
+      },
+      "delta": null,
+      "witness": null,
+      "localization": null,
+      "repair": null
+    },
+    {
+      "case_id": "CONFL-001",
+      "family": "contradiction",
+      "split": "dev",
+      "extraction": {
+        "status": "CONFLICT",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "status": "CORRECTLY_ESCALATED",
+      "expects_escalation": true,
+      "latency": {
+        "extraction_ms": 0.06
+      },
+      "delta": null,
+      "witness": null,
+      "localization": null,
+      "repair": null
+    },
+    {
+      "case_id": "THRESH-RELAX-002",
+      "family": "threshold_relaxation",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "THRESHOLD_RELAXED",
+        "expected": "THRESHOLD_RELAXED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "wrong_rejection"
+        ],
+        "expected_kinds": [
+          "wrong_rejection"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-GATE"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "gate >= 75",
+        "forbidden_hit": [],
+        "cost": 2.0,
+        "cost_ok": true,
+        "validation": "15/15",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-GATE",
+            "old": {
+              "operator": ">=",
+              "value": 80
+            },
+            "new": {
+              "operator": ">=",
+              "value": 75
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.04,
+        "delta_ms": 0.01,
+        "witness_ms": 0.12,
+        "localize_ms": 0.01,
+        "repair_ms": 0.37
+      }
+    },
+    {
+      "case_id": "THRESH-TIGHTEN-002",
+      "family": "threshold_tightening",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "THRESHOLD_TIGHTENED",
+        "expected": "THRESHOLD_TIGHTENED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "wrong_acceptance"
+        ],
+        "expected_kinds": [
+          "wrong_acceptance"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-GATE"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "gate <= 40000",
+        "forbidden_hit": [],
+        "cost": 2.0,
+        "cost_ok": true,
+        "validation": "15/15",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-GATE",
+            "old": {
+              "operator": "<=",
+              "value": 60000
+            },
+            "new": {
+              "operator": "<=",
+              "value": 40000
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.05,
+        "delta_ms": 0.01,
+        "witness_ms": 0.12,
+        "localize_ms": 0.01,
+        "repair_ms": 0.36
+      }
+    },
+    {
+      "case_id": "REQ-REMOVE-002",
+      "family": "requirement_removed",
+      "split": "eval",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "OBLIGATION_REMOVED",
+        "expected": "OBLIGATION_REMOVED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "unnecessary_burden"
+        ],
+        "expected_kinds": [
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-APPR"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "required=False",
+        "forbidden_hit": [],
+        "cost": 1.0,
+        "cost_ok": true,
+        "validation": "6/6",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-APPR",
+            "field": "manager_signoff",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": false,
+              "required_condition": null
+            },
+            "rationale": "obligation removed in active rules"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.06,
+        "delta_ms": 0.01,
+        "witness_ms": 0.03,
+        "localize_ms": 0.01,
+        "repair_ms": 0.14
+      }
+    },
+    {
+      "case_id": "REQ-ADD-002",
+      "family": "requirement_added",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "OBLIGATION_ADDED",
+        "expected": "OBLIGATION_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "missing_safeguard"
+        ],
+        "expected_kinds": [
+          "missing_safeguard"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "required=True",
+        "forbidden_hit": [],
+        "cost": 6.0,
+        "cost_ok": true,
+        "validation": "11/11",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "ADD_NODE",
+            "node_id": "NODE-IDENTITY_VERIFICATION",
+            "label": "Identity Verification",
+            "implementation": {
+              "form_field": "identity_verification_file",
+              "action": "identity_verification",
+              "required": true,
+              "required_condition": null
+            },
+            "rationale": "IMPLEMENTS_RULE R-IDV-V2"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-IDENTITY_VERIFICATION"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-IDENTITY_VERIFICATION",
+            "to": "NODE-SUBMIT"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.07,
+        "delta_ms": 0.01,
+        "witness_ms": 0.11,
+        "localize_ms": 0.0,
+        "repair_ms": 0.35
+      }
+    },
+    {
+      "case_id": "COND-002",
+      "family": "conditional_requirement",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "CONDITION_CHANGED",
+        "expected": "CONDITION_CHANGED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "unnecessary_burden"
+        ],
+        "expected_kinds": [
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-STEP"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "probe true->True false->False",
+        "forbidden_hit": [],
+        "cost": 3.0,
+        "cost_ok": true,
+        "validation": "10/10",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-STEP",
+            "field": "transcript_file",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": true,
+              "required_condition": {
+                "field": "backlogs",
+                "operator": ">",
+                "value": 0
+              }
+            },
+            "rationale": "IMPLEMENTS_RULE R-TR-V2"
+          },
+          {
+            "op": "ADD_GATE",
+            "node_id": "NODE-STEP",
+            "condition": {
+              "field": "backlogs",
+              "operator": ">",
+              "value": 0
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.04,
+        "delta_ms": 0.01,
+        "witness_ms": 0.07,
+        "localize_ms": 0.0,
+        "repair_ms": 0.24
+      }
+    },
+    {
+      "case_id": "EXC-REMOVE-001",
+      "family": "exception_removed",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "EXCEPTION_REMOVED",
+        "expected": "EXCEPTION_REMOVED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "missing_safeguard"
+        ],
+        "expected_kinds": [
+          "missing_safeguard"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-STEP"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "required=True",
+        "forbidden_hit": [],
+        "cost": 1.0,
+        "cost_ok": true,
+        "validation": "8/8",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-STEP",
+            "field": "recommendation_file",
+            "old": {
+              "required": true,
+              "required_condition": {
+                "field": "category",
+                "operator": "!=",
+                "value": "X"
+              }
+            },
+            "new": {
+              "required": true,
+              "required_condition": null
+            },
+            "rationale": "IMPLEMENTS_RULE R-REC-V1"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.05,
+        "delta_ms": 0.02,
+        "witness_ms": 0.08,
+        "localize_ms": 0.0,
+        "repair_ms": 0.18
+      }
+    },
+    {
+      "case_id": "ORDER-002",
+      "family": "ordering_change",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "PREREQUISITE_ADDED",
+        "expected": "PREREQUISITE_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "wrong_journey"
+        ],
+        "expected_kinds": [
+          "wrong_journey"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-APPR",
+          "NODE-SUBMIT"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "order_ok",
+        "forbidden_hit": [],
+        "cost": 9.0,
+        "cost_ok": true,
+        "validation": "8/8",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "MOVE_NODE",
+            "node_id": "NODE-APPR",
+            "anchor": {
+              "before": "NODE-SUBMIT"
+            },
+            "rationale": "IMPLEMENTS_RULE R-ORD-V2"
+          },
+          {
+            "op": "ADD_PREREQUISITE",
+            "prerequisite": "dept_approval",
+            "target": "final_submission",
+            "rationale": "IMPLEMENTS_RULE R-ORD-V2"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-SUBMIT",
+            "to": "NODE-APPR"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-START",
+            "to": "NODE-APPR"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-START",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-APPR",
+            "to": "NODE-SUBMIT"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.06,
+        "delta_ms": 0.01,
+        "witness_ms": 0.04,
+        "localize_ms": 0.01,
+        "repair_ms": 0.2
+      }
+    },
+    {
+      "case_id": "DL-TIGHT-001",
+      "family": "deadline_tightened",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "DEADLINE_TIGHTENED",
+        "expected": "DEADLINE_TIGHTENED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "deadline_mismatch"
+        ],
+        "expected_kinds": [
+          "deadline_mismatch"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-DL"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "deadline 2026-09-25",
+        "forbidden_hit": [],
+        "cost": 2.0,
+        "cost_ok": true,
+        "validation": "15/15",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-DL",
+            "old": {
+              "operator": "<=",
+              "value": "2026-09-30"
+            },
+            "new": {
+              "operator": "<=",
+              "value": "2026-09-25"
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.07,
+        "delta_ms": 0.01,
+        "witness_ms": 0.16,
+        "localize_ms": 0.0,
+        "repair_ms": 1.09
+      }
+    },
+    {
+      "case_id": "NOOP-IRREL-001",
+      "family": "irrelevant_edit",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "SEMANTICS_UNCHANGED",
+        "expected": "SEMANTICS_UNCHANGED",
+        "match": true
+      },
+      "status": "CORRECTLY_NO_OP",
+      "witness": {
+        "count": 0
+      },
+      "latency": {
+        "extraction_ms": 0.21,
+        "delta_ms": 0.01,
+        "witness_ms": 0.1
+      }
+    },
+    {
+      "case_id": "AMBIG-002",
+      "family": "ambiguity",
+      "split": "eval",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "status": "CORRECTLY_ESCALATED",
+      "expects_escalation": true,
+      "latency": {
+        "extraction_ms": 0.11
+      },
+      "delta": null,
+      "witness": null,
+      "localization": null,
+      "repair": null
+    },
+    {
+      "case_id": "CONFL-002",
+      "family": "contradiction",
+      "split": "eval",
+      "extraction": {
+        "status": "CONFLICT",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "status": "CORRECTLY_ESCALATED",
+      "expects_escalation": true,
+      "latency": {
+        "extraction_ms": 0.06
+      },
+      "delta": null,
+      "witness": null,
+      "localization": null,
+      "repair": null
+    },
+    {
+      "case_id": "COMPOUND-001",
+      "family": "compound_amendment",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "COMPOUND",
+        "expected": "COMPOUND",
+        "match": true
+      },
+      "witness": {
+        "count": 2,
+        "kinds": [
+          "missing_safeguard",
+          "wrong_rejection"
+        ],
+        "expected_kinds": [
+          "wrong_rejection",
+          "missing_safeguard"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-GATE"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "gate >= 7.8",
+        "forbidden_hit": [],
+        "cost": 8.0,
+        "cost_ok": true,
+        "validation": "14/14",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_CONDITION",
+            "node_id": "NODE-GATE",
+            "old": {
+              "operator": ">=",
+              "value": 8.0
+            },
+            "new": {
+              "operator": ">=",
+              "value": 7.8
+            }
+          },
+          {
+            "op": "ADD_NODE",
+            "node_id": "NODE-UPLOAD_TRANSCRIPT",
+            "label": "Upload Transcript",
+            "implementation": {
+              "form_field": "upload_transcript_file",
+              "action": "upload_transcript",
+              "required": true,
+              "required_condition": null
+            },
+            "rationale": "IMPLEMENTS_RULE R-TR-V2"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-UPLOAD_TRANSCRIPT"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-UPLOAD_TRANSCRIPT",
+            "to": "NODE-SUBMIT"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.05,
+        "delta_ms": 0.01,
+        "witness_ms": 0.14,
+        "localize_ms": 0.01,
+        "repair_ms": 0.5
+      }
+    },
+    {
+      "case_id": "EXC-ADD-002",
+      "family": "exception_added",
+      "split": "eval",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "EXCEPTION_ADDED",
+        "expected": "EXCEPTION_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "unnecessary_burden"
+        ],
+        "expected_kinds": [
+          "unnecessary_burden"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [
+          "NODE-STEP"
+        ],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "probe true->True false->False",
+        "forbidden_hit": [],
+        "cost": 3.0,
+        "cost_ok": true,
+        "validation": "8/8",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "CHANGE_REQUIRED_FLAG",
+            "node_id": "NODE-STEP",
+            "field": "transcript_file",
+            "old": {
+              "required": true,
+              "required_condition": null
+            },
+            "new": {
+              "required": true,
+              "required_condition": {
+                "not": {
+                  "field": "category",
+                  "operator": "==",
+                  "value": "STAFF"
+                }
+              }
+            },
+            "rationale": "IMPLEMENTS_RULE R-TR-V1"
+          },
+          {
+            "op": "ADD_GATE",
+            "node_id": "NODE-STEP",
+            "condition": {
+              "not": {
+                "field": "category",
+                "operator": "==",
+                "value": "STAFF"
+              }
+            }
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.06,
+        "delta_ms": 0.01,
+        "witness_ms": 0.06,
+        "localize_ms": 0.0,
+        "repair_ms": 0.21
+      }
+    },
+    {
+      "case_id": "PROH-001",
+      "family": "prohibition_added",
+      "split": "dev",
+      "extraction": {
+        "status": "EXTRACTED",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "delta": {
+        "type": "PROHIBITION_ADDED",
+        "expected": "PROHIBITION_ADDED",
+        "match": true
+      },
+      "witness": {
+        "count": 1,
+        "kinds": [
+          "prohibition_breach"
+        ],
+        "expected_kinds": [
+          "prohibition_breach"
+        ],
+        "kinds_ok": true,
+        "domain_ok": true,
+        "validity": 1.0
+      },
+      "localization": {
+        "affected": [],
+        "recall": 1.0,
+        "precision_flag": 1.0
+      },
+      "repair": {
+        "effect_ok": true,
+        "effect_detail": "gate > 100000 blocked=True",
+        "forbidden_hit": [],
+        "cost": 6.0,
+        "cost_ok": true,
+        "validation": "17/17",
+        "preservation_ok": true,
+        "provenance_coverage": 1.0,
+        "ops": [
+          {
+            "op": "ADD_NODE",
+            "node_id": "NODE-PROHIBIT-AMOUNT",
+            "label": "Enforce R-PRO-V2",
+            "implementation": {
+              "kind": "prohibition_gate",
+              "field": "amount",
+              "operator": ">",
+              "value": 100000,
+              "rule": "R-PRO-V2"
+            },
+            "rationale": "IMPLEMENTS_RULE R-PRO-V2"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-PROHIBIT-AMOUNT"
+          },
+          {
+            "op": "REMOVE_EDGE",
+            "from": "NODE-GATE",
+            "to": "NODE-SUBMIT"
+          },
+          {
+            "op": "ADD_EDGE",
+            "from": "NODE-PROHIBIT-AMOUNT",
+            "to": "NODE-SUBMIT"
+          }
+        ]
+      },
+      "status": "AUTO_REPAIRED",
+      "latency": {
+        "extraction_ms": 0.12,
+        "delta_ms": 0.01,
+        "witness_ms": 0.17,
+        "localize_ms": 0.0,
+        "repair_ms": 0.58
+      }
+    },
+    {
+      "case_id": "UNSUP-TEMP-001",
+      "family": "unsupported_temporal",
+      "split": "dev",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 1.0,
+        "operator": 1.0,
+        "value": 1.0,
+        "condition": 1.0,
+        "source_span": 1.0
+      },
+      "status": "UNSUPPORTED",
+      "expects_unsupported": true,
+      "latency": {
+        "extraction_ms": 0.11
+      },
+      "delta": null,
+      "witness": null,
+      "localization": null,
+      "repair": null
+    },
+    {
+      "case_id": "UNSUP-NEST-001",
+      "family": "unsupported_nested",
+      "split": "eval",
+      "extraction": {
+        "status": "NEEDS_REVIEW",
+        "kind": 0.0,
+        "operator": 0.0,
+        "value": 0.0,
+        "condition": 0.0,
+        "source_span": 0.0
+      },
+      "status": "UNSUPPORTED",
+      "expects_unsupported": true,
+      "latency": {
+        "extraction_ms": 0.16
+      },
+      "delta": null,
+      "witness": null,
+      "localization": null,
+      "repair": null
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "rule_id": "R-LIM-V1",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "amount",
+      "operator": "<=",
+      "value": 200000
+    },
+    "normalized_expression": "amount <= 200000",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.1",
+      "source_text": "Claims up to amount <= 200000 are accepted."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  },
+  {
+    "rule_id": "R-PRO-V2",
+    "kind": "prohibition",
+    "subject": "applicant",
+    "action": "approve_claim",
+    "condition": {
+      "field": "amount",
+      "operator": ">",
+      "value": 100000
+    },
+    "normalized_expression": "FORBID approve_claim WHEN amount > 100000",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.6",
+      "source_text": "Managers MUST NOT approve claims above amount 100000."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

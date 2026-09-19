@@ -121,11 +121,23 @@ def _check_effect(patched: dict, model, effect: dict) -> tuple[bool, str]:
         base = {"cgpa": 8.0, "amount": 40000, "year": 3, "backlogs": 0,
                 "category": "general", "submission_date": "2026-09-28"}
         t = execute(patched, {**base, **p["case_true"]}, model.ordering)["required"].get(p["action"])
-        f = execute(patched, {**base, **p["case_false"]}, model.ordering)["required"].get(p["action"])
-        return (t is True and f is False), f"probe true->{t} false->{f}"
+        f = execute(patched, {**base, **p["case_false"]}, model.ordering)["required"].get(p["action"], False)
+        # An unreached/skipped step reports None — semantically "not required".
+        return (t is True and not f), f"probe true->{t} false->{f}"
     if "order_ok" in effect:
         ok = execute(patched, {"cgpa": 9.0, "amount": 10000}, model.ordering)["order_ok"]
         return ok, "order_ok" if ok else "order violated"
+    if "prohibition_gate" in effect:
+        g = effect["prohibition_gate"]
+        found = [n for n in patched.get("nodes", [])
+                 if (n.get("implementation", {}) or {}).get("kind") == "prohibition_gate"
+                 and (n.get("implementation", {}) or {}).get("field") == g["field"]]
+        if not found:
+            return False, "prohibition gate missing"
+        impl = found[0]["implementation"]
+        ok_cfg = impl.get("operator") == g["operator"] and str(impl.get("value")) == str(g["value"])
+        blocked = execute(patched, {"cgpa": 9.0, "amount": g["value"] + 1 if isinstance(g["value"], (int, float)) else g["value"], "submission_date": "2026-09-28"}, model.ordering).get("prohibited")
+        return bool(ok_cfg and blocked), f"gate {impl.get('operator')} {impl.get('value')} blocked={blocked}"
     return True, "unknown effect assumed ok"
 
 
@@ -133,9 +145,9 @@ def run_case(cid: str) -> dict:
     c = _load_case(cid)
     t = {}
     res: dict = {"case_id": cid, "family": c["meta"]["family"], "split": c["meta"]["split"]}
-    t0 = time.time()
+    t0 = time.perf_counter()
     ext = extract(c["policy_v2"], "POLICY-BENCH")
-    t["extraction"] = round(time.time() - t0, 3)
+    t["extraction_ms"] = round((time.perf_counter() - t0) * 1000, 2)
     res["extraction"] = {"status": ext["status"], **_score_extraction(c["rules_v2"], ext)}
 
     gw = c["gold_witness"]
@@ -146,10 +158,18 @@ def run_case(cid: str) -> dict:
                     "latency": t, "delta": None, "witness": None,
                     "localization": None, "repair": None})
         return res
+    if gw.get("unsupported"):
+        codes = [n.get("code", "") for n in ext.get("needs_review", [])]
+        ok = ext["status"] == "NEEDS_REVIEW" and any("UNSUPPORTED" in code for code in codes)
+        res.update({"status": "UNSUPPORTED" if ok else "FAILED_EXTRACTION",
+                    "expects_unsupported": True,
+                    "latency": t, "delta": None, "witness": None,
+                    "localization": None, "repair": None})
+        return res
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     delta = semantic_rule_delta(c["rules_v1"], c["rules_v2"])
-    t["delta"] = round(time.time() - t0, 3)
+    t["delta_ms"] = round((time.perf_counter() - t0) * 1000, 2)
     res["delta"] = {"type": delta["type"], "expected": c["gold_delta"]["type"],
                     "match": delta["type"] == c["gold_delta"]["type"]}
 
@@ -160,9 +180,9 @@ def run_case(cid: str) -> dict:
         res.update({"status": "FAILED_EXTRACTION", "error": str(e), "latency": t})
         return res
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     witnesses = find_witnesses(model, c["procedure"])
-    t["witness"] = round(time.time() - t0, 3)
+    t["witness_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
     if gw.get("no_witness"):
         ok = not witnesses and not delta.get("behavioral")
@@ -202,9 +222,9 @@ def run_case(cid: str) -> dict:
         res.update({"status": "FAILED_REPAIR", "latency": t})
         return res
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     faults = localize_all(witnesses, c["procedure"], model)
-    t["localize"] = round(time.time() - t0, 3)
+    t["localize_ms"] = round((time.perf_counter() - t0) * 1000, 2)
     affected = {n for f in faults for n in f.get("affected_nodes", [])}
     gl = c["gold_localization"]
     must = set(gl.get("must_include_nodes", []))
@@ -216,11 +236,11 @@ def run_case(cid: str) -> dict:
         res.update({"status": "FAILED_LOCALIZATION", "latency": t})
         return res
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     patch = propose(model, c["procedure"], faults)
     patched = patch["patched_workflow"]
     validation = validate(patch, witnesses, model, old_model, patched, c["procedure"], delta, faults)
-    t["repair"] = round(time.time() - t0, 3)
+    t["repair_ms"] = round((time.perf_counter() - t0) * 1000, 2)
     gr = c["gold_repair"]
     effect_ok, effect_detail = _check_effect(patched, model, gr.get("required_effect", {}))
     ops = [f"{o.get('op')}:{o.get('node_id', o.get('from', ''))}" for o in patch["operations"]]
@@ -291,5 +311,5 @@ def metrics(results: list[dict]) -> dict:
             "repair_success": round(sum(1 for r in rep if r["status"] == "AUTO_REPAIRED") / max(len(rep), 1), 3),
             "preservation_rate": round(sum(1 for r in rep if r["repair"].get("preservation_ok")) / max(len(rep), 1), 3),
             "median_patch_cost": sorted([r["repair"]["cost"] for r in rep])[len(rep) // 2] if rep else 0,
-            "median_latency_s": {k: sorted(v)[len(v) // 2] for k, v in lat.items()},
+            "median_latency_ms": {k: sorted(v)[len(v) // 2] for k, v in lat.items()},
             "provenance_coverage": round(sum(r["repair"].get("provenance_coverage", 0) for r in rep) / max(len(rep), 1), 3)}

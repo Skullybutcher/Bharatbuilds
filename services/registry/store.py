@@ -12,6 +12,12 @@ from services.storage import _load, _save
 
 COMPILER_VERSION = "0.1.0"
 EXTRACTOR_VERSION = "processpatch-extractor/0.1.0"
+SCHEMA_VERSION = "1"
+
+# Build identity (documented in one place):
+#   build_id     = HASH(source text + procedure + compiler/extractor/schema versions)
+#   compile_key  = HASH(accepted Rule IR + procedure + compiler version)
+# Upgrading the compiler therefore yields a NEW build_id for the same source.
 
 
 def sha(obj) -> str:
@@ -42,13 +48,20 @@ def save_policy_version(workspace_id: str, label: str, text: str, rules: list) -
     return rec
 
 
+SCHEMA_VERSION = "1"
+
+
 def save_procedure_version(workflow: dict, status: str = "active") -> dict:
+    # Immutable: an existing id is never overwritten. Callers mint unique ids
+    # (patched versions embed the build hash).
     vers = _load("procedure_versions.json", [])
     pid = workflow.get("procedure_version_id", f"WF-V{len(vers) + 1}")
+    if any(v.get("procedure_version_id") == pid for v in vers):
+        raise ValueError(f"procedure version {pid} already exists and is immutable")
     rec = {"procedure_version_id": pid, "workflow_id": workflow.get("workflow_id"),
            "version_label": workflow.get("version_label"), "graph_json": workflow,
            "sha256": sha(workflow), "status": status, "created_at": time.time()}
-    vers = [v for v in vers if v.get("procedure_version_id") != pid] + [rec]
+    vers = vers + [rec]
     _save("procedure_versions.json", vers)
     return rec
 

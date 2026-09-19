@@ -1,0 +1,19 @@
+{
+  "kinds": [
+    "prohibition_breach"
+  ],
+  "domains": {
+    "prohibition_breach": [
+      {
+        "field": "amount",
+        "operator": ">",
+        "value": 100000
+      },
+      {
+        "field": "amount",
+        "operator": "<=",
+        "value": 200000
+      }
+    ]
+  }
+}
