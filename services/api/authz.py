@@ -199,7 +199,32 @@ def claims_from_event(event: dict) -> dict | None:
     claims = ctx.get("jwt", {}).get("claims") or ctx.get("claims") or {}
     if not claims:
         return None  # authorizer absent -> authenticate(headers) will 401
+<<<<<<< HEAD
     groups = _groups(claims.get("cognito:groups"))
+=======
+    raw_groups = claims.get("cognito:groups") or []
+    if isinstance(raw_groups, str):
+        # Some authorizer contexts stringify claims ("pp-admins" or
+        # "pp-admins,pp-reviewers"). set("pp-admins") is a set of CHARACTERS —
+        # non-empty (so no fallback triggers) but membership fails (role
+        # collapses to READ_ONLY, every write 403s). Split instead.
+        raw_groups = [g.strip() for g in raw_groups.split(",") if g.strip()]
+    groups = set(raw_groups)
+    if not groups:
+        # Some HTTP API JWT-authorizer configurations drop colon-carrying claim
+        # keys (cognito:groups, cognito:username) before they reach the
+        # function — live-verified in the T41 smoke: role collapsed to
+        # READ_ONLY and every write 403'd despite a valid pp-admins token. The
+        # bearer header is ground truth (API GW already verified its
+        # signature), so re-derive the identity from the token itself with a
+        # full RS256 verify (cached JWKS) instead of trusting a group-less
+        # claims dict. If the header is missing/invalid, keep the claims-based
+        # identity (reads still work; writes stay denied).
+        try:
+            return authenticate(event.get("headers") or {})
+        except (AuthzError, ValueError):  # ValueError: malformed token base64 (binascii.Error subclasses it)
+            pass
+>>>>>>> 0716053c3fe83ede7d82b2117cc5ed7925793dd6
     role = "admin" if ADMIN_GROUP in groups else ("reviewer" if REVIEWER_GROUP in groups else READ_ONLY)
     return {"reviewer_id": claims.get("email") or claims.get("username") or claims.get("sub", "?"),
             "display_name": claims.get("email") or claims.get("name") or "reviewer",
