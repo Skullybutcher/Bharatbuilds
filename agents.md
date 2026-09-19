@@ -57,6 +57,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T4 | `CHANGELOG.md` for v0.3.0 features (auth, traces, language, workspaces, judge demo) | **IBM Bob** | `CHANGELOG.md` (new file only) | DONE |
 | T5 | Backend standing by: fixes/reviews requested by T1–T4; no frontend edits | **Buffy** | everything except `frontend/**` | STANDBY |
 | T6 | Repair GitHub Actions AWS OIDC deployment authentication | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
+| T7 | Diagnose recurring GitHub Actions OIDC trust rejection | **GitHub Copilot** | `docs/aws-setup.md`, `agents.md` | DONE |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -83,6 +84,10 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 ## 6. Activity log (append-only, newest first)
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
+
+
+- 2026-09-19 18:30 | GitHub Copilot | T7 | `docs/aws-setup.md`, `agents.md`, AWS IAM role trust | DONE: verified GitHub OIDC provider and audience; updated `GitHubActionsProcessPatchDeploy` trust from a single exact ref subject to repository-scoped `repo:Skullybutcher/Bharatbuilds:*`; workflow retains `id-token: write` and `contents: read` | rerun the workflow; commit: "Broaden GitHub OIDC trust to repository subjects"
+
 
 - 2026-09-19 18:00 | GitHub Copilot | T6 | `.github/workflows/ci.yml`, `docs/aws-setup.md`, AWS IAM OIDC provider | DONE: registered `https://token.actions.githubusercontent.com` with audience `sts.amazonaws.com`; verified role `GitHubActionsProcessPatchDeploy` trust for `repo:Skullybutcher/Bharatbuilds:ref:refs/heads/main`; upgraded credentials action to v5; infra validation, 178/178 verify, 70/70 pytest, and workflow YAML parse PASS | commit: "Fix GitHub Actions AWS OIDC deployment auth"; human should rerun the failed workflow
 

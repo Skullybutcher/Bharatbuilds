@@ -40,10 +40,12 @@ Audience: sts.amazonaws.com
 ```
 
 The role stored in the repository secret `AWS_DEPLOY_ROLE_ARN` must trust that
-provider with `sts:AssumeRoleWithWebIdentity` and restrict the subject to:
+provider with `sts:AssumeRoleWithWebIdentity` and restrict the subject to this
+repository. A suffix wildcard accommodates GitHub branch and environment
+subject formats:
 
 ```text
-repo:Skullybutcher/Bharatbuilds:ref:refs/heads/main
+repo:Skullybutcher/Bharatbuilds:*
 ```
 
 Set the repository secret to the ARN of the role, for example:
