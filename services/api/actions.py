@@ -118,6 +118,12 @@ def create_build(body: dict):
         auto = body.get("auto_accept", True)
     key = compile_key(new, proc)
     hit = find_build_by_key(key)
+    # A DRAFT is a registration stub, not a compiled build — it must never
+    # satisfy idempotent reuse of a COMPILED build (live-proven during the
+    # first cloud E2E, 2026-09-19: the SFN execution cache-hit the draft and
+    # never reached the gates).
+    if hit and str(hit.get("build_id", "")).startswith("DRAFT-"):
+        hit = None
     if hit and not body.get("force"):
         return {**hit, "idempotent_reuse": True}
     if body.get("defer"):

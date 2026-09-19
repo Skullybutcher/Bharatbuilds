@@ -161,6 +161,12 @@ def govern_handler(event, context):
         from services.registry.store import compile_key, find_build_by_key
         key = compile_key(event.get("new_rules", []), event.get("procedure", {}))
         hit = find_build_by_key(key)
+        # A DRAFT is a registration stub, not a compiled build — it must never
+        # satisfy idempotent reuse here, or the execution cache-hits the draft
+        # (READY_CACHED), never reaches the gates, and no real build is ever
+        # produced (live-proven during the first cloud E2E, 2026-09-19).
+        if hit and str(hit.get("build_id", "")).startswith("DRAFT-"):
+            hit = None
         return _out(event, {"compile_key": key, "idempotent_reuse": bool(hit),
                             "build": hit})
     if op == "hash":
