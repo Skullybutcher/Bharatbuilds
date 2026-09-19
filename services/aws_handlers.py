@@ -302,6 +302,8 @@ def api_handler(event, context):
         return _out(event, A.register_procedure(body))
     if method == "GET" and raw_path == "/traces":
         return _out(event, A.list_traces((qs.get("workflow_id") or [None])[0]))
+    if method == "POST" and raw_path == "/traces/csv":
+        return _out(event, A.bulk_ingest_traces_csv(body))
     if method == "POST" and raw_path == "/traces":
         return _out(event, A.ingest_trace(body))
     if method == "GET" and raw_path.startswith("/traces/"):
@@ -314,13 +316,19 @@ def api_handler(event, context):
         simple = {"": A.get_build_view, "diff": A.diff, "patch": A.patch,
                   "certificate": A.certificate, "impact": A.impact,
                   "witnesses": A.witnesses, "rule-reviews": A.rule_reviews,
-                  "approvals": A.approvals, "guardrails": A.guardrails, "audit": A.audit}
+                  "approvals": A.approvals, "guardrails": A.guardrails, "audit": A.audit,
+                  "coverage": A.coverage,
+                  "governance-bundle": A.governance_bundle}
         if method == "GET" and tail in ("impact/witnesses",):
             return call(A.witnesses, bid)
         if method == "GET" and tail == "impact/artifacts":
             return call(A.impact_artifacts, bid)
         if method == "GET" and tail == "trace-compare":
             return call(A.compare_traces, bid)
+        if method == "GET" and tail == "governance-bundle":
+            return call(A.governance_bundle, bid)
+        if method == "POST" and tail == "nominate-witness":
+            return call(A.nominate_witness, bid, body)
         if method == "GET" and tail in simple:
             return call(simple[tail], bid)
         if method == "POST" and tail.startswith("rules/"):

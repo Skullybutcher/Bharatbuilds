@@ -58,8 +58,11 @@ def _normalize_outcome(outcome: dict) -> dict:
     return out
 
 
-def ingest_trace(body: dict) -> dict:
-    """Validate + store one runtime trace. Raises ValueError on bad input."""
+def validate_trace(body: dict) -> tuple:
+    """Validate one trace body without storing anything. Returns the
+    normalized (case, outcome); raises ValueError on any problem. Shared by
+    single ingestion and CSV bulk ingestion (which validates every row BEFORE
+    storing any, so a bad row cannot leave a half-ingested batch)."""
     if not isinstance(body, dict) or not isinstance(body.get("case"), dict) or not body["case"]:
         raise ValueError("trace.case must be a non-empty object (the applicant/approval case fields)")
     case = body["case"]
@@ -69,6 +72,12 @@ def ingest_trace(body: dict) -> dict:
         if v is not None and not isinstance(v, (str, int, float, bool)):
             raise ValueError(f"trace.case[{k!r}] must be a scalar (got {type(v).__name__})")
     outcome = _normalize_outcome(body.get("outcome") or {})
+    return case, outcome
+
+
+def ingest_trace(body: dict) -> dict:
+    """Validate + store one runtime trace. Raises ValueError on bad input."""
+    case, outcome = validate_trace(body)
     now = time.time()
     tid = "TRC-" + sha({"case": case, "outcome": outcome,
                         "workflow_id": body.get("workflow_id"),

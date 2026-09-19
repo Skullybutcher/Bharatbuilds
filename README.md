@@ -35,13 +35,13 @@ deadline) validates 20/20.
 
 ```bash
 pip install -e ".[dev]"        # pytest + pyyaml (clean-machine repro)
+make app                        # ONE command: full app on http://localhost:8080
 python scripts/verify.py        # 178 assertions, no network/LLM/AWS
 make verify                     # same
 make benchmark                  # ProcessPatchBench v0.3.0, 31 scenarios
 make infra-validate             # SAM/ASL/dashboard checks, no credentials
 python scripts/demo.py          # terminal person-first demo
-python -m services.api.server 8000   # REST API (§45 + §57E)
-# open frontend/index.html → COMPILE AMENDMENT
+python -m services.api.server 8000   # REST API only (§45 + §57E)
 ```
 
 API highlights: `GET /demo/canonical`, `POST /builds` (idempotent),
@@ -51,19 +51,29 @@ rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,
 `POST /procedures/{v}/activate` (hash-verified), `POST /builds/{id}/resume`
 (server-side Step Functions resume — clients never hold task tokens),
 runtime-trace ingestion `POST /traces` + `GET /builds/{id}/trace-compare`
-(real-world evidence, read-only comparison — docs/traces.md),
+(real-world evidence, read-only comparison — docs/traces.md), bulk CSV ingest
+`POST /traces/csv` (all-or-nothing, idempotent),
 multi-procedure workspaces `POST /procedures` + build against any registered
 version by `procedure_version_id` (fail-closed DAG validation — docs/workspaces.md),
+approved builds export a sha256-sealed evidence pack
+(`GET /builds/{id}/governance-bundle`) — reviews, approvals, guardrails,
+witnesses, patch, certificate, and audit over canonical bytes. Export is
+refused (409) for builds with no human approval on record, so an unapproved
+candidate can never masquerade as a governed artifact. A runtime trace can be
+nominated as a witness candidate (`POST /builds/{id}/nominate-witness`), but
+the nomination only re-runs the verified pipeline behind an honesty gate —
+the trace must disagree with the stale procedure. A nomination never creates
+a witness by assertion.
 benchmark endpoints. The local server and the Lambda `ApiFn` share one
 implementation (`services/api/actions.py`) so both surfaces stay identical.
 
 ## Layout
 
 `services/` deterministic pipeline + impact/governance/registry/bench/aws_handlers ·
-`shared/schemas/` all contracts · `demo/` two domains · `frontend/` 11-tab UI ·
+`shared/schemas/` all contracts · `demo/` two domains · `frontend/` 10-tab UI ·
 `benchmark/processpatchbench/` 31 heterogeneous cases + manifest ·
 `benchmark_runs/` reference runs · `tests/` 8 suites · `infra/` full SAM setup ·
-`docs/` 16 notes (incl. auth, traces, workspaces) · `scripts/` verify/demo/benchmark/smoke/infra-validate/judge_demo.
+`docs/` 21 notes (incl. auth, traces, workspaces) · `scripts/` verify/demo/benchmark/smoke/infra-validate/judge_demo.
 
 ## Trust
 

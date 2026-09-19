@@ -13,8 +13,13 @@ builds, amendments are commits, affected people are failing tests.
 ## What we built
 
 NL rules → Rule IR → constraints → verified witnesses → localized patch →
-regression + impact + certificate → hash-bound human approval → new procedure
-version. 31-scenario heterogeneous benchmark; full AWS orchestration.
+regression (178-assertion verify suite; 91-test pytest suite) + impact +
+certificate → hash-bound human approval → new procedure version.
+31-scenario heterogeneous benchmark (ProcessPatchBench v0.3.0); full AWS
+orchestration; Cognito-gated human gates (pp-reviewers / pp-admins);
+runtime-trace ingestion with read-only trace comparison; multi-procedure
+workspaces; scripted 6-beat judge demo (`make app` one-command local run);
+21 docs.
 
 ## Why it is trustworthy
 
@@ -46,3 +51,9 @@ cartesian dumps; honest benchmark categories beat fake 100%.
 
 Runtime traces, decision/incident provenance, larger rule language, Neptune
 only at cross-workflow scale.
+
+## Verify these numbers
+
+`python scripts/verify.py` → 178 assertions · `pytest tests -q` → 91 tests ·
+`make benchmark` → 31 scenarios (15 dev / 16 eval) · `docs/` → 21 notes · UI:
+10 tabs, 3 themes (lab default; paper; graphite).

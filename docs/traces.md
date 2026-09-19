@@ -68,6 +68,9 @@ reported as `SKIPPED` with the reason (fail-closed, never swallowed).
 | Route | Purpose |
 |---|---|
 | `POST /traces` | ingest one trace (validated, idempotent) |
+| `POST /traces/csv` | bulk-ingest pasted CSV (all-or-nothing, idempotent) |
+| `POST /builds/{id}/nominate-witness` | nominate a trace as a candidate witness (human suggests, the verified pipeline disposes — see below) |
+| `GET /builds/{id}/coverage` | witness coverage of the blast radius (read-only honesty metric — see Impact tab) |
 | `GET /traces[?workflow_id=…]` | list stored traces |
 | `GET /traces/{trace_id}` | fetch one |
 | `GET /builds/{id}/trace-compare` | read-only comparison for a build |
@@ -76,7 +79,52 @@ The UI's **Traces** tab shows the comparison summary, per-trace verdicts, an
 inline ingestion form, and the stored list. Auth: ingesting requires
 `pp-reviewers` (it is a write); reads require any signed-in identity.
 
+## Bulk CSV ingestion
+
+`POST /traces/csv` with `{"csv": "…", "workflow_id": "WF-…"}` ingests many
+rows at once — the path for "we exported a month of decisions from the legacy
+system":
+
+```csv
+cgpa,amount,year,category,eligible,required,steps_done,occurred_at
+7.2,0,3,general,approved,w-2;w-5,docs-verified,2026-09-01T10:00:00Z
+6.4,500,2,obc,rejected,,,2026-09-02T10:00:00Z
+```
+
+- **Case columns are every column not reserved** (`eligible/on_time/
+  `prohibited`/`required`/`steps_done`/`source`/`workflow_id`/`occurred_at`);
+  values are coerced to numbers where they parse, kept as strings otherwise.
+- `required` is `;`-separated action ids → `outcome.required{action:true}`.
+- **All-or-nothing**: every row is validated *before* anything is stored — a
+  bad row fails the whole batch with `row N: reason`, leaving zero partial
+  state (fail-closed, like every other boundary).
+- **Idempotent**: re-submitting the same CSV reports duplicates and stores
+  nothing twice (trace ids are content-hashed).
+
 ## Storage
 
 Same abstraction as everything else: `traces.json` locally, the DynamoDB
 single table on Lambda (via `services.storage`). No new infrastructure.
+
+## Nomination — from evidence to witness (the honest way)
+
+A trace that **disagrees with the build's stale procedure** (the same criteria
+`trace-compare` uses) can be *nominated* as a candidate witness:
+`POST /builds/{id}/nominate-witness` with `{"trace_id": "…"}`.
+
+Doctrine preserved — the nomination is a **suggestion from reality**, never a
+promotion:
+
+1. **Honesty gate** — the endpoint recomputes trace-compare and refuses (409)
+   unless the trace actually disagrees with the stale graph. A trace that
+   agrees with everything has nothing to contribute.
+2. **Verified pipeline disposes** — the trace's case is pushed through
+   `find_witnesses` + the full regression validator exactly like
+   pipeline-discovered witnesses. If the pipeline already covers the case, the
+   answer is `verified: false` ("already covers — no new witness needed"), not
+   a duplicate witness.
+3. **Audited** — every nomination is recorded (`WITNESS_NOMINATED`) with the
+   reviewer id (identity-stamped when auth enforcement is on).
+
+UI: the Traces tab shows a **Nominate witness** action on disagreeing traces;
+the CSV bulk card (same tab) is the fastest way to load many traces first.

@@ -195,9 +195,10 @@ def _writable(method: str, path: str) -> bool:
     """POSTs that reviewers (not just admins) may perform."""
     if method != "POST":
         return False
-    if path in ("/builds", "/builds/", "/traces", "/workspaces", "/procedures") or \
+    if path in ("/builds", "/builds/", "/traces", "/traces/csv", "/workspaces", "/procedures") or \
        path.endswith("/execute") or path.endswith("/replay") or path.endswith("/resume") or \
-       path.endswith("/patch/validate") or path.endswith("/patch/review-request"):
+       path.endswith("/patch/validate") or path.endswith("/patch/review-request") or \
+       path.endswith("/nominate-witness"):
         return True
     if "/rules/" in path and path.split("/")[-1] in ("accept", "edit", "reject", "escalate"):
         return True

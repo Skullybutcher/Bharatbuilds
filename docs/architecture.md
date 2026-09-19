@@ -41,4 +41,5 @@ simpler and cheaper; Neptune only if cross-workflow scale justifies it.
 Auth: Cognito UserPool + hosted-UI PKCE, HttpApi JWT authorizer (health/demo/auth-config
 public), verified identity stamped by `services/api/authz.py` (docs/auth.md).
 Trace ingestion: `POST /traces`, read-only `GET /builds/{id}/trace-compare` (docs/traces.md).
+Governance bundle: `GET /builds/{id}/governance-bundle` (sha256-sealed evidence pack over canonical bytes; refused 409 without human approval). Witness nomination: `POST /builds/{id}/nominate-witness` (honesty gate — the trace must disagree with the stale procedure; the verified pipeline disposes, never a witness by assertion). Bulk CSV ingest: `POST /traces/csv` (all-or-nothing, idempotent).
 Multi-procedure workspaces: `POST /workspaces`, `POST /procedures` (docs/workspaces.md).

@@ -13,6 +13,9 @@ benchmark_runs/BENCH-LOCAL-*
 
 # Session/context notes are local-only by design — NEVER commit
 ProcessPatch_Session_Context.md
+.app_data/
+.app_backend.log
+.app_clean*/
 
 # Environments, logs, OS junk
 .venv/

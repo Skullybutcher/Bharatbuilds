@@ -215,6 +215,50 @@ def audit(bid: str):
     return {"audit": audit_for(_need(bid)["build_id"])}
 
 
+def governance_bundle(bid: str):
+    """Downloadable evidence pack: everything that justifies this patch's
+    approval in ONE artifact — reviews, approvals, guardrail evaluation,
+    witnesses, patch, certificate, and the audit trail, sealed with a sha256
+    over the exact bytes. Read-only; refused (409) for builds with no human
+    approval on record, so an unapproved candidate can never masquerade as a
+    governed artifact."""
+    b = _need(bid)
+    import hashlib as _hl
+    import json as _jl
+    import time as _time
+    from services.governance.store import (rule_reviews as _rr, approvals_for,
+                                           approval_guardrails)
+    from services.registry.store import audit as _audit, audit_for
+    reviews = _rr(b["build_id"])
+    approvals = approvals_for(b["build_id"])
+    if not approvals:
+        raise ValueError("no human approval on record for "
+                         f"{b['build_id']} — bundle refused "
+                         "(an unapproved candidate cannot be exported as "
+                         "a governed artifact)")
+    content = {
+        "kind": "processpatch-governance-bundle",
+        "bundle_version": 1,
+        "generated_at": _time.time(),
+        "build": {k: b.get(k) for k in
+                  ("build_id", "policy_version_id", "status", "review_state",
+                   "extraction_backend", "created_at")},
+        "rule_reviews": reviews,
+        "approvals": approvals,
+        "guardrails": approval_guardrails(b),
+        "witnesses": b.get("witnesses", []),
+        "patch": b.get("patch", {}),
+        "validation": b.get("validation", {}),
+        "certificate": b.get("certificate", {}),
+        "audit": audit_for(b["build_id"]),
+    }
+    blob = _jl.dumps(content, sort_keys=True, separators=(",", ":")).encode()
+    content["bundle_sha256"] = _hl.sha256(blob).hexdigest()
+    _audit("BUNDLE_EXPORTED", {"build_id": b["build_id"],
+                               "bundle_sha256": content["bundle_sha256"]})
+    return content
+
+
 def review_action(bid: str, rid: str, action: str, body: dict):
     from services.governance.store import review_rule
     _need(bid)
@@ -345,6 +389,105 @@ def ingest_trace(body: dict):
     return _ingest(body or {})
 
 
+def bulk_ingest_traces_csv(body: dict):
+    """Bulk trace ingestion from pasted CSV text.
+
+    Header row is mandatory; `case` columns are every column NOT in the
+    reserved set (eligible/on_time/prohibited/required/steps_done/source/
+    workflow_id/occurred_at) — case fields are the majority, so the tool stays
+    usable without schema ceremony.
+
+    Fail-closed: one bad row fails the whole batch (nothing partial). Rows that
+    repeat content already stored (or earlier in the batch) are reported as
+    duplicates and change nothing — ingestion stays content-hashed/idempotent.
+    Rows without an `occurred_at` column get ingest-time timestamps, so they
+    are not cross-batch dedupable (documented, honest limitation). Traces
+    remain *evidence only*.
+    """
+    import csv
+    import io
+    import json as _json
+    from services.registry.store import audit as _audit
+    from services.traces.store import ingest_trace as _ingest
+    from services.traces.store import list_traces as _lt, validate_trace
+
+    text = body.get("csv")
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("body.csv must be a non-empty CSV string with a header row")
+    default_wf = body.get("workflow_id") or None
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise ValueError("CSV needs a header row")
+    reserved = {"eligible", "on_time", "prohibited", "required",
+                "steps_done", "source", "workflow_id", "occurred_at"}
+    case_cols = [c for c in reader.fieldnames if c and c not in reserved]
+    if not case_cols:
+        raise ValueError("CSV needs at least one case column "
+                         f"(reserved: {', '.join(sorted(reserved))})")
+
+    def _coerce(v):
+        v = (v or "").strip()
+        if not v:
+            return v
+        for cast in (int, float):
+            try:
+                return cast(v)
+            except ValueError:
+                pass
+        return v
+
+    # Pass 1 — validate EVERY row before storing ANY (all-or-nothing batch).
+    # The trace id is content-hashed (incl. the body's occurred_at), so any
+    # identical re-ingest — with or without occurred_at — dedupes as a
+    # duplicate in pass 2. Idempotent everywhere; nothing partial.
+    rows = []
+    for n, row in enumerate(reader, start=2):  # header is line 1
+        if row.get(None) is not None:
+            raise ValueError(f"row {n}: wrong column count")
+        if any((row.get(c) or "").strip() == "" for c in case_cols):
+            raise ValueError(f"row {n}: empty case cell")
+        case = {c: _coerce(row[c]) for c in case_cols}
+        outcome = {k: row[k].strip() for k in ("eligible", "on_time", "prohibited")
+                   if (row.get(k) or "").strip()}
+        if (row.get("required") or "").strip():
+            outcome["required"] = [s.strip() for s in row["required"].split(";") if s.strip()]
+        steps = [s.strip() for s in (row.get("steps_done") or "").split(";") if s.strip()]
+        source = (row.get("source") or "csv").strip()
+        wf = default_wf or (row.get("workflow_id") or "").strip() or None
+        occurred = (row.get("occurred_at") or "").strip() or None
+        payload = {"case": case, "outcome": outcome or {}, "steps_done": steps,
+                   "source": source, "workflow_id": wf, "occurred_at": occurred}
+        try:
+            case_n, outcome_n = validate_trace(payload)
+        except ValueError as e:
+            raise ValueError(f"row {n}: {e}") from e
+        key = (_json.dumps(case_n, sort_keys=True), _json.dumps(outcome_n, sort_keys=True),
+               tuple(steps), source, wf or "", occurred or "")
+        rows.append((key, payload, n))
+
+    # Pass 2 — store; duplicates (in-batch repeats or already-stored ids) and
+    # store nothing twice. Ingestion stays content-hashed/idempotent; traces
+    # remain *evidence only*.
+    pre_existing = {t["trace_id"] for t in _lt()}
+    ingested: list = []
+    duplicates = 0
+    stored_ids: set = set()
+    seen_in_batch: set = set()
+    for key, payload, n in rows:
+        if key in seen_in_batch:  # repeated row inside this batch
+            duplicates += 1
+            continue
+        seen_in_batch.add(key)
+        rec = _ingest(payload)  # pass-1 validated; cannot raise here
+        if rec["trace_id"] in pre_existing or rec["trace_id"] in stored_ids:
+            duplicates += 1
+        else:
+            stored_ids.add(rec["trace_id"])
+            ingested.append(rec)
+    _audit("TRACES_BULK_INGESTED", {"ingested": len(ingested), "duplicates": duplicates})
+    return {"ingested": len(ingested), "duplicates": duplicates, "traces": ingested}
+
+
 def list_traces(workflow_id=None):
     from services.traces.store import list_traces as _lt
     return {"traces": _lt(workflow_id)}
@@ -358,10 +501,129 @@ def get_trace(trace_id: str):
     return t
 
 
+def coverage(bid: str):
+    """How much of the change's blast radius the verified witnesses touch
+    (read-only, T18).
+
+    Node coverage: the share of affected nodes (computed EXACTLY like the
+    impact engine — localize_all over the same procedure) that at least one
+    witness's affected_nodes cites. Field coverage: the share of affected
+    rule fields cited by at least one witness case. Honest by construction:
+    'covered' means a verified witness exercises that node/field — nothing
+    else counts. Low coverage is reported, not hidden; witnesses are the
+    regression suite, so uncovered blast radius is exactly where the next
+    bug ships from.
+    """
+    b = _need(bid)
+    witnesses = b.get("witnesses") or []
+    procedure = b.get("procedure") or {}
+    from services.localizer.localizer import localize_all
+    from services.compiler.compiler import compile_rules
+    try:
+        model = compile_rules(b.get("new_rules") or [])
+        faults = localize_all(witnesses, procedure, model)
+    except Exception:
+        faults = []
+    # Witnesses don't carry affected_nodes themselves — the localizer's faults
+    # do, keyed by witness_id. A witness "covers" the nodes its own fault cites.
+    nodes_by_witness = {f.get("witness_id"): set(f.get("affected_nodes") or [])
+                        for f in faults}
+    affected_nodes = sorted({n for ns in nodes_by_witness.values() for n in ns})
+    node_rows = []
+    for n in affected_nodes:
+        by = [w["witness_id"] for w in witnesses
+              if n in nodes_by_witness.get(w.get("witness_id"), set())]
+        node_rows.append({"node_id": n, "covered": bool(by), "witnesses": by})
+    # Affected rules come from the build's own impact artifact (same engine);
+    # a rule field is covered when some witness case actually cites it.
+    rules = ((b.get("impact") or {}).get("artifacts", {}) or {}).get("affected_rules", [])
+    fields = sorted({f for r in b.get("new_rules") or []
+                     if r.get("rule_id") in rules
+                     for f in [((r.get("condition") or {}).get("field"))]
+                     if f})
+    wcase_keys = {k for w in witnesses for k in (w.get("case") or {})}
+    field_rows = [{"field": f, "covered": f in wcase_keys} for f in fields]
+    n_cov = sum(1 for r in node_rows if r["covered"])
+    f_cov = sum(1 for r in field_rows if r["covered"])
+    return {
+        "nodes": {"total": len(node_rows), "covered": n_cov,
+                  "pct": round(n_cov / len(node_rows), 3) if node_rows else None,
+                  "rows": node_rows},
+        "fields": {"total": len(field_rows), "covered": f_cov,
+                   "pct": round(f_cov / len(field_rows), 3) if field_rows else None,
+                   "rows": field_rows},
+        "witness_count": len(witnesses),
+        "note": "covered = a verified witness exercises this node/field; "
+                "uncovered blast radius is where the next regression would ship from",
+    }
+
+
 def compare_traces(bid: str):
     """Read-only comparison: replay trace cases vs the build's graphs."""
     from services.traces.store import compare_traces as _cmp
     return _cmp(_need(bid))
+
+
+def nominate_witness(bid: str, body: dict):
+    """Human-nominated candidate witness from a runtime trace (T15).
+
+    Closes the loop: reality (traces) suggests; the VERIFIED pipeline
+    disposes. The trace case is pushed through find_witnesses + the full
+    regression validator exactly like pipeline-discovered witnesses — a
+    nomination never becomes a witness by assertion. Refused (409) unless
+    the trace actually disagrees with the build's STALE procedure (the
+    honesty gate, identical criteria to compare_traces).
+
+    The nomination is recorded in the audit log with the human's reviewer
+    id (auth-stamped when enforcement is on). Returns the verified witness
+    (or the reason the pipeline rejected it) plus the new validation state.
+    """
+    b = _need(bid)
+    trace_id = (body.get("trace_id") or "").strip()
+    if not trace_id:
+        raise ValueError("body.trace_id is required")
+    from services.registry.store import audit as _audit
+    from services.traces.store import get_trace as _gt, compare_traces as _cmp
+    t = _gt(trace_id)
+    if not t:
+        raise KeyError(trace_id)
+    cmp = _cmp(b)
+    rec = next((r for r in cmp["results"] if r["trace_id"] == trace_id), None)
+    if rec is None or rec.get("vs_stale", {}).get("status") != "DISAGREE":
+        raise ValueError(
+            f"trace {trace_id} agrees with the stale procedure for this build "
+            "— nothing to nominate (nomination requires disagreement with "
+            "the stale graph, same criteria as trace-compare)")
+    reviewer = (body.get("reviewer") or {})
+    reviewer_id = (reviewer.get("reviewer_id") if isinstance(reviewer, dict)
+                   else body.get("reviewer")) or "USR-001"
+    _audit("WITNESS_NOMINATED", {"build_id": b["build_id"], "trace_id": trace_id,
+                                 "reviewer": reviewer_id})
+
+    # Verified path: same discovery + validation the pipeline itself uses.
+    from services.compiler.compiler import compile_rules
+    from services.witness.generator import find_witnesses
+    from services.regression.validator import validate as _validate
+    model = compile_rules(b.get("new_rules") or [])
+    old_model = compile_rules(b.get("old_rules") or [])
+    procedure = b.get("procedure") or {}
+    patched = b.get("patched_workflow") or procedure
+    before = {w["witness_id"] for w in (b.get("witnesses") or [])}
+    found = find_witnesses(model, procedure, extra_cases=[t["case"]])
+    new_w = next((w for w in found if w["witness_id"] not in before), None)
+    if new_w is None:
+        return {"nominated": True, "trace_id": trace_id, "verified": False,
+                "reason": "verified pipeline already covers this case — "
+                          "no new witness needed", "witnesses": b.get("witnesses") or []}
+    b["witnesses"] = (b.get("witnesses") or []) + [new_w]
+    b["validation"] = _validate(b.get("patch"), b["witnesses"], model, old_model,
+                                patched, procedure, b.get("semantic_delta", {}),
+                                b.get("faults"))
+    _store(b)
+    return {"nominated": True, "trace_id": trace_id, "verified": True,
+            "witness": new_w, "validation": b["validation"],
+            "note": "verified via the build pipeline (find_witnesses + "
+                    "regression validator), not by assertion"}
 
 
 def start_execution(body: dict):
