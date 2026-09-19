@@ -52,4 +52,8 @@ jobs:
       - name: Deploy backend
         env:
           AMPLIFY_TOKEN: ${{ secrets.AMPLIFY_TOKEN }}
+          # Deterministic CORS/Cognito origin — discovery is the fallback for
+          # local runs only (T37: app name didn't match the stack pattern and
+          # the loud guard correctly refused to guess).
+          FRONTEND_ORIGIN: https://main.d1bq8os9dwj0d.amplifyapp.com
         run: bash infra/deploy.sh

@@ -49,7 +49,17 @@ if [ -n "${FRONTEND_ORIGIN:-}" ]; then
   BRANCH_URL="$FRONTEND_ORIGIN"
   echo "FrontendOrigin: $BRANCH_URL (from FRONTEND_ORIGIN env)"
 else
+  # Try 1: app name matching the stack suffix.
   AMPLIFY_URL=$(aws amplify list-apps --region "$REGION" --query "apps[?name=='processpatch-${STACK##*-}']|[0].defaultDomain" --output text 2>/dev/null || echo "")
+  # Try 2: if the name didn't match (apps get renamed/created manually), scan
+  # every Amplify app; if exactly one hosts an amplifyapp.com domain, it's ours.
+  if [ -z "$AMPLIFY_URL" ] || [ "$AMPLIFY_URL" = "None" ]; then
+    AMPLIFY_URL=$(aws amplify list-apps --region "$REGION" --output json 2>/dev/null | python3 -c '
+import json,sys
+apps=json.load(sys.stdin).get("apps",[])
+doms=[a.get("defaultDomain","") for a in apps if a.get("defaultDomain","").endswith("amplifyapp.com")]
+print(doms[0] if len(doms)==1 else "")' || echo "")
+  fi
   if [ -n "$AMPLIFY_URL" ] && [ "$AMPLIFY_URL" != "None" ]; then
     BRANCH_URL="https://main.${AMPLIFY_URL}"
     echo "FrontendOrigin: $BRANCH_URL (discovered from Amplify)"
