@@ -384,16 +384,21 @@ def start_execution(body: dict):
     if arn:
         import boto3  # lazy
         bucket = _os.environ.get("SOURCE_BUCKET", "")
+        policy_key = f"builds/{bid}/policy.md"
         if bucket and b.get("policy_text"):
-            boto3.client("s3").put_object(Bucket=bucket, Key=f"builds/{bid}/policy.md",
+            boto3.client("s3").put_object(Bucket=bucket, Key=policy_key,
                                           Body=b["policy_text"].encode())
         ex = boto3.client("stepfunctions").start_execution(
             stateMachineArn=arn, name=f"{bid}-{int(_t.time())}",
-            input=_json_dumps({"build_id": bid,
+            input=_json_dumps({"policy_s3_key": policy_key,
                                "policy_text": b.get("policy_text", ""),
                                "procedure": b.get("procedure", {}),
                                "old_rules": b.get("old_rules", []),
-                               "policy_version_id": b.get("policy_version_id", "POLICY-V2")}))
+                               "policy_version_id": b.get("policy_version_id", "POLICY-V2"),
+                               "workflow_id": b.get("procedure", {}).get("workflow_id", "WF-RESEARCH-GRANT"),
+                               "workspace_id": b.get("workspace_id", "default"),
+                               "procedure_version_id": b.get("procedure", {}).get("procedure_version_id") or
+                               b.get("procedure_version_id", "WF-V3")}))
         rec = {"executionArn": ex["executionArn"], "build_id": bid,
                "status": "RUNNING", "started": _t.time()}
     else:

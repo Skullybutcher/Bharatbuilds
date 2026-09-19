@@ -6,7 +6,7 @@
     "LOAD_BUILD_CONTEXT": {
       "Type": "Task", "Resource": "${GovernFnArn}",
       "Comment": "Reads S3 policy text, resolves active procedure + previous policy rules.",
-      "Parameters": {"op": "load_context", "policy_s3_key.$": "$.policy_s3_key", "policy_version_id.$": "$.policy_version_id", "workflow_id.$": "$.workflow_id", "workspace_id.$": "$.workspace_id", "procedure_version_id.$": "$.procedure_version_id"},
+      "Parameters": {"op": "load_context", "policy_s3_key.$": "$.policy_s3_key", "policy_text.$": "$.policy_text", "procedure.$": "$.procedure", "old_rules.$": "$.old_rules", "policy_version_id.$": "$.policy_version_id", "workflow_id.$": "$.workflow_id", "workspace_id.$": "$.workspace_id", "procedure_version_id.$": "$.procedure_version_id"},
       "ResultPath": "$.build_context", "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 2}],
       "Next": "HASH_ARTIFACT"
     },
@@ -150,7 +150,7 @@
     },
     "WAIT_FOR_ACTIVATION_APPROVAL": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
-      "Parameters": {"FunctionName": "${ApiFnArn}", "Payload": {"op": "resume", "kind": "activation", "build_id.$": "$.build_id", "taskToken.$": "$$.Task.Token"}},
+      "Parameters": {"FunctionName": "${GovernFnArn}", "Payload": {"op": "resume", "kind": "activation", "build_id.$": "$.build_id", "taskToken.$": "$$.Task.Token"}},
       "ResultPath": "$.activation_decision", "HeartbeatSeconds": 86400,
       "Next": "ACTIVATION_APPROVED?"
     },

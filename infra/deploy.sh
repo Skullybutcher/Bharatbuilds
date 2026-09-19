@@ -10,7 +10,6 @@ PARAMS="$(dirname "$0")/parameters.json"
 
 command -v sam >/dev/null || { echo "install AWS SAM CLI first"; exit 1; }
 command -v aws >/dev/null || { echo "install AWS CLI first"; exit 1; }
-[ -n "${AMPLIFY_TOKEN:-}" ] || { echo "export AMPLIFY_TOKEN (GitHub token for Amplify hosting) first"; exit 1; }
 
 # Auth params are passed explicitly below (resolved from stack outputs), so
 # exclude them here to avoid duplicate --parameter-overrides keys.
@@ -19,11 +18,15 @@ OVERRIDES=$(python3 -c "import json;print(' '.join(f\"ParameterKey={k},Parameter
 sam build --template-file infra/template.yaml
 # shellcheck disable=SC2086
 sam deploy --stack-name "$STACK" --region "$REGION" --capabilities CAPABILITY_IAM \
-  --parameter-overrides $OVERRIDES ParameterKey=AmplifyAccessToken,ParameterValue="$AMPLIFY_TOKEN" \
-  --no-confirm-changeset --no-fail-empty-changeset
+  --parameter-overrides $OVERRIDES \
+  --resolve-s3 --no-confirm-changeset --no-fail-on-empty-changeset
 
 API=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+if [ -z "$API" ] || [ "$API" = "None" ]; then
+  echo "CloudFormation returned no ApiUrl; deployment did not complete successfully" >&2
+  exit 1
+fi
 echo "API: $API"
 
 # Auth wiring: read pool outputs back and redeploy once so ApiFn/FrontendOrigin

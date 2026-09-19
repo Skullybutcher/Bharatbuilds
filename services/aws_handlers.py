@@ -12,7 +12,10 @@ def _out(event, obj, code: int = 200) -> dict:
     get the raw payload (SAM ${FnArn} substitution = request/response)."""
     if event.get("routeKey") or event.get("httpMethod"):
         import json
-        return {"statusCode": code, "headers": {"Content-Type": "application/json"},
+        return {"statusCode": code, "headers": {"Content-Type": "application/json",
+                               "Access-Control-Allow-Origin": "*",
+                               "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+                               "Access-Control-Allow-Headers": "Content-Type"},
                 "body": json.dumps(obj, default=str)}
     return obj
 
@@ -169,6 +172,10 @@ def govern_handler(event, context):
                       "extractor_version": EXTRACTOR_VERSION,
                       "schema_version": SCHEMA_VERSION})
         return _out(event, {"sha256": digest, "build_id": f"BUILD-{digest[:12].upper()}"})
+    if op == "resume" and event.get("taskToken"):
+        gate = {"activation": "activation"}.get(event.get("kind", ""), "patch_approval")
+        save_callback(event.get("build_id", ""), gate, event.get("taskToken"))
+        return _out(event, {"waiting": True, "gate": gate})
     if op == "create_procedure_version":
         from services.registry.store import save_procedure_version
         return _out(event, {"procedure_version": save_procedure_version(
@@ -232,14 +239,27 @@ def api_handler(event, context):
         gate = {"activation": "activation"}.get(event.get("kind", ""), "patch_approval")
         save_callback(event.get("build_id", ""), gate, event.get("taskToken"))
         return _out(event, {"waiting": True, "gate": gate})
-    route = event.get("routeKey", "") or f"{event.get('method', event.get('httpMethod', 'GET'))} {event.get('path', event.get('rawPath', '/'))}"
-    parts = route.split(" ", 1)
-    method = parts[0] if len(parts) > 1 else "GET"
-    raw_path = parts[1] if len(parts) > 1 else "/"
+    request_http = (event.get("requestContext") or {}).get("http") or {}
+    method = (request_http.get("method") or event.get("method") or
+              event.get("httpMethod"))
+    raw_path = event.get("rawPath") or request_http.get("path")
+    if not method or not raw_path:
+        route = event.get("routeKey", "") or f"{method or 'GET'} {event.get('path', '/') }"
+        parts = route.split(" ", 1)
+        method = method or (parts[0] if len(parts) > 1 else "GET")
+        raw_path = raw_path or (parts[1] if len(parts) > 1 else "/")
+    route = f"{method} {raw_path}"
     # substitute {proxy+} / {id} templates with actuals when present
     params = event.get("pathParameters") or {}
     for k, v in params.items():
         raw_path = raw_path.replace("{" + k + "}", v or "")
+    stage = (event.get("requestContext") or {}).get("stage")
+    if stage and raw_path == f"/{stage}":
+        raw_path = "/"
+    elif stage and raw_path.startswith(f"/{stage}/"):
+        raw_path = raw_path[len(stage) + 1:]
+    if method == "OPTIONS":
+        return _out(event, {}, 204)
     qs = event.get("queryStringParameters") or {}
     qs = {k: [v] for k, v in qs.items()}
     body = event.get("body") or "{}"
