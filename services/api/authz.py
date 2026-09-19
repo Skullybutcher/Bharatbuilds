@@ -141,6 +141,35 @@ def _check_claims(claims: dict) -> None:
 
 
 # ------------------------------------------------------------- identity ----
+def _parse_groups(raw) -> list:
+    """cognito:groups reaches the function in EVERY shape API GW has shipped:
+    proper list (REST context), 'pp-admins' (stringified single),
+    'pp-admins,pp-reviewers' (stringified many), and — live-verified via the
+    T41c AUTHDEBUG line — "[pp-admins]" (list flattened to its bracket-form,
+    double-quoted by the context serializer). Accept them all; fail closed to
+    [] (reads-only) on anything unparseable."""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(g) for g in raw if str(g).strip()]
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.startswith("[") and s.endswith("]"):
+            inner = s[1:-1].strip()
+            if not inner:
+                return []
+            # JSON array (possibly itself quoted) or bracket-flattened names
+            try:
+                val = json.loads(s)
+                if isinstance(val, list):
+                    return [str(g).strip("\"'").strip() for g in val if str(g).strip("\"'").strip()]
+            except ValueError:
+                pass
+            return [g.strip("\"'").strip() for g in inner.split(",") if g.strip("\"'").strip()]
+        return [g.strip() for g in s.split(",") if g.strip()]
+    return []
+
+
 def authenticate(headers: dict) -> dict | None:
     """Verify the bearer token (if any) and return an identity dict.
     Returns None in `off` mode. Raises AuthzError(401) on bad tokens."""
@@ -172,14 +201,7 @@ def claims_from_event(event: dict) -> dict | None:
     claims = ctx.get("jwt", {}).get("claims") or ctx.get("claims") or {}
     if not claims:
         return None  # authorizer absent -> authenticate(headers) will 401
-    raw_groups = claims.get("cognito:groups") or []
-    if isinstance(raw_groups, str):
-        # Some authorizer contexts stringify claims ("pp-admins" or
-        # "pp-admins,pp-reviewers"). set("pp-admins") is a set of CHARACTERS —
-        # non-empty (so no fallback triggers) but membership fails (role
-        # collapses to READ_ONLY, every write 403s). Split instead.
-        raw_groups = [g.strip() for g in raw_groups.split(",") if g.strip()]
-    groups = set(raw_groups)
+    groups = set(_parse_groups(claims.get("cognito:groups")))
     if not groups:
         # Some HTTP API JWT-authorizer configurations drop colon-carrying claim
         # keys (cognito:groups, cognito:username) before they reach the

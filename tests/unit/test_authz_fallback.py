@@ -110,6 +110,28 @@ def test_stringified_groups_recognized(signed_token):
     assert ident["role"] == "admin" and set(ident["groups"]) == {"pp-admins", "pp-reviewers"}
 
 
+def test_bracket_flattened_groups_live_shape(signed_token):
+    """THE LIVE SHAPE (T41c AUTHDEBUG, 2026-09-19T15:50Z): API GW delivers
+    cognito:groups as the literal string '\"[pp-admins]\"' — the list
+    flattened to bracket form and quoted. Must parse to ['pp-admins']."""
+    event = _gw_event(signed_token, with_groups=False)
+    event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = '["pp-admins"]'
+    ident = authz.claims_from_event(event)
+    assert ident["role"] == "admin" and ident["groups"] == ["pp-admins"]
+    # and the bracket-flattened, JSON-unquoted variant
+    event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "[pp-admins]"
+    ident = authz.claims_from_event(event)
+    assert ident["role"] == "admin" and ident["groups"] == ["pp-admins"]
+    # multiple groups, flattened
+    event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "[pp-reviewers, pp-admins]"
+    ident = authz.claims_from_event(event)
+    assert ident["role"] == "admin" and set(ident["groups"]) == {"pp-admins", "pp-reviewers"}
+    # garbage stays fail-closed
+    event["requestContext"]["authorizer"]["jwt"]["claims"]["cognito:groups"] = "[[["
+    ident = authz.claims_from_event(event)
+    assert ident["role"] == "readonly"
+
+
 def test_groupless_with_malformed_token_stays_readonly(signed_token):
     """Secure default: garbage token + group-less claims -> readonly, no 500."""
     ident = authz.claims_from_event(_gw_event("garbage.sig.here", with_groups=False))
