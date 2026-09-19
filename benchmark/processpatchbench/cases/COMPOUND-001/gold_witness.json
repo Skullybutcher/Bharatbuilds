@@ -1,0 +1,27 @@
+{
+  "kinds": [
+    "wrong_rejection",
+    "missing_safeguard"
+  ],
+  "domains": {
+    "wrong_rejection": [
+      {
+        "field": "cgpa",
+        "operator": ">=",
+        "value": 7.8
+      },
+      {
+        "field": "cgpa",
+        "operator": "<",
+        "value": 8.0
+      }
+    ],
+    "missing_safeguard": [
+      {
+        "field": "cgpa",
+        "operator": ">=",
+        "value": 7.8
+      }
+    ]
+  }
+}

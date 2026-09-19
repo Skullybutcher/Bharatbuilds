@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-DL-V1",
+    "kind": "deadline",
+    "subject": "applicant",
+    "action": "submit_claim",
+    "condition": {
+      "field": "submission_date",
+      "operator": "<=",
+      "value": "2026-09-30"
+    },
+    "normalized_expression": "submission_date <= 2026-09-30",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "6.1",
+      "source_text": "Applications must be submitted by September 30."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

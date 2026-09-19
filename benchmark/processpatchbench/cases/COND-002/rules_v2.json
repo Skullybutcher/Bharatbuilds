@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-TR-V2",
+    "kind": "conditional_obligation",
+    "subject": "applicant",
+    "action": "upload_transcript",
+    "condition": {
+      "field": "backlogs",
+      "operator": ">",
+      "value": 0
+    },
+    "normalized_expression": "IF backlogs > 0 THEN transcript",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-TR-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.2",
+      "source_text": "A transcript is required only when backlogs > 0."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

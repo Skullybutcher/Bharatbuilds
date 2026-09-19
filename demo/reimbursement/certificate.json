@@ -1,0 +1,398 @@
+{
+ "certificate": "PATCH CERTIFICATE",
+ "build": "BUILD-AD84652D8647",
+ "policy": "REIMB-V2",
+ "policy_sha256": "17b94532fc729f2b41e20d3a4704a4dc8d616c1f2c839c71f4248b0d3b71c332",
+ "procedure_before": "REIMB-WF-V1",
+ "procedure_before_sha256": "5c10073f3f213db8f10b4c6466d15708fda3f5fbd781cbd5dfa5fa06a082e145",
+ "procedure_after": "REIMB-WF-V1-PATCHED",
+ "procedure_after_sha256": "4c2fb5a38ba5f7310e81f2b42223d9e1c75ac95e41a22c5717adc0443da18428",
+ "changed_rules": [
+  "REIMB-LIMIT-102",
+  "REIMB-APPR-102",
+  "REIMB-DL-102"
+ ],
+ "sources": [
+  {
+   "policy_version_id": "REIMB-V2",
+   "document_sha256": "r2",
+   "page": 1,
+   "section": "2.1",
+   "source_text": "Claims up to amount <= 50000 are accepted without extra review."
+  },
+  {
+   "policy_version_id": "REIMB-V2",
+   "document_sha256": "r2",
+   "page": 1,
+   "section": "2.2",
+   "source_text": "Manager approval is required only when amount > 50000."
+  },
+  {
+   "policy_version_id": "REIMB-V2",
+   "document_sha256": "r2",
+   "page": 2,
+   "section": "2.4",
+   "source_text": "Claims MUST NOT be submitted after 2026-09-30."
+  }
+ ],
+ "semantic_delta": {
+  "type": "COMPOUND",
+  "behavioral": true,
+  "added": [
+   {
+    "rule_id": "REIMB-LIMIT-102",
+    "kind": "threshold",
+    "subject": "claim",
+    "action": "eligible",
+    "condition": {
+     "field": "amount",
+     "operator": "<=",
+     "value": 50000,
+     "datatype": "integer"
+    },
+    "normalized_expression": "amount <= 50000",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "REIMB-LIMIT-101",
+    "provenance": {
+     "policy_version_id": "REIMB-V2",
+     "document_sha256": "r2",
+     "page": 1,
+     "section": "2.1",
+     "source_text": "Claims up to amount <= 50000 are accepted without extra review."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 0.97,
+     "review_state": "accepted"
+    }
+   },
+   {
+    "rule_id": "REIMB-APPR-102",
+    "kind": "conditional_obligation",
+    "subject": "claimant",
+    "action": "manager_approval",
+    "condition": {
+     "field": "amount",
+     "operator": ">",
+     "value": 50000,
+     "datatype": "integer"
+    },
+    "normalized_expression": "IF amount > 50000 THEN manager_approval = true ELSE false",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "REIMB-APPR-101",
+    "provenance": {
+     "policy_version_id": "REIMB-V2",
+     "document_sha256": "r2",
+     "page": 1,
+     "section": "2.2",
+     "source_text": "Manager approval is required only when amount > 50000."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 0.94,
+     "review_state": "accepted"
+    }
+   },
+   {
+    "rule_id": "REIMB-DL-102",
+    "kind": "deadline",
+    "subject": "claimant",
+    "action": "submit_claim",
+    "condition": {
+     "field": "submission_date",
+     "operator": "<=",
+     "value": "2026-09-30",
+     "datatype": "date"
+    },
+    "normalized_expression": "submission_date <= 2026-09-30",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+     "policy_version_id": "REIMB-V2",
+     "document_sha256": "r2",
+     "page": 2,
+     "section": "2.4",
+     "source_text": "Claims MUST NOT be submitted after 2026-09-30."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 0.95,
+     "review_state": "accepted"
+    }
+   }
+  ],
+  "removed": [
+   {
+    "rule_id": "REIMB-LIMIT-101",
+    "kind": "threshold",
+    "subject": "claim",
+    "action": "eligible",
+    "condition": {
+     "field": "amount",
+     "operator": "<=",
+     "value": 100000,
+     "datatype": "integer"
+    },
+    "normalized_expression": "amount <= 100000",
+    "effective_from": "2026-06-01",
+    "effective_to": "2026-09-17",
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+     "policy_version_id": "REIMB-V1",
+     "document_sha256": "r1",
+     "page": 1,
+     "section": "2.1",
+     "source_text": "Claims up to amount <= 100000 are accepted without extra review."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 1.0,
+     "review_state": "accepted"
+    }
+   },
+   {
+    "rule_id": "REIMB-APPR-101",
+    "kind": "obligation",
+    "subject": "claimant",
+    "action": "manager_approval",
+    "condition": null,
+    "normalized_expression": "manager_approval = true",
+    "effective_from": "2026-06-01",
+    "effective_to": "2026-09-17",
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+     "policy_version_id": "REIMB-V1",
+     "document_sha256": "r1",
+     "page": 1,
+     "section": "2.2",
+     "source_text": "All claims must receive manager approval."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 1.0,
+     "review_state": "accepted"
+    }
+   }
+  ],
+  "affected_rule_ids": [
+   "REIMB-APPR-102",
+   "REIMB-DL-102",
+   "REIMB-LIMIT-102"
+  ],
+  "notes": [
+   "THRESHOLD_TIGHTENED: amount <= 100000 -> <= 50000",
+   "manager_approval: manager_approval = true -> IF amount > 50000 THEN manager_approval = true ELSE false",
+   "new deadline submission_date <= 2026-09-30"
+  ],
+  "changes": [
+   "CONDITION_CHANGED",
+   "DEADLINE_ADDED",
+   "THRESHOLD_TIGHTENED"
+  ]
+ },
+ "witnesses": [
+  {
+   "case": {
+    "year": 3,
+    "backlogs": 0,
+    "category": "general",
+    "amount": 100000,
+    "submission_date": "2026-09-28"
+   },
+   "kind": "wrong_acceptance",
+   "key": "eligible",
+   "expected": {
+    "eligible": false,
+    "required": {
+     "manager_approval": true
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "actual": {
+    "eligible": true,
+    "required": {
+     "manager_approval": true,
+     "payment": false,
+     "verification": false
+    },
+    "on_time": true,
+    "order_ok": false
+   },
+   "trace_expected": [
+    "eligibility -> False",
+    "required -> {'manager_approval': True}",
+    "on_time -> True"
+   ],
+   "trace_actual": [
+    "NODE-CLAIM-START: visit (File Claim)",
+    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> PASS",
+    "NODE-MGR-APPROVAL: visit (Manager Approval)",
+    "NODE-PAYMENT: visit (Release Payment)",
+    "NODE-VERIFY: visit (Verify Claim)",
+    "ORDER VIOLATION: verification after payment"
+   ],
+   "witness_id": "W-001",
+   "label": "Who gets the wrong outcome? Wrongfully accepted.",
+   "verified": true
+  },
+  {
+   "case": {
+    "year": 3,
+    "backlogs": 0,
+    "category": "general",
+    "amount": 100001,
+    "submission_date": "2026-09-28"
+   },
+   "kind": "wrong_journey",
+   "key": "order",
+   "expected": {
+    "eligible": false,
+    "required": {
+     "manager_approval": true
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "actual": {
+    "eligible": false,
+    "required": {
+     "manager_approval": true,
+     "payment": false,
+     "verification": false
+    },
+    "on_time": true,
+    "order_ok": false
+   },
+   "trace_expected": [
+    "eligibility -> False",
+    "required -> {'manager_approval': True}",
+    "on_time -> True"
+   ],
+   "trace_actual": [
+    "NODE-CLAIM-START: visit (File Claim)",
+    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> REJECT",
+    "NODE-MGR-APPROVAL: visit (Manager Approval)",
+    "NODE-PAYMENT: visit (Release Payment)",
+    "NODE-VERIFY: visit (Verify Claim)",
+    "ORDER VIOLATION: verification after payment"
+   ],
+   "witness_id": "W-002",
+   "label": "Whose journey violates ordering? Wrong journey.",
+   "verified": true
+  },
+  {
+   "case": {
+    "year": 3,
+    "backlogs": 0,
+    "category": "general",
+    "amount": 100001,
+    "submission_date": "2026-10-01"
+   },
+   "kind": "deadline_mismatch",
+   "key": "on_time",
+   "expected": {
+    "eligible": false,
+    "required": {
+     "manager_approval": true
+    },
+    "on_time": false,
+    "order_ok": true
+   },
+   "actual": {
+    "eligible": false,
+    "required": {
+     "manager_approval": true,
+     "payment": false,
+     "verification": false
+    },
+    "on_time": true,
+    "order_ok": false
+   },
+   "trace_expected": [
+    "eligibility -> False",
+    "required -> {'manager_approval': True}",
+    "on_time -> False"
+   ],
+   "trace_actual": [
+    "NODE-CLAIM-START: visit (File Claim)",
+    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> REJECT",
+    "NODE-MGR-APPROVAL: visit (Manager Approval)",
+    "NODE-PAYMENT: visit (Release Payment)",
+    "NODE-VERIFY: visit (Verify Claim)",
+    "ORDER VIOLATION: verification after payment"
+   ],
+   "witness_id": "W-003",
+   "label": "Whose submission timing disagrees? Deadline mismatch.",
+   "verified": true
+  },
+  {
+   "case": {
+    "year": 3,
+    "backlogs": 0,
+    "category": "general",
+    "amount": 40000,
+    "submission_date": "2026-09-28"
+   },
+   "kind": "unnecessary_burden",
+   "key": "manager_approval",
+   "expected": {
+    "eligible": true,
+    "required": {
+     "manager_approval": false
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "actual": {
+    "eligible": true,
+    "required": {
+     "manager_approval": true,
+     "payment": false,
+     "verification": false
+    },
+    "on_time": true,
+    "order_ok": false
+   },
+   "trace_expected": [
+    "eligibility -> True",
+    "required -> {'manager_approval': False}",
+    "on_time -> True"
+   ],
+   "trace_actual": [
+    "NODE-CLAIM-START: visit (File Claim)",
+    "NODE-AMOUNT-GATE: gate {'field': 'amount', 'operator': '<=', 'value': 100000} -> PASS",
+    "NODE-MGR-APPROVAL: visit (Manager Approval)",
+    "NODE-PAYMENT: visit (Release Payment)",
+    "NODE-VERIFY: visit (Verify Claim)",
+    "ORDER VIOLATION: verification after payment"
+   ],
+   "witness_id": "W-004",
+   "label": "Who faces an obsolete step? Unnecessary burden.",
+   "verified": true
+  }
+ ],
+ "impact_summary_ref": "BUILD-AD84652D8647",
+ "tests_before": {
+  "failed": 4,
+  "total": 4
+ },
+ "tests_after": {
+  "passed": 16,
+  "total": 16
+ },
+ "approvals": [],
+ "compiler": "0.1.0",
+ "created_at": "2026-09-19T03:39:09.954021+00:00",
+ "status": "VALIDATED_WITHIN_TESTED_MODEL",
+ "disclaimer": "Evidence-backed verification for the bounded model ProcessPatch supports; NOT a guarantee of full institutional compliance.",
+ "certificate_sha256": "a561672f1222b41ba2a5e3f33696d9c26f88e17c1d6873f40ebd6c4346915842"
+}

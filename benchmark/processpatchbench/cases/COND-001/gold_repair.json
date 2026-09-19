@@ -1,0 +1,17 @@
+{
+  "required_effect": {
+    "required_probe": {
+      "action": "manager_approval",
+      "case_true": {
+        "amount": 60000
+      },
+      "case_false": {
+        "amount": 40000
+      }
+    }
+  },
+  "forbidden_operations": [
+    "REMOVE_NODE:NODE-APPR"
+  ],
+  "max_locality_cost": 9.0
+}

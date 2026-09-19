@@ -1,0 +1,260 @@
+{
+ "certificate": "PATCH CERTIFICATE",
+ "build": "BUILD-EA35E6F0FFB1",
+ "policy": "POLICY-V2",
+ "policy_sha256": "ee1dcc66c20b25ec90fcacc17a2475fa36cfb3879a36574abf2eabd7ecc0585f",
+ "procedure_before": "WF-V3",
+ "procedure_before_sha256": "dc382ca960c52af5488122564f58bc7447f80e68e51a28c6a19dc06fc570ea05",
+ "procedure_after": "WF-V3-PATCHED",
+ "procedure_after_sha256": "0c1bec4277d5aac8a6e8021a4272269fe045f6579755423db8d3c21ca6286d60",
+ "changed_rules": [
+  "RULE-ELIG-014",
+  "RULE-REC-014"
+ ],
+ "sources": [
+  {
+   "policy_version_id": "POLICY-V2",
+   "document_sha256": "v2-placeholder",
+   "page": 2,
+   "section": "4.1",
+   "source_text": "Applicants must have CGPA >= 7.5."
+  },
+  {
+   "policy_version_id": "POLICY-V2",
+   "document_sha256": "v2-placeholder",
+   "page": 3,
+   "section": "4.2",
+   "source_text": "A faculty recommendation is required only when CGPA < 8.0."
+  }
+ ],
+ "semantic_delta": {
+  "type": "COMPOUND",
+  "behavioral": true,
+  "added": [
+   {
+    "rule_id": "RULE-ELIG-014",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+     "field": "cgpa",
+     "operator": ">=",
+     "value": 7.5,
+     "datatype": "decimal"
+    },
+    "normalized_expression": "cgpa >= 7.5",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "RULE-ELIG-009",
+    "provenance": {
+     "policy_version_id": "POLICY-V2",
+     "document_sha256": "v2-placeholder",
+     "page": 2,
+     "section": "4.1",
+     "source_text": "Applicants must have CGPA >= 7.5."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 0.98,
+     "review_state": "accepted"
+    }
+   },
+   {
+    "rule_id": "RULE-REC-014",
+    "kind": "conditional_obligation",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": {
+     "field": "cgpa",
+     "operator": "<",
+     "value": 8.0,
+     "datatype": "decimal"
+    },
+    "normalized_expression": "IF cgpa < 8.0 THEN recommendation_required = true ELSE false",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "RULE-REC-009",
+    "provenance": {
+     "policy_version_id": "POLICY-V2",
+     "document_sha256": "v2-placeholder",
+     "page": 3,
+     "section": "4.2",
+     "source_text": "A faculty recommendation is required only when CGPA < 8.0."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 0.93,
+     "review_state": "accepted"
+    }
+   }
+  ],
+  "removed": [
+   {
+    "rule_id": "RULE-ELIG-009",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+     "field": "cgpa",
+     "operator": ">=",
+     "value": 8.0,
+     "datatype": "decimal"
+    },
+    "normalized_expression": "cgpa >= 8.0",
+    "effective_from": "2026-08-01",
+    "effective_to": "2026-09-17",
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+     "policy_version_id": "POLICY-V1",
+     "document_sha256": "v1-placeholder",
+     "page": 2,
+     "section": "4.1",
+     "source_text": "Applicants must have CGPA >= 8.0."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 1.0,
+     "review_state": "accepted"
+    }
+   },
+   {
+    "rule_id": "RULE-REC-009",
+    "kind": "obligation",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": null,
+    "normalized_expression": "recommendation_required = true",
+    "effective_from": "2026-08-01",
+    "effective_to": "2026-09-17",
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+     "policy_version_id": "POLICY-V1",
+     "document_sha256": "v1-placeholder",
+     "page": 3,
+     "section": "4.2",
+     "source_text": "All applicants must provide a faculty recommendation."
+    },
+    "extraction": {
+     "model": "hand-authored-fixture",
+     "confidence": 1.0,
+     "review_state": "accepted"
+    }
+   }
+  ],
+  "affected_rule_ids": [
+   "RULE-ELIG-014",
+   "RULE-REC-014"
+  ],
+  "notes": [
+   "THRESHOLD_RELAXED: cgpa >= 8.0 -> >= 7.5",
+   "upload_recommendation: recommendation_required = true -> IF cgpa < 8.0 THEN recommendation_required = true ELSE false"
+  ],
+  "changes": [
+   "CONDITION_CHANGED",
+   "THRESHOLD_RELAXED"
+  ]
+ },
+ "witnesses": [
+  {
+   "case": {
+    "year": 3,
+    "backlogs": 0,
+    "category": "general",
+    "cgpa": 7.5
+   },
+   "kind": "wrong_rejection",
+   "key": "eligible",
+   "expected": {
+    "eligible": true,
+    "required": {
+     "upload_recommendation": true
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "actual": {
+    "eligible": false,
+    "required": {
+     "upload_recommendation": true
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "trace_expected": [
+    "eligibility -> True",
+    "required -> {'upload_recommendation': True}",
+    "on_time -> True"
+   ],
+   "trace_actual": [
+    "NODE-START: visit (Start Application)",
+    "NODE-ELIGIBILITY: gate {'field': 'cgpa', 'operator': '>=', 'value': 8.0} -> REJECT",
+    "NODE-REC-UPLOAD: visit (Upload Recommendation)",
+    "NODE-DEPT-APPROVAL: visit (Department Approval)",
+    "NODE-SUBMIT: visit (Final Submission)"
+   ],
+   "witness_id": "W-001",
+   "label": "Who gets the wrong outcome? Wrongfully rejected.",
+   "verified": true
+  },
+  {
+   "case": {
+    "year": 3,
+    "backlogs": 0,
+    "category": "general",
+    "cgpa": 8
+   },
+   "kind": "unnecessary_burden",
+   "key": "upload_recommendation",
+   "expected": {
+    "eligible": true,
+    "required": {
+     "upload_recommendation": false
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "actual": {
+    "eligible": true,
+    "required": {
+     "upload_recommendation": true
+    },
+    "on_time": true,
+    "order_ok": true
+   },
+   "trace_expected": [
+    "eligibility -> True",
+    "required -> {'upload_recommendation': False}",
+    "on_time -> True"
+   ],
+   "trace_actual": [
+    "NODE-START: visit (Start Application)",
+    "NODE-ELIGIBILITY: gate {'field': 'cgpa', 'operator': '>=', 'value': 8.0} -> PASS",
+    "NODE-REC-UPLOAD: visit (Upload Recommendation)",
+    "NODE-DEPT-APPROVAL: visit (Department Approval)",
+    "NODE-SUBMIT: visit (Final Submission)"
+   ],
+   "witness_id": "W-002",
+   "label": "Who faces an obsolete step? Unnecessary burden.",
+   "verified": true
+  }
+ ],
+ "impact_summary_ref": "BUILD-EA35E6F0FFB1",
+ "tests_before": {
+  "failed": 2,
+  "total": 2
+ },
+ "tests_after": {
+  "passed": 12,
+  "total": 12
+ },
+ "approvals": [],
+ "compiler": "0.1.0",
+ "created_at": "2026-09-19T03:39:09.946473+00:00",
+ "status": "VALIDATED_WITHIN_TESTED_MODEL",
+ "disclaimer": "Evidence-backed verification for the bounded model ProcessPatch supports; NOT a guarantee of full institutional compliance.",
+ "certificate_sha256": "7cb88e0e6d08a1909e6f3ba05d1a9de5202aaea4cd5343c41178f7978d56e47f"
+}

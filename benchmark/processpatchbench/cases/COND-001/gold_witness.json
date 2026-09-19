@@ -1,0 +1,14 @@
+{
+  "kinds": [
+    "unnecessary_burden"
+  ],
+  "domains": {
+    "unnecessary_burden": [
+      {
+        "field": "amount",
+        "operator": "<=",
+        "value": 50000
+      }
+    ]
+  }
+}

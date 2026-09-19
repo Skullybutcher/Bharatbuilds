@@ -1,0 +1,64 @@
+{
+  "workflow_id": "WF-E9",
+  "procedure_version_id": "WF-E9-V1",
+  "version_label": "WF-E9-V1",
+  "status": "active",
+  "nodes": [
+    {
+      "node_id": "NODE-START",
+      "workflow_id": "WF-E9",
+      "type": "start",
+      "label": "Start",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {},
+      "provenance_links": []
+    },
+    {
+      "node_id": "NODE-GATE",
+      "workflow_id": "WF-E9",
+      "type": "gate",
+      "label": "Check amount",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "kind": "threshold_gate",
+        "field": "amount",
+        "operator": "<=",
+        "value": 50000
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-LIM-V1"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-SUBMIT",
+      "workflow_id": "WF-E9",
+      "type": "action",
+      "label": "Final Submission",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "submit"
+      },
+      "provenance_links": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "NODE-START",
+      "to": "NODE-GATE",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-GATE",
+      "to": "NODE-SUBMIT",
+      "type": "NEXT",
+      "condition": null
+    }
+  ]
+}

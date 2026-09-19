@@ -1,0 +1,7 @@
+{
+  "type": "CONDITION_CHANGED",
+  "action": "manager_approval",
+  "affected_rule_ids": [
+    "R-AP-V2"
+  ]
+}

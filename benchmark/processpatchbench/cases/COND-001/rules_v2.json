@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-AP-V2",
+    "kind": "conditional_obligation",
+    "subject": "applicant",
+    "action": "manager_approval",
+    "condition": {
+      "field": "amount",
+      "operator": ">",
+      "value": 50000
+    },
+    "normalized_expression": "IF amount > 50000 THEN approval",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-AP-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "3.1",
+      "source_text": "Manager approval is required only when amount > 50000."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

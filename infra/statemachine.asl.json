@@ -1,0 +1,135 @@
+{
+  "Comment": "ProcessPatch compile-test-patch pipeline with human governance gates (Spec 57G). Human waits use the Lambda callback pattern (taskToken); the demo may resolve them via application state (POST /builds/... + /resume) while preserving the conceptual gates.",
+  "StartAt": "INGEST",
+  "States": {
+    "INGEST": {"Type": "Pass", "Comment": "Build envelope: policy_s3_key, procedure_version_id, workspace_id.", "Next": "HASH_ARTIFACT"},
+    "HASH_ARTIFACT": {
+      "Type": "Task", "Resource": "${GovernFnArn}", "Comment": "Idempotency hash over policy+procedure+compiler.",
+      "Parameters": {"op": "hash", "policy_text.$": "$.policy_text", "procedure.$": "$.procedure"},
+      "ResultPath": "$.artifact_hash", "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 2}],
+      "Next": "EXTRACT_RULES"
+    },
+    "EXTRACT_RULES": {
+      "Type": "Task", "Resource": "${ExtractorFnArn}",
+      "Parameters": {"policy_text.$": "$.policy_text", "policy_version_id.$": "$.policy_version_id", "build_id.$": "$.build_id"},
+      "ResultPath": "$.extraction", "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 2}],
+      "Next": "VALIDATE_RULE_IR"
+    },
+    "VALIDATE_RULE_IR": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.extraction.schema_valid", "BooleanEquals": false, "Next": "EXTRACTION_FAILURE"}],
+      "Default": "RESOLVE_AUTHORITY"
+    },
+    "RESOLVE_AUTHORITY": {"Type": "Pass", "Comment": "Attach source precedence metadata; conflicts fail closed downstream.", "Next": "RULE_REVIEW_REQUIRED?"},
+    "RULE_REVIEW_REQUIRED?": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.extraction.status", "StringEquals": "NEEDS_REVIEW", "Next": "WAIT_FOR_RULE_REVIEW"},
+        {"Variable": "$.extraction.status", "StringEquals": "CONFLICT", "Next": "NEEDS_REVIEW"}
+      ],
+      "Default": "COMPILE_CONSTRAINTS"
+    },
+    "WAIT_FOR_RULE_REVIEW": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {"FunctionName": "${GovernFnArn}", "Payload": {"op": "open_reviews", "build_id.$": "$.build_id", "rules.$": "$.extraction.rules", "taskToken.$": "$$.Task.Token"}},
+      "ResultPath": "$.rule_review", "HeartbeatSeconds": 86400,
+      "Next": "RULE_REVIEW_DECIDED?"
+    },
+    "RULE_REVIEW_DECIDED?": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.rule_review.accepted", "BooleanEquals": true, "Next": "COMPILE_CONSTRAINTS"}],
+      "Default": "NEEDS_REVIEW"
+    },
+    "COMPILE_CONSTRAINTS": {
+      "Type": "Task", "Resource": "${CompilerFnArn}",
+      "Parameters": {"op": "compile", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules"},
+      "ResultPath": "$.compiled",
+      "Next": "CHECK_CONFLICT"
+    },
+    "CHECK_CONFLICT": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.compiled.error", "IsPresent": true, "Next": "NEEDS_REVIEW"}],
+      "Default": "SEMANTIC_DIFF"
+    },
+    "SEMANTIC_DIFF": {"Type": "Pass", "Comment": "Surfaces $.compiled.semantic_delta; behavioral vs no-op vs provenance-only.", "Next": "FIND_WITNESSES"},
+    "FIND_WITNESSES": {
+      "Type": "Task", "Resource": "${WitnessFnArn}",
+      "Parameters": {"new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure"},
+      "ResultPath": "$.witnesses_out",
+      "Next": "CHECK_WITNESSES"
+    },
+    "CHECK_WITNESSES": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.witnesses_out.witnesses_found", "BooleanEquals": false, "Next": "GENERATE_CERTIFICATE_CLEAN"}],
+      "Default": "COMPUTE_IMPACT"
+    },
+    "COMPUTE_IMPACT": {
+      "Type": "Task", "Resource": "${ImpactFnArn}",
+      "Parameters": {"build_id.$": "$.build_id", "policy_version_id.$": "$.policy_version_id", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure", "patched_workflow.$": "$.procedure", "semantic_delta.$": "$.compiled.semantic_delta", "witnesses.$": "$.witnesses_out.witnesses", "faults": [], "validation": {}},
+      "ResultPath": "$.impact_prelim",
+      "Next": "LOCALIZE_PATCH"
+    },
+    "LOCALIZE_PATCH": {
+      "Type": "Task", "Resource": "${CompilerFnArn}",
+      "Parameters": {"op": "localize_patch", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure", "witnesses.$": "$.witnesses_out.witnesses"},
+      "ResultPath": "$.patched",
+      "Next": "VALIDATE_PATCH"
+    },
+    "VALIDATE_PATCH": {
+      "Type": "Task", "Resource": "${ValidatorFnArn}",
+      "Parameters": {"build_id.$": "$.build_id", "policy_version_id.$": "$.policy_version_id", "old_rules.$": "$.old_rules", "new_rules.$": "$.accepted_rules", "procedure.$": "$.procedure", "patched_workflow.$": "$.patched.patched_workflow", "patch.$": "$.patched.patch", "witnesses.$": "$.witnesses_out.witnesses", "faults.$": "$.patched.faults", "semantic_delta.$": "$.compiled.semantic_delta", "with_certificate": true, "impact.$": "$.impact_prelim"},
+      "ResultPath": "$.validation_out",
+      "Next": "CHECK_VALIDATION"
+    },
+    "CHECK_VALIDATION": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.validation_out.patch_valid", "BooleanEquals": true, "Next": "GENERATE_CERTIFICATE"}],
+      "Default": "NEEDS_REVIEW"
+    },
+    "GENERATE_CERTIFICATE": {"Type": "Pass", "Comment": "Surfaces $.validation_out.certificate; never claims compliance.", "Next": "WAIT_FOR_PATCH_APPROVAL"},
+    "WAIT_FOR_PATCH_APPROVAL": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {"FunctionName": "${GovernFnArn}", "Payload": {"op": "request_review", "build_id.$": "$.build_id", "taskToken.$": "$$.Task.Token"}},
+      "ResultPath": "$.patch_decision", "HeartbeatSeconds": 86400,
+      "Next": "PATCH_APPROVED?"
+    },
+    "PATCH_APPROVED?": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.patch_decision.decision", "StringEquals": "APPROVE_CANDIDATE", "Next": "CREATE_PROCEDURE_VERSION"},
+        {"Variable": "$.patch_decision.decision", "StringEquals": "REQUEST_REVISION", "Next": "REVISION_REQUIRED"}
+      ],
+      "Default": "CLOSED_REJECTED"
+    },
+    "CREATE_PROCEDURE_VERSION": {
+      "Type": "Task", "Resource": "${GovernFnArn}",
+      "Parameters": {"op": "create_procedure_version", "patched_workflow.$": "$.patched.patched_workflow"},
+      "ResultPath": "$.candidate",
+      "Next": "WAIT_FOR_ACTIVATION_APPROVAL"
+    },
+    "WAIT_FOR_ACTIVATION_APPROVAL": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {"FunctionName": "${ApiFnArn}", "Payload": {"op": "resume", "kind": "activation", "build_id.$": "$.build_id", "taskToken.$": "$$.Task.Token"}},
+      "ResultPath": "$.activation_decision", "HeartbeatSeconds": 86400,
+      "Next": "ACTIVATION_APPROVED?"
+    },
+    "ACTIVATION_APPROVED?": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.activation_decision.decision", "StringEquals": "APPROVE", "Next": "ACTIVATE"}],
+      "Default": "CLOSED_REJECTED"
+    },
+    "ACTIVATE": {
+      "Type": "Task", "Resource": "${GovernFnArn}",
+      "Parameters": {"op": "activate", "build_id.$": "$.build_id", "build.$": "$", "reviewer.$": "$.activation_decision.reviewer", "reason.$": "$.activation_decision.reason"},
+      "ResultPath": "$.activation",
+      "Next": "READY"
+    },
+    "GENERATE_CERTIFICATE_CLEAN": {"Type": "Pass", "Comment": "No drift: record clean bill, no patch, no approval needed.", "Next": "READY"},
+    "NEEDS_REVIEW": {"Type": "Pass", "Comment": "AMBIGUOUS_RULE | CONFLICTING_RULES | EXTRACTION_FAILURE | NO_VALID_PATCH -> human review.", "Next": "CLOSED_REVIEW"},
+    "CLOSED_REVIEW": {"Type": "Succeed", "Comment": "Closed pending human review."},
+    "CLOSED_REJECTED": {"Type": "Succeed", "Comment": "Reviewer rejected; candidate retained inactive; activation blocked."},
+    "REVISION_REQUIRED": {"Type": "Succeed", "Comment": "Reviewer requested revision; next patch iteration references this one."},
+    "EXTRACTION_FAILURE": {"Type": "Fail", "Error": "EXTRACTION_FAILURE", "Cause": "Schema validation failed; retry constrained extraction, then NEEDS_REVIEW."},
+    "READY": {"Type": "Succeed"}
+  }
+}

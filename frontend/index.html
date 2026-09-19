@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ProcessPatch — CI for real-world procedures</title>
+<style>
+:root{--green:#16a34a;--red:#dc2626;--amber:#d97706;--grey:#6b7280;--blue:#2563eb;--bg:#0b0f14;--card:#111827;--line:#1f2937}
+*{box-sizing:border-box}body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:#e5e7eb}
+header{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.badge{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.fail{background:#3f0d0d;color:#fecaca;border-color:#7f1d1d}.pass{background:#052e16;color:#bbf7d0;border-color:#14532d}
+.warn{background:#451a03;color:#fed7aa;border-color:#9a3412}.info{background:#172554;color:#bfdbfe;border-color:#1e40af}
+.tag{font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);margin-right:6px}
+.tabs{display:flex;gap:8px;padding:12px 22px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs button{background:#0f172a;color:#e5e7eb;border:1px solid var(--line);padding:8px 12px;border-radius:8px;cursor:pointer}
+.tabs button.active{background:#1d4ed8;border-color:#1d4ed8}
+main{padding:18px 22px;max-width:1200px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.cols2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:900px){.cols,.cols2{grid-template-columns:1fr}}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.btn{background:#1d4ed8;border:0;color:#fff;padding:10px 16px;border-radius:9px;font-weight:700;cursor:pointer;margin:2px}
+.btn.ghost{background:#0f172a;border:1px solid var(--line)}
+.btn.danger{background:#991b1b}.btn.ok{background:#15803d}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{border:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+input,select,textarea{background:#0f172a;border:1px solid var(--line);color:#fff;padding:9px 10px;border-radius:8px}
+small{color:#9ca3af}
+.clickable{cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+<div><div style="font-size:20px;font-weight:800">ProcessPatch</div><small>Operational Rule Compiler · CI for real-world procedures</small></div>
+<div id="buildBadge" class="badge">no build yet</div>
+<select id="domain"><option value="research_grant">research_grant</option><option value="reimbursement">reimbursement</option></select>
+<button class="btn" onclick="runBuild()">COMPILE AMENDMENT / FIND DRIFT</button>
+<button class="btn ghost" onclick="refreshBuild()">Refresh</button>
+<small>API <input id="apiBase" value="http://localhost:8000" style="width:190px"/></small>
+</header>
+<div class="tabs" id="tabs"></div>
+<main id="view"></main>
+<script>
+let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], drilled=null;
+const TABS=['Overview','Impact','Policy Diff','Witnesses','Procedure','Patch','Tests','Evidence','Approval','Benchmarks','Build History'];
+let active='Overview';
+const api=()=>document.getElementById('apiBase').value.replace(/\/$/,'');
+async function get(p){const r=await fetch(api()+p);return r.json();}
+async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});return {code:r.status,data:await r.json()};}
+async function runBuild(){
+  const d=document.getElementById('domain').value;
+  setView('<div class=card>Compiling… INGEST → … → WAIT_FOR_PATCH_APPROVAL. Start the API with <span class=mono>python -m services.api.server</span>.</div>');
+  BUILD=await get('/demo/canonical?domain='+d); drilled=null; active='Overview'; renderTabs(); render(); loadHistory();
+}
+async function refreshBuild(){ if(BUILD){BUILD=await get('/builds/'+BUILD.build_id); render();} }
+async function loadHistory(){ try{HISTORY=(await get('/builds')).builds||[];}catch(e){} }
+function setView(h){document.getElementById('view').innerHTML=h;}
+function renderTabs(){const t=document.getElementById('tabs');t.innerHTML='';TABS.forEach(x=>{const b=document.createElement('button');b.textContent=x;b.className=x===active?'active':'';b.onclick=()=>{active=x;renderTabs();render();};t.appendChild(b);});}
+function badge(){const b=document.getElementById('buildBadge');if(!BUILD){b.textContent='no build yet';b.className='badge';return;}const n=(BUILD.witnesses||[]).length;b.textContent=`${BUILD.build_id} · ${BUILD.status} · ${n} witnesses`;b.className='badge '+(BUILD.status==='PATCH_VALIDATED'?'pass':(n?'fail':'warn'));}
+function trust(t){return t==='AI-EXTRACTED'?'<span class="tag info">AI-EXTRACTED · proposes, never decides</span>':t==='VERIFIED'?'<span class="tag fail">VERIFIED · witness reproduces</span>':t==='VALIDATED'?'<span class="tag pass">VALIDATED · patch passed checks</span>':t==='HUMAN' ?'<span class="tag warn">HUMAN-APPROVED</span>':`<span class=tag>${t}</span>`;}
+function render(){badge();if(!BUILD){setView('<div class=card><h3>A policy changed. Which procedure steps are wrong now?</h3><p>Select a domain and click <b>COMPILE AMENDMENT</b>.</p><p class=mono>Policy change → Compile → Witness → Localized patch → Regression tests → Validated procedure</p><p><small>Software gets regression tests when code changes. Real-world procedures should get them when rules change.</small></p></div>');return;}
+  ({Overview:vOverview,Impact:vImpact,'Policy Diff':vDiff,Witnesses:vWit,Procedure:vProc,Patch:vPatch,Tests:vTests,Evidence:vEvidence,Approval:vApproval,Benchmarks:vBench,'Build History':vHist})[active]();}
+function portalCard(def){return `<div class=card><h3>Synthetic portal — driven by procedure JSON ${trust('VERIFIED')}</h3><label>CGPA <input id=cgpa value="${def}"/></label> <label>Amount <input id=amt value="40000"/></label>
+<button class=btn onclick="checkPortal(false)">Check (current portal)</button><button class=btn ghost onclick="checkPortal(true)">Check (patched preview)</button><div id=portalOut class=mono style="margin-top:10px"></div></div>`;}
+async function checkPortal(p){const q=`cgpa=${encodeURIComponent(document.getElementById('cgpa').value)}&amount=${encodeURIComponent(document.getElementById('amt').value)}&patched=${p?1:0}&domain=${document.getElementById('domain').value}`;const j=await get('/portal?'+q);
+document.getElementById('portalOut').textContent=`Expected: eligible=${j.expected.eligible} required=${JSON.stringify(j.expected.required)}\nActual:   eligible=${j.actual.eligible} required=${JSON.stringify(j.actual.required)}\n`+((j.expected.eligible!==j.actual.eligible||JSON.stringify(j.expected.required)!==JSON.stringify(j.actual.required))?'DISAGREEMENT — PROCEDURAL DRIFT CONFIRMED':'agree');}
+function vOverview(){const w=BUILD.witnesses||[];setView(`<div class=card><h2>Research Grant Procedure — ${BUILD.build_id} <span class="badge ${w.length?'fail':'pass'}">${BUILD.status}</span></h2>
+<p>${(BUILD.semantic_delta||{}).type} · ${w.length} witnesses · ${(BUILD.faults||[]).length} fault regions · ${BUILD.validation.failed} failing checks · machine=${(BUILD.validation||{}).status}</p>
+<div class=cols><div class=card><b>POLICY</b><div class=mono>CGPA ≥ 7.5\nrec only if CGPA &lt; 8.0\ndept approval → submit</div></div>
+<div class=card><b>PERSON</b><div class=mono>CGPA 7.80\nExpected: ACCEPT\nActual: REJECT</div><b>DISAGREEMENT</b></div>
+<div class=card><b>PROCEDURE (stale)</b><div class=mono>CGPA ≥ 8.0\nrec: always required</div></div></div>
+<p>${trust('AI-EXTRACTED')} extraction with source spans · ${trust('VERIFIED')} witnesses reproduce · ${trust('VALIDATED')} patch passed ${BUILD.validation.total} checks · approval still required (see Approval tab)</p></div>`+portalCard('7.80'));}
+function vImpact(){const im=BUILD.impact||{};const b=im.behavioral||{},tc=im.test_cohort||{},v=im.verification||{};const rows=Object.entries(b).map(([k,n])=>`<tr><td class=clickable onclick="drill('${k}')">${k} (${n})</td><td>${n}</td></tr>`).join('');
+setView(`<div class=card><h3>Impact Dashboard — what changed, where it propagated, who is affected ${trust('VERIFIED')}</h3>
+<div class=cols><div class=card><b>Semantic Change</b><div class=mono>${(im.semantic_breakdown||{}).delta_type}\naffected rules: ${(im.artifacts||{}).affected_rules||[]}</div></div>
+<div class=card><b>Operational Blast Radius</b><div class=mono>workflows: ${(im.artifacts||{}).workflows_affected}\nnodes: ${(im.artifacts||{}).nodes_affected} [${((im.artifacts||{}).affected_nodes||[]).join(', ')}]\nfields: ${((im.artifacts||{}).fields_affected||[]).join(', ')||'—'}</div></div>
+<div class=card><b>Human Impact</b><div class=mono>Generated test cohort (synthetic, n=${tc.cohort_size})\nnewly eligible: ${tc.newly_eligible}\nshorter journeys: ${tc.shorter_journeys}\nunchanged: ${tc.unchanged}</div><small>Never imply population prevalence from synthetic cases.</small></div></div>
+<div class=cols2><div class=card><b>Behavioral counts (click to drill down)</b><table><tr><th>kind</th><th>verified</th></tr>${rows}</table><div id=drill class=mono></div></div>
+<div class=card><b>Regression State</b><div class=mono>Before: ${(v.tests_before||{}).failed} failing\nAfter: ${((v.tests_after||{}).failed||0)} failing / ${((v.tests_after||{}).total||0)} total\nprovenance coverage: ${v.provenance_coverage}</div><b>Trust State</b><div class=mono>Rule review: ${BUILD.review_state}\nMachine validation: ${v.tests_after?'COMPLETE':'—'}\nHuman approval: ${((im.approval||{}).human_status||'AWAITING_APPROVAL')}</div></div></div></div>`);}
+function drill(kind){const map={wrong_rejections:'wrong_rejection',wrong_acceptances:'wrong_acceptance',unnecessary_burdens:'unnecessary_burden',missing_safeguards:'missing_safeguard',wrong_orderings:'wrong_journey',deadline_mismatches:'deadline_mismatch'};const k=map[kind];const list=(BUILD.witnesses||[]).filter(w=>w.kind===k);
+document.getElementById('drill').textContent=list.map(w=>`${w.witness_id} ${JSON.stringify(w.case)} expected=${JSON.stringify(w.expected)} actual=${JSON.stringify(w.actual)}`).join('\n')||'none';}
+function vDiff(){setView(`<div class=card><h3>Semantic diff (not text diff) ${trust('AI-EXTRACTED')}</h3><div class=mono>${JSON.stringify(BUILD.semantic_delta,null,2)}</div></div>`);}
+function vWit(){const w=BUILD.witnesses||[];setView(w.map(x=>`<div class=card><h3>${x.witness_id} · ${x.kind} ${trust('VERIFIED')}</h3><div class=mono>Who gets the wrong outcome? ${JSON.stringify(x.case)}\nExpected=${JSON.stringify(x.expected)}\nActual=${JSON.stringify(x.actual)}</div><div class=cols2><div><b>Expected trace</b><div class=mono>${x.trace_expected.join('\n')}</div></div><div><b>Actual trace</b><div class=mono>${x.trace_actual.join('\n')}</div></div></div><button class=btn ghost onclick="replay('${x.witness_id}')">Replay witness</button><div id=rp-${x.witness_id} class=mono></div></div>`).join('')||'<div class=card>No witnesses — semantics equivalent.</div>');}
+async function replay(wid){const j=await post(`/builds/${BUILD.build_id}/witnesses/${wid}/replay`,{});document.getElementById('rp-'+wid).textContent=JSON.stringify(j.data||j,null,2);}
+function vProc(){const p=BUILD.patched_workflow||{};setView(`<div class=card><h3>Procedure (patched preview ${p.procedure_version_id})</h3><table><tr><th>node</th><th>label</th><th>config</th><th>provenance</th></tr>${(p.nodes||[]).map(n=>`<tr><td>${n.node_id}</td><td>${n.label}</td><td class=mono>${JSON.stringify(n.implementation)}</td><td class=mono>${JSON.stringify(n.provenance_links)}</td></tr>`).join('')}</table></div>`);}
+function vPatch(){const pt=BUILD.patch||{};setView(`<div class=card><h3>Localized candidate patch ${pt.patch_id} (cost ${pt.cost}) ${trust('VALIDATED')}</h3><div class=mono>${JSON.stringify(pt.operations,null,2)}</div><p><small>${pt.strategy}</small></p></div>`);}
+function vTests(){const v=BUILD.validation||{results:[]};setView(`<div class=card><h3>Regression — ${v.passed}/${v.total} passing · ${v.status}</h3><table><tr><th>suite</th><th>case</th><th>pass</th><th>detail</th></tr>${(v.results||[]).map(r=>`<tr><td>${r.suite}</td><td class=mono>${JSON.stringify(r.case)}</td><td>${r.pass?'PASS':'FAIL'}</td><td>${r.detail}</td></tr>`).join('')}</table><p><small>Never display COMPLIANCE GUARANTEED. Only VALIDATED_WITHIN_TESTED_MODEL.</small></p></div>`);}
+function vEvidence(){const c=BUILD.certificate||{};setView(`<div class=card><h3>Patch Certificate + provenance ${trust('VALIDATED')}</h3><div class=mono>${JSON.stringify(c,null,2)}</div></div>`);}
+async function vApproval(){
+setView('<div class=card>Loading governance state…</div>');
+const [rev,appr,g,log]=await Promise.all([get(`/builds/${BUILD.build_id}/rule-reviews`),get(`/builds/${BUILD.build_id}/approvals`),get(`/builds/${BUILD.build_id}/guardrails`),get(`/builds/${BUILD.build_id}/audit`)]);
+const dis=(g.blockers||[]).length>0;
+setView(`<div class=card><h3>Approval — what exactly am I being asked to accept? ${trust('HUMAN')}</h3>
+<div class=cols2><div class=card><b>Gate 1 · Rule review</b><table><tr><th>rule</th><th>decision</th><th>action</th></tr>${(rev.reviews||[]).map(r=>`<tr><td class=mono>${r.rule_id}</td><td>${r.decision}</td><td><button class=btn ghost onclick="revDecide('${r.rule_id}','accept')">Accept</button> <button class=btn ghost onclick="revDecide('${r.rule_id}','reject')">Reject</button></td></tr>`).join('')}</table></div>
+<div class=card><b>Gate 2 · Patch review + guardrails</b><div class=mono>${JSON.stringify(g.checks,null,2)}\nblockers: ${JSON.stringify(g.blockers)}</div>
+<label>Reviewer <input id=revName value="Demo Reviewer"/></label> <label>Reason <input id=revReason value="Matches policy; all checks pass." style="width:260px"/></label><br/>
+<button class=btn ok ${dis?'disabled':''} onclick="patchDecide('approve')">APPROVE_CANDIDATE</button><button class=btn danger onclick="patchDecide('reject')">REJECT_PATCH</button><button class=btn ghost onclick="patchDecide('revision')">REQUEST_REVISION</button>
+${dis?'<p><small>APPROVE disabled by guardrails above.</small></p>':''}</div></div>
+<div class=cols2><div class=card><b>Gate 3 · Activation</b><p><small>Server-side hash verification before activation.</small></p><button class=btn ok onclick="activate()">Activate candidate procedure</button><div id=actOut class=mono></div></div>
+<div class=card><b>Approvals + audit timeline</b><div class=mono>${JSON.stringify(appr.approvals,null,2)}\n---\n${(log.audit||[]).map(e=>`${new Date(e.ts*1000).toISOString()} ${e.event}`).join('\n')}</div></div></div></div>`);}
+async function revDecide(rid,how){await post(`/builds/${BUILD.build_id}/rules/${rid}/${how}`,{reason:'UI review'});vApproval();}
+async function patchDecide(how){const map={approve:'patch/approve',reject:'patch/reject',revision:'patch/request-revision'};const r=await post(`/builds/${BUILD.build_id}/${map[how]}`,{reviewer:{reviewer_id:'USR-001',display_name:document.getElementById('revName').value},reason:document.getElementById('revReason').value,role:'PROCEDURE_OWNER'});
+if(r.code!==200){alert('Blocked: '+JSON.stringify(r.data));}else{BUILD=await get('/builds/'+BUILD.build_id);vApproval();render();}}
+async function activate(){const r=await post(`/procedures/${BUILD.patch.patched_workflow||'WF-V4'}/activate`,{build_id:BUILD.build_id,reviewer:{reviewer_id:'USR-001',display_name:'Demo Reviewer'},reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data,null,2).slice(0,800);}
+async function vBench(){setView('<div class=card>Loading benchmark…</div>');try{BENCH=await get('/benchmark-runs/latest');}catch(e){setView('<div class=card>Run <span class=mono>make benchmark</span> first.</div>');return;}
+const m={};(BENCH.cases||[]).forEach(c=>{const f=c.case_id.split('-')[0];m[f]=m[f]||{};m[f][c.status]=(m[f][c.status]||0)+1;});
+setView(`<div class=card><h3>ProcessPatchBench — how do we know this is more than one scripted demo?</h3><div class=mono>${JSON.stringify(BENCH.run_id||'latest',null,0)} ${(BENCH.cases||[]).length} scenarios</div>
+<table><tr><th>family</th><th>results</th></tr>${Object.entries(m).map(([k,v])=>`<tr><td>${k}</td><td class=mono>${JSON.stringify(v)}</td></tr>`).join('')}</table>
+<table><tr><th>case</th><th>split</th><th>status</th></tr>${(BENCH.cases||[]).map(c=>`<tr><td>${c.case_id}</td><td>${c.split||''}</td><td>${c.status}</td></tr>`).join('')}</table></div>`);}
+function vHist(){setView(`<div class=card><h3>Build History</h3><table><tr><th>build</th><th>status</th><th></th></tr>${HISTORY.map(b=>`<tr><td class=mono>${b.build_id||b}</td><td>${b.status||''}</td><td><button class=btn ghost onclick="openBuild('${b.build_id||b}')">Open</button></td></tr>`).join('')}</table></div>`);}
+async function openBuild(id){BUILD=await get('/builds/'+id);active='Overview';renderTabs();render();}
+renderTabs();render();loadHistory();
+</script>
+</body>
+</html>

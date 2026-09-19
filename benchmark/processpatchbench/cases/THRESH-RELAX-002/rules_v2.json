@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-SC-V2",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "score",
+      "operator": ">=",
+      "value": 75
+    },
+    "normalized_expression": "score >= 75",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-SC-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "3.1",
+      "source_text": "Interns must have score >= 75."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

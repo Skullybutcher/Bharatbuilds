@@ -1,0 +1,9 @@
+{
+  "type": "DEADLINE_EXTENDED",
+  "field": "submission_date",
+  "old": "2026-09-25",
+  "new": "2026-09-30",
+  "affected_rule_ids": [
+    "R-DL-V2"
+  ]
+}

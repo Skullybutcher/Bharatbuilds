@@ -1,0 +1,11 @@
+{
+  "required_effect": {
+    "gate": {
+      "field": "income",
+      "operator": "<=",
+      "value": 40000
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 6.0
+}

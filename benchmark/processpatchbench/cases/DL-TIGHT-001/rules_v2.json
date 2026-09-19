@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-DL-V2",
+    "kind": "deadline",
+    "subject": "applicant",
+    "action": "submit_claim",
+    "condition": {
+      "field": "submission_date",
+      "operator": "<=",
+      "value": "2026-09-25"
+    },
+    "normalized_expression": "submission_date <= 2026-09-25",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-DL-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "2.4",
+      "source_text": "Claims MUST NOT be submitted after 2026-09-25."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

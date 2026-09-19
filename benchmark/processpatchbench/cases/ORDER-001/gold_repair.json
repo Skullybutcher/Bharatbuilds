@@ -1,0 +1,7 @@
+{
+  "required_effect": {
+    "order_ok": true
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 12.0
+}

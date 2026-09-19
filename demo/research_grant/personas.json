@@ -1,0 +1,6 @@
+[
+  {"persona_id": "PERSONA-A", "name": "Wrongfully rejected student", "cgpa": 7.8, "year": 3, "backlogs": 0, "category": "general", "submission_date": "2026-09-28", "description": "Newly eligible under V2 but rejected by stale portal."},
+  {"persona_id": "PERSONA-B", "name": "Overburdened high achiever", "cgpa": 8.2, "year": 4, "backlogs": 0, "category": "general", "submission_date": "2026-09-28", "description": "Recommendation should be waived but stale portal requires it."},
+  {"persona_id": "PERSONA-C", "name": "Clearly eligible senior", "cgpa": 9.1, "year": 4, "backlogs": 0, "category": "general", "submission_date": "2026-09-28", "description": "Eligible under both versions; rec waived under V2."},
+  {"persona_id": "PERSONA-D", "name": "Clearly ineligible junior", "cgpa": 7.2, "year": 2, "backlogs": 2, "category": "general", "submission_date": "2026-09-28", "description": "Ineligible under both versions."}
+]

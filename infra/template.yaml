@@ -1,0 +1,341 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  ProcessPatch — Operational Rule Compiler with Counterexample-Guided Procedure
+  Repair. Event-driven, serverless, bursty. See docs/aws-setup.md.
+
+Parameters:
+  EnvName:
+    Type: String
+    Default: demo
+    Description: Resource suffix (demo, staging, prod).
+  GitHubRepo:
+    Type: String
+    Default: https://github.com/Stakeylock/Bharatbuilds.git
+    Description: Public repo backing the Amplify frontend branch.
+  ModelId:
+    Type: String
+    Default: amazon.nova-micro-v1:0
+    Description: Approved AWS model runtime for semantic extraction ONLY.
+  AmplifyBranch:
+    Type: String
+    Default: main
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 60
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        REGISTRY_TABLE: !Ref RegistryTable
+        PROCESSPATCH_STORAGE: dynamodb
+        MODEL_ID: !Ref ModelId
+        LOG_LEVEL: INFO
+
+Resources:
+  # ---------------- Storage ----------------
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration: { Status: Enabled }
+      NotificationConfiguration:
+        EventBridgeConfiguration: { EventBridgeEnabled: true }
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration: { Status: Enabled }
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldReports
+            Status: Enabled
+            ExpirationInDays: 365
+
+  RegistryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+        - { AttributeName: GSI_PK, AttributeType: S }
+        - { AttributeName: GSI_SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - { AttributeName: GSI_PK, KeyType: HASH }
+            - { AttributeName: GSI_SK, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+
+  # ---------------- API ----------------
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: ['GET', 'POST', 'OPTIONS']
+        AllowHeaders: ['Content-Type']
+
+  ApiFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.api_handler
+      CodeUri: ../
+      Timeout: 15
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref RegistryTable }
+        - Statement:
+            - Effect: Allow
+              Action: states:SendTaskSuccess
+              Resource: !Ref BuildStateMachine
+      Events:
+        Proxy:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: '/{proxy+}', Method: ANY }
+        Health:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: /, Method: GET }
+
+  # ---------------- Pipeline Lambdas ----------------
+  ExtractorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.extractor_handler
+      CodeUri: ../
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+        - S3ReadPolicy: { BucketName: !Ref SourceBucket }
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${ModelId}'
+
+  CompilerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.compiler_handler
+      CodeUri: ../
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+
+  WitnessFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.witness_handler
+      CodeUri: ../
+      Timeout: 120
+      MemorySize: 1024
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+        # NOTE: if Z3 containerization becomes necessary, move this function to
+        # PackageType: Image (see docs/aws-setup.md). Deterministic sampling runs here today.
+
+  ValidatorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.validator_handler
+      CodeUri: ../
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+        - S3WritePolicy: { BucketName: !Ref ArtifactBucket }
+
+  ImpactFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.impact_handler
+      CodeUri: ../
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+
+  GovernFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: services.aws_handlers.govern_handler
+      CodeUri: ../
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref RegistryTable }
+
+  # ---------------- Orchestration ----------------
+  BuildStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub 'processpatch-build-${EnvName}'
+      DefinitionUri: statemachine.asl.json
+      DefinitionSubstitutions:
+        ApiFnArn: !GetAtt ApiFn.Arn
+        ExtractorFnArn: !GetAtt ExtractorFn.Arn
+        CompilerFnArn: !GetAtt CompilerFn.Arn
+        WitnessFnArn: !GetAtt WitnessFn.Arn
+        ValidatorFnArn: !GetAtt ValidatorFn.Arn
+        ImpactFnArn: !GetAtt ImpactFn.Arn
+        GovernFnArn: !GetAtt GovernFn.Arn
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogs.Arn
+      Tracing: { Enabled: true }
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ApiFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ExtractorFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CompilerFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WitnessFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ValidatorFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ImpactFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref GovernFn
+        - DynamoDBWritePolicy:
+            TableName: !Ref RegistryTable
+        - S3WritePolicy:
+            BucketName: !Ref ArtifactBucket
+
+  StateMachineLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  NewPolicyEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: S3 policy upload -> start ProcessPatch build.
+      EventPattern:
+        source: [aws.s3]
+        detail-type: [Object Created]
+        detail:
+          bucket: { name: [!Ref SourceBucket] }
+      Targets:
+        - Arn: !Ref BuildStateMachine
+          Id: StartBuild
+          RoleArn: !GetAtt EventBridgeToSfnRole.Arn
+          InputTransformer:
+            InputPathsMap: { key: $.detail.object.key }
+            InputTemplate: '{"policy_s3_key": <key>}'
+
+  EventBridgeToSfnRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: events.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: start-executions
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref BuildStateMachine
+
+  # ---------------- Observability ----------------
+  ExecutionsFailedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'processpatch-${EnvName}-executions-failed'
+      MetricName: ExecutionsFailed
+      Namespace: AWS/States
+      Dimensions:
+        - Name: StateMachineArn
+          Value: !Ref BuildStateMachine
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+
+  FunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'processpatch-${EnvName}-lambda-errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'processpatch-${EnvName}'
+      DashboardBody: !Sub
+        - '${Body}'
+        - Body:
+            Fn::Transform:
+              Name: AWS::Include
+              Parameters: { Location: ./cloudwatch-dashboard.json }
+          SM: !Ref BuildStateMachine
+
+  # ---------------- Frontend ----------------
+  FrontendApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub 'processpatch-${EnvName}'
+      Repository: !Ref GitHubRepo
+      BuildSpec: |
+        version: 1
+        frontend:
+          phases:
+            build:
+              commands: []
+          artifacts:
+            baseDirectory: frontend
+            files:
+              - '**/*'
+          cache:
+            paths: []
+
+  FrontendBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt FrontendApp.AppId
+      BranchName: !Ref AmplifyBranch
+      EnableAutoBuild: true
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API base URL.
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  StateMachineArn:
+    Value: !Ref BuildStateMachine
+  RegistryTable:
+    Value: !Ref RegistryTable
+  SourceBucket:
+    Value: !Ref SourceBucket
+  ArtifactBucket:
+    Value: !Ref ArtifactBucket
+  DashboardName:
+    Value: !Ref Dashboard
+  AmplifyAppId:
+    Value: !GetAtt FrontendApp.AppId

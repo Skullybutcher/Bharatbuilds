@@ -1,0 +1,10 @@
+{
+  "type": "COMPOUND",
+  "field": "cgpa",
+  "old": 8.0,
+  "new": 7.8,
+  "affected_rule_ids": [
+    "R-ELIG-V2",
+    "R-TR-V2"
+  ]
+}

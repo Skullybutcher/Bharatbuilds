@@ -1,0 +1,82 @@
+[
+  {
+    "rule_id": "R-ELIG-V1",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "cgpa",
+      "operator": ">=",
+      "value": 8.0
+    },
+    "normalized_expression": "cgpa >= 8.0",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.1",
+      "source_text": "Applicants must have CGPA >= 8.0."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  },
+  {
+    "rule_id": "R-REC-V1",
+    "kind": "obligation",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": null,
+    "normalized_expression": "recommendation_required = true",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.2",
+      "source_text": "All applicants must provide a faculty recommendation."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  },
+  {
+    "rule_id": "R-ORD-V1",
+    "kind": "prerequisite",
+    "subject": "applicant",
+    "action": "final_submission",
+    "condition": {
+      "prerequisite": "dept_approval",
+      "target": "final_submission",
+      "relation": "BEFORE"
+    },
+    "normalized_expression": "dept_approval BEFORE final_submission",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.3",
+      "source_text": "Department approval must occur before final submission."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

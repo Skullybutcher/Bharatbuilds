@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "processpatch"
+version = "0.1.0"
+description = "ProcessPatch: Operational Rule Compiler with Counterexample-Guided Procedure Repair"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,49 @@
+{
+ "patch_id": "PATCH-0001",
+ "operations": [
+  {
+   "op": "CHANGE_CONDITION",
+   "node_id": "NODE-ELIGIBILITY",
+   "old": {
+    "operator": ">=",
+    "value": 8.0
+   },
+   "new": {
+    "operator": ">=",
+    "value": 7.5
+   }
+  },
+  {
+   "op": "CHANGE_REQUIRED_FLAG",
+   "node_id": "NODE-REC-UPLOAD",
+   "field": "recommendation_file",
+   "old": {
+    "required": true,
+    "required_condition": null
+   },
+   "new": {
+    "required": true,
+    "required_condition": {
+     "field": "cgpa",
+     "operator": "<",
+     "value": 8.0,
+     "datatype": "decimal"
+    }
+   },
+   "rationale": "IMPLEMENTS_RULE RULE-REC-014"
+  },
+  {
+   "op": "ADD_GATE",
+   "node_id": "NODE-REC-UPLOAD",
+   "condition": {
+    "field": "cgpa",
+    "operator": "<",
+    "value": 8.0,
+    "datatype": "decimal"
+   }
+  }
+ ],
+ "cost": 5.0,
+ "cost_breakdown": "w1*nodes + w2*edges + w3*conds + w4*fields",
+ "strategy": "smallest validated candidate found (localized; not claimed globally minimal)"
+}

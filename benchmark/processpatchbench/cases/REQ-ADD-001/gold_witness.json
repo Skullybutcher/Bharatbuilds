@@ -1,0 +1,14 @@
+{
+  "kinds": [
+    "missing_safeguard"
+  ],
+  "domains": {
+    "missing_safeguard": [
+      {
+        "field": "cgpa",
+        "operator": ">=",
+        "value": 7.5
+      }
+    ]
+  }
+}

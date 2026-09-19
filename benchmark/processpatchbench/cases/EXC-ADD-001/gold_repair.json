@@ -1,0 +1,15 @@
+{
+  "required_effect": {
+    "required_probe": {
+      "action": "upload_recommendation",
+      "case_true": {
+        "category": "general"
+      },
+      "case_false": {
+        "category": "X"
+      }
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 9.0
+}

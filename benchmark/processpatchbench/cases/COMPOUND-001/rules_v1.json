@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-ELIG-V1",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "cgpa",
+      "operator": ">=",
+      "value": 8.0
+    },
+    "normalized_expression": "cgpa >= 8.0",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.1",
+      "source_text": "Applicants must have CGPA >= 8.0."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  }
+]

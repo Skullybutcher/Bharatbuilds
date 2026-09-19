@@ -1,0 +1,13 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "type": "object",
+ "title": "PatchCertificate",
+ "required": [
+  "build",
+  "policy",
+  "procedure_before",
+  "witnesses",
+  "tests_after",
+  "status"
+ ]
+}

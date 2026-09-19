@@ -1,0 +1,29 @@
+{
+  "widgets": [
+    {"type": "text", "x": 0, "y": 0, "width": 24, "height": 2,
+     "properties": {"markdown": "# ProcessPatch — compile/test/patch pipeline\nCustom namespace: **ProcessPatch** (CompileRuns, WitnessesFound, NeedsReviewCount, ExtractionFailures, PatchValidationFailures)."}},
+    {"type": "metric", "x": 0, "y": 2, "width": 12, "height": 6,
+     "properties": {"title": "Step Functions executions", "region": "${AWS::Region}",
+       "metrics": [["AWS/States", "ExecutionsStarted", "StateMachineArn", "${SM}"],
+                   [".", "ExecutionsSucceeded", ".", "."],
+                   [".", "ExecutionsFailed", ".", "."]], "stat": "Sum", "period": 300}},
+    {"type": "metric", "x": 12, "y": 2, "width": 12, "height": 6,
+     "properties": {"title": "Lambda errors + throttles", "region": "${AWS::Region}",
+       "metrics": [["AWS/Lambda", "Errors", {"stat": "Sum"}],
+                   [".", "Throttles", {"stat": "Sum"}]], "stat": "Sum", "period": 300}},
+    {"type": "metric", "x": 0, "y": 8, "width": 12, "height": 6,
+     "properties": {"title": "Pipeline latency (p50 duration)", "region": "${AWS::Region}",
+       "metrics": [["AWS/Lambda", "Duration", {"stat": "p50"}],
+                   ["AWS/States", "ExecutionTime", {"stat": "p50"}]], "period": 300}},
+    {"type": "metric", "x": 12, "y": 8, "width": 12, "height": 6,
+     "properties": {"title": "Domain metrics (ProcessPatch namespace)", "region": "${AWS::Region}",
+       "metrics": [["ProcessPatch", "CompileRuns", {"stat": "Sum"}],
+                   [".", "WitnessesFound", {"stat": "Sum"}],
+                   [".", "NeedsReviewCount", {"stat": "Sum"}],
+                   [".", "PatchValidationFailures", {"stat": "Sum"}]], "period": 300}},
+    {"type": "metric", "x": 0, "y": 14, "width": 24, "height": 6,
+     "properties": {"title": "DynamoDB throttles + latency", "region": "${AWS::Region}",
+       "metrics": [["AWS/DynamoDB", "ReadThrottleEvents", {"stat": "Sum"}],
+                   [".", "WriteThrottleEvents", {"stat": "Sum"}]], "period": 300}}
+  ]
+}

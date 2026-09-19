@@ -1,0 +1,9 @@
+{
+  "type": "THRESHOLD_TIGHTENED",
+  "field": "amount",
+  "old": 100000,
+  "new": 50000,
+  "affected_rule_ids": [
+    "R-LIM-V2"
+  ]
+}

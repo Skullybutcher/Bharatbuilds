@@ -1,0 +1,9 @@
+{
+  "type": "THRESHOLD_RELAXED",
+  "field": "score",
+  "old": 80,
+  "new": 75,
+  "affected_rule_ids": [
+    "R-SC-V2"
+  ]
+}

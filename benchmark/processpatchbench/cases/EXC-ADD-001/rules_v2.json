@@ -1,0 +1,54 @@
+[
+  {
+    "rule_id": "R-REC-V1",
+    "kind": "obligation",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": null,
+    "normalized_expression": "recommendation_required = true",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.2",
+      "source_text": "All applicants must provide a faculty recommendation."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  },
+  {
+    "rule_id": "R-EXC-V2",
+    "kind": "exception",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": {
+      "field": "category",
+      "operator": "==",
+      "value": "X"
+    },
+    "normalized_expression": "waive rec IF category == X",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.3",
+      "source_text": "Recommendation is waived if applicant category is X."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

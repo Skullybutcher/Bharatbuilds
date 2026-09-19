@@ -1,0 +1,7 @@
+{
+  "type": "OBLIGATION_ADDED",
+  "action": "identity_verification",
+  "affected_rule_ids": [
+    "R-IDV-V2"
+  ]
+}

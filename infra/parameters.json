@@ -1,0 +1,6 @@
+{
+  "EnvName": "demo",
+  "GitHubRepo": "https://github.com/Stakeylock/Bharatbuilds.git",
+  "ModelId": "amazon.nova-micro-v1:0",
+  "AmplifyBranch": "main"
+}

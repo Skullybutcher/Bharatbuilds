@@ -1,0 +1,19 @@
+{
+  "kinds": [
+    "deadline_mismatch"
+  ],
+  "domains": {
+    "deadline_mismatch": [
+      {
+        "field": "submission_date",
+        "operator": ">",
+        "value": "2026-09-25"
+      },
+      {
+        "field": "submission_date",
+        "operator": "<=",
+        "value": "2026-09-30"
+      }
+    ]
+  }
+}

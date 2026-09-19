@@ -1,0 +1,90 @@
+{
+  "workflow_id": "WF-T2",
+  "procedure_version_id": "WF-T2-V1",
+  "version_label": "WF-T2-V1",
+  "status": "active",
+  "nodes": [
+    {
+      "node_id": "NODE-START",
+      "workflow_id": "WF-T2",
+      "type": "start",
+      "label": "Start",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {},
+      "provenance_links": []
+    },
+    {
+      "node_id": "NODE-GATE",
+      "workflow_id": "WF-T2",
+      "type": "gate",
+      "label": "Check amount",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "kind": "threshold_gate",
+        "field": "amount",
+        "operator": "<=",
+        "value": 100000
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-LIM-V1"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-STEP",
+      "workflow_id": "WF-T2",
+      "type": "action",
+      "label": "Upload Receipt",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "form_field": "receipt_file",
+        "action": "upload_receipt",
+        "required": true,
+        "required_condition": null
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-RCT-V1"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-SUBMIT",
+      "workflow_id": "WF-T2",
+      "type": "action",
+      "label": "Final Submission",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "submit"
+      },
+      "provenance_links": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "NODE-START",
+      "to": "NODE-GATE",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-GATE",
+      "to": "NODE-STEP",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-STEP",
+      "to": "NODE-SUBMIT",
+      "type": "NEXT",
+      "condition": null
+    }
+  ]
+}

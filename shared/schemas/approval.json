@@ -1,0 +1,12 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "type": "object",
+ "title": "Approval",
+ "required": [
+  "approval_id",
+  "build_id",
+  "decision",
+  "artifacts",
+  "timestamp"
+ ]
+}

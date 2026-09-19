@@ -1,0 +1,54 @@
+[
+  {
+    "rule_id": "R-LIM-V1",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "amount",
+      "operator": "<=",
+      "value": 50000
+    },
+    "normalized_expression": "amount <= 50000",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.1",
+      "source_text": "Claims up to amount <= 50000 are accepted."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  },
+  {
+    "rule_id": "R-IDV-V2",
+    "kind": "obligation",
+    "subject": "applicant",
+    "action": "identity_verification",
+    "condition": null,
+    "normalized_expression": "identity_verification = true",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.5",
+      "source_text": "All claims must complete identity verification."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

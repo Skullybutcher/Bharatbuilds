@@ -1,0 +1,19 @@
+{
+  "kinds": [
+    "wrong_acceptance"
+  ],
+  "domains": {
+    "wrong_acceptance": [
+      {
+        "field": "income",
+        "operator": ">",
+        "value": 40000
+      },
+      {
+        "field": "income",
+        "operator": "<=",
+        "value": 60000
+      }
+    ]
+  }
+}

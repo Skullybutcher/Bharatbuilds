@@ -1,0 +1,100 @@
+{
+ "patch_id": "PATCH-0001",
+ "operations": [
+  {
+   "op": "CHANGE_CONDITION",
+   "node_id": "NODE-AMOUNT-GATE",
+   "old": {
+    "operator": "<=",
+    "value": 100000
+   },
+   "new": {
+    "operator": "<=",
+    "value": 50000
+   }
+  },
+  {
+   "op": "CHANGE_REQUIRED_FLAG",
+   "node_id": "NODE-MGR-APPROVAL",
+   "field": "manager_signoff",
+   "old": {
+    "required": true,
+    "required_condition": null
+   },
+   "new": {
+    "required": true,
+    "required_condition": {
+     "field": "amount",
+     "operator": ">",
+     "value": 50000,
+     "datatype": "integer"
+    }
+   },
+   "rationale": "IMPLEMENTS_RULE REIMB-APPR-102"
+  },
+  {
+   "op": "ADD_GATE",
+   "node_id": "NODE-MGR-APPROVAL",
+   "condition": {
+    "field": "amount",
+    "operator": ">",
+    "value": 50000,
+    "datatype": "integer"
+   }
+  },
+  {
+   "op": "MOVE_NODE",
+   "node_id": "NODE-VERIFY",
+   "anchor": {
+    "before": "NODE-PAYMENT"
+   },
+   "rationale": "IMPLEMENTS_RULE REIMB-ORD-102"
+  },
+  {
+   "op": "ADD_PREREQUISITE",
+   "prerequisite": "verification",
+   "target": "payment",
+   "rationale": "IMPLEMENTS_RULE REIMB-ORD-102"
+  },
+  {
+   "op": "REMOVE_EDGE",
+   "from": "NODE-PAYMENT",
+   "to": "NODE-VERIFY"
+  },
+  {
+   "op": "ADD_EDGE",
+   "from": "NODE-MGR-APPROVAL",
+   "to": "NODE-VERIFY"
+  },
+  {
+   "op": "REMOVE_EDGE",
+   "from": "NODE-MGR-APPROVAL",
+   "to": "NODE-PAYMENT"
+  },
+  {
+   "op": "ADD_EDGE",
+   "from": "NODE-VERIFY",
+   "to": "NODE-PAYMENT"
+  },
+  {
+   "op": "ADD_NODE",
+   "node_id": "NODE-DEADLINE-GATE",
+   "label": "Check Submission Deadline",
+   "implementation": {
+    "kind": "deadline_gate",
+    "field": "submission_date",
+    "operator": "<=",
+    "value": "2026-09-30"
+   },
+   "rationale": "IMPLEMENTS_RULE REIMB-DL-102"
+  },
+  {
+   "op": "ADD_EDGE",
+   "from": "NODE-START",
+   "to": "NODE-DEADLINE-GATE"
+  }
+ ],
+ "cost": 18.0,
+ "cost_breakdown": "w1*nodes + w2*edges + w3*conds + w4*fields",
+ "strategy": "smallest validated candidate found (localized; not claimed globally minimal)"
+}

@@ -1,0 +1,5 @@
+{
+  "type": "OBLIGATION_REMOVED",
+  "action": "manager_approval",
+  "affected_rule_ids": []
+}

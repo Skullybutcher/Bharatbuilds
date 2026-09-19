@@ -1,0 +1,7 @@
+{
+  "type": "CONDITION_CHANGED",
+  "action": "upload_transcript",
+  "affected_rule_ids": [
+    "R-TR-V2"
+  ]
+}

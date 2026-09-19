@@ -1,0 +1,86 @@
+{
+  "workflow_id": "WF-T7",
+  "procedure_version_id": "WF-T7-V1",
+  "version_label": "WF-T7-V1",
+  "status": "active",
+  "nodes": [
+    {
+      "node_id": "NODE-START",
+      "workflow_id": "WF-T7",
+      "type": "start",
+      "label": "Start",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {},
+      "provenance_links": []
+    },
+    {
+      "node_id": "NODE-PAY",
+      "workflow_id": "WF-T7",
+      "type": "action",
+      "label": "Release Payment",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "payment",
+        "role": "payment"
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-ORD"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-VERIFY",
+      "workflow_id": "WF-T7",
+      "type": "action",
+      "label": "Verify Claim",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "verification",
+        "role": "verification"
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-ORD"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-SUBMIT",
+      "workflow_id": "WF-T7",
+      "type": "action",
+      "label": "Final Submission",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "submit"
+      },
+      "provenance_links": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "NODE-START",
+      "to": "NODE-PAY",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-PAY",
+      "to": "NODE-VERIFY",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-VERIFY",
+      "to": "NODE-SUBMIT",
+      "type": "NEXT",
+      "condition": null
+    }
+  ]
+}

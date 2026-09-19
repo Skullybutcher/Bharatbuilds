@@ -1,0 +1,65 @@
+{
+  "workflow_id": "WF-T5",
+  "procedure_version_id": "WF-T5-V1",
+  "version_label": "WF-T5-V1",
+  "status": "active",
+  "nodes": [
+    {
+      "node_id": "NODE-START",
+      "workflow_id": "WF-T5",
+      "type": "start",
+      "label": "Start",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {},
+      "provenance_links": []
+    },
+    {
+      "node_id": "NODE-APPR",
+      "workflow_id": "WF-T5",
+      "type": "approval",
+      "label": "Manager Approval",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "form_field": "manager_signoff",
+        "action": "manager_approval",
+        "required": true,
+        "required_condition": null,
+        "approver": "manager_approval"
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-AP-V1"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-SUBMIT",
+      "workflow_id": "WF-T5",
+      "type": "action",
+      "label": "Final Submission",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "submit"
+      },
+      "provenance_links": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "NODE-START",
+      "to": "NODE-APPR",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-APPR",
+      "to": "NODE-SUBMIT",
+      "type": "NEXT",
+      "condition": null
+    }
+  ]
+}

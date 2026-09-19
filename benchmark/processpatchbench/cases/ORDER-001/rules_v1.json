@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-ORD-V1",
+    "kind": "prerequisite",
+    "subject": "workflow",
+    "action": "verification",
+    "condition": {
+      "prerequisite": "payment",
+      "target": "verification",
+      "relation": "BEFORE"
+    },
+    "normalized_expression": "payment BEFORE verification",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "2.3",
+      "source_text": "Payment must occur before verification."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  }
+]

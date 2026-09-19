@@ -1,0 +1,11 @@
+{
+  "required_effect": {
+    "gate": {
+      "field": "score",
+      "operator": ">=",
+      "value": 75
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 6.0
+}

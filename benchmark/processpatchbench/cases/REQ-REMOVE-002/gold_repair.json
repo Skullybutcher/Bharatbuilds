@@ -1,0 +1,10 @@
+{
+  "required_effect": {
+    "required": {
+      "action": "manager_approval",
+      "value": false
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 6.0
+}

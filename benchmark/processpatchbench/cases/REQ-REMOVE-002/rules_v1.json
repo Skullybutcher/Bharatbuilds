@@ -1,0 +1,26 @@
+[
+  {
+    "rule_id": "R-AP-V1",
+    "kind": "obligation",
+    "subject": "applicant",
+    "action": "manager_approval",
+    "condition": null,
+    "normalized_expression": "manager_approval = true",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "3.1",
+      "source_text": "All claims must receive manager approval."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  }
+]

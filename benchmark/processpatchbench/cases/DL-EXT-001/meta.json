@@ -1,0 +1,22 @@
+{
+  "case_id": "DL-EXT-001",
+  "family": "deadline_extended",
+  "domain": "university_application",
+  "split": "dev",
+  "behavioral_change": true,
+  "repairable": true,
+  "requires_human_review": false,
+  "benchmark_version": "v0.1.0",
+  "variables": {
+    "cgpa": {
+      "type": "decimal",
+      "min": 0,
+      "max": 10
+    },
+    "amount": {
+      "type": "integer",
+      "min": 0,
+      "max": 200000
+    }
+  }
+}

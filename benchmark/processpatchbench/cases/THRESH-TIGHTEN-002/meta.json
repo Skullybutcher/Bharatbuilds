@@ -1,0 +1,22 @@
+{
+  "case_id": "THRESH-TIGHTEN-002",
+  "family": "threshold_tightening",
+  "domain": "housing_assistance",
+  "split": "eval",
+  "behavioral_change": true,
+  "repairable": true,
+  "requires_human_review": false,
+  "benchmark_version": "v0.1.0",
+  "variables": {
+    "cgpa": {
+      "type": "decimal",
+      "min": 0,
+      "max": 10
+    },
+    "amount": {
+      "type": "integer",
+      "min": 0,
+      "max": 200000
+    }
+  }
+}

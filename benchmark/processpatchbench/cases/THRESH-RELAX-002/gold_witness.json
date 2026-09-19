@@ -1,0 +1,19 @@
+{
+  "kinds": [
+    "wrong_rejection"
+  ],
+  "domains": {
+    "wrong_rejection": [
+      {
+        "field": "score",
+        "operator": ">=",
+        "value": 75
+      },
+      {
+        "field": "score",
+        "operator": "<",
+        "value": 80
+      }
+    ]
+  }
+}

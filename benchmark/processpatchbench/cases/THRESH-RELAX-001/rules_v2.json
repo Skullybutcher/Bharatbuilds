@@ -1,0 +1,86 @@
+[
+  {
+    "rule_id": "R-ELIG-V2",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "cgpa",
+      "operator": ">=",
+      "value": 7.5
+    },
+    "normalized_expression": "cgpa >= 7.5",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-ELIG-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.1",
+      "source_text": "Applicants must have CGPA >= 7.5."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  },
+  {
+    "rule_id": "R-REC-V2",
+    "kind": "conditional_obligation",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": {
+      "field": "cgpa",
+      "operator": "<",
+      "value": 8.0
+    },
+    "normalized_expression": "IF cgpa < 8.0 THEN rec",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-REC-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.2",
+      "source_text": "A faculty recommendation is required only when CGPA < 8.0."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  },
+  {
+    "rule_id": "R-ORD-V1",
+    "kind": "prerequisite",
+    "subject": "applicant",
+    "action": "final_submission",
+    "condition": {
+      "prerequisite": "dept_approval",
+      "target": "final_submission",
+      "relation": "BEFORE"
+    },
+    "normalized_expression": "dept_approval BEFORE final_submission",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.3",
+      "source_text": "Department approval must occur before final submission."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

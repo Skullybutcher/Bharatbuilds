@@ -1,0 +1,10 @@
+{
+  "required_effect": {
+    "required": {
+      "action": "upload_transcript",
+      "value": true
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 9.0
+}

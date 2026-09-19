@@ -1,0 +1,35 @@
+{
+  "workflow_id": "WF-RESEARCH-GRANT",
+  "procedure_version_id": "WF-V3",
+  "version_label": "v3 (implements POLICY-V1 — STALE)",
+  "status": "active",
+  "nodes": [
+    {"node_id": "NODE-START", "workflow_id": "WF-RESEARCH-GRANT", "type": "start",
+     "label": "Start Application", "preconditions": [], "postconditions": [],
+     "implementation": {}, "provenance_links": []},
+    {"node_id": "NODE-ELIGIBILITY", "workflow_id": "WF-RESEARCH-GRANT", "type": "gate",
+     "label": "Check CGPA Eligibility", "preconditions": [],
+     "postconditions": ["eligibility_checked = true"],
+     "implementation": {"kind": "threshold_gate", "field": "cgpa", "operator": ">=", "value": 8.0, "on_fail": "REJECT"},
+     "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": "RULE-ELIG-009"}]},
+    {"node_id": "NODE-REC-UPLOAD", "workflow_id": "WF-RESEARCH-GRANT", "type": "action",
+     "label": "Upload Recommendation", "preconditions": [],
+     "postconditions": ["recommendation_uploaded = true"],
+     "implementation": {"form_field": "recommendation_file", "action": "upload_recommendation", "required": true, "required_condition": null},
+     "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": "RULE-REC-009"}]},
+    {"node_id": "NODE-DEPT-APPROVAL", "workflow_id": "WF-RESEARCH-GRANT", "type": "approval",
+     "label": "Department Approval", "preconditions": [], "postconditions": ["dept_approved = true"],
+     "implementation": {"approver": "dept_approval"},
+     "provenance_links": [{"type": "IMPLEMENTS_RULE", "target": "RULE-ORD-009"}]},
+    {"node_id": "NODE-SUBMIT", "workflow_id": "WF-RESEARCH-GRANT", "type": "action",
+     "label": "Final Submission", "preconditions": ["dept_approved = true"],
+     "postconditions": ["submitted = true"],
+     "implementation": {"action": "submit"}, "provenance_links": []}
+  ],
+  "edges": [
+    {"from": "NODE-START", "to": "NODE-ELIGIBILITY", "type": "NEXT", "condition": null},
+    {"from": "NODE-ELIGIBILITY", "to": "NODE-REC-UPLOAD", "type": "NEXT", "condition": null},
+    {"from": "NODE-REC-UPLOAD", "to": "NODE-DEPT-APPROVAL", "type": "NEXT", "condition": null},
+    {"from": "NODE-DEPT-APPROVAL", "to": "NODE-SUBMIT", "type": "NEXT", "condition": null}
+  ]
+}

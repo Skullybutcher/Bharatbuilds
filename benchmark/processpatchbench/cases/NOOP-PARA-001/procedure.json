@@ -1,0 +1,64 @@
+{
+  "workflow_id": "WF-T10",
+  "procedure_version_id": "WF-T10-V1",
+  "version_label": "WF-T10-V1",
+  "status": "active",
+  "nodes": [
+    {
+      "node_id": "NODE-START",
+      "workflow_id": "WF-T10",
+      "type": "start",
+      "label": "Start",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {},
+      "provenance_links": []
+    },
+    {
+      "node_id": "NODE-DL",
+      "workflow_id": "WF-T10",
+      "type": "gate",
+      "label": "Check Submission Deadline",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "kind": "deadline_gate",
+        "field": "submission_date",
+        "operator": "<=",
+        "value": "2026-09-30"
+      },
+      "provenance_links": [
+        {
+          "type": "IMPLEMENTS_RULE",
+          "target": "R-DL-V1"
+        }
+      ]
+    },
+    {
+      "node_id": "NODE-SUBMIT",
+      "workflow_id": "WF-T10",
+      "type": "action",
+      "label": "Final Submission",
+      "preconditions": [],
+      "postconditions": [],
+      "implementation": {
+        "action": "submit"
+      },
+      "provenance_links": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "NODE-START",
+      "to": "NODE-DL",
+      "type": "NEXT",
+      "condition": null
+    },
+    {
+      "from": "NODE-DL",
+      "to": "NODE-SUBMIT",
+      "type": "NEXT",
+      "condition": null
+    }
+  ]
+}

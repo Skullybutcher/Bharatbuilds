@@ -1,0 +1,22 @@
+[
+  {"rule_id": "RULE-ELIG-009", "kind": "threshold", "subject": "applicant", "action": "eligible",
+   "condition": {"field": "cgpa", "operator": ">=", "value": 8.0, "datatype": "decimal"},
+   "normalized_expression": "cgpa >= 8.0", "effective_from": "2026-08-01", "effective_to": "2026-09-17",
+   "status": "superseded", "supersedes": null,
+   "provenance": {"policy_version_id": "POLICY-V1", "document_sha256": "v1-placeholder", "page": 2, "section": "4.1",
+                  "source_text": "Applicants must have CGPA >= 8.0."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 1.0, "review_state": "accepted"}},
+  {"rule_id": "RULE-REC-009", "kind": "obligation", "subject": "applicant", "action": "upload_recommendation",
+   "condition": null, "normalized_expression": "recommendation_required = true",
+   "effective_from": "2026-08-01", "effective_to": "2026-09-17", "status": "superseded", "supersedes": null,
+   "provenance": {"policy_version_id": "POLICY-V1", "document_sha256": "v1-placeholder", "page": 3, "section": "4.2",
+                  "source_text": "All applicants must provide a faculty recommendation."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 1.0, "review_state": "accepted"}},
+  {"rule_id": "RULE-ORD-009", "kind": "prerequisite", "subject": "workflow", "action": "final_submission",
+   "condition": {"prerequisite": "dept_approval", "target": "final_submission", "relation": "BEFORE"},
+   "normalized_expression": "dept_approval BEFORE final_submission",
+   "effective_from": "2026-08-01", "effective_to": null, "status": "active", "supersedes": null,
+   "provenance": {"policy_version_id": "POLICY-V1", "document_sha256": "v1-placeholder", "page": 3, "section": "4.3",
+                  "source_text": "Department approval must occur before final submission."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 1.0, "review_state": "accepted"}}
+]

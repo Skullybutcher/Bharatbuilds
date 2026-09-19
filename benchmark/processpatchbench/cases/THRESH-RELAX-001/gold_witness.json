@@ -1,0 +1,27 @@
+{
+  "kinds": [
+    "wrong_rejection",
+    "unnecessary_burden"
+  ],
+  "domains": {
+    "wrong_rejection": [
+      {
+        "field": "cgpa",
+        "operator": ">=",
+        "value": 7.5
+      },
+      {
+        "field": "cgpa",
+        "operator": "<",
+        "value": 8.0
+      }
+    ],
+    "unnecessary_burden": [
+      {
+        "field": "cgpa",
+        "operator": ">=",
+        "value": 8.0
+      }
+    ]
+  }
+}

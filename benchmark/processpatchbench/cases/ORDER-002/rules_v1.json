@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-ORD-V1",
+    "kind": "prerequisite",
+    "subject": "workflow",
+    "action": "dept_approval",
+    "condition": {
+      "prerequisite": "final_submission",
+      "target": "dept_approval",
+      "relation": "BEFORE"
+    },
+    "normalized_expression": "final_submission BEFORE dept_approval",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.2",
+      "source_text": "Final submission must occur before department approval."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  }
+]

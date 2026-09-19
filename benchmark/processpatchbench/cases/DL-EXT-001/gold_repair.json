@@ -1,0 +1,11 @@
+{
+  "required_effect": {
+    "deadline": {
+      "field": "submission_date",
+      "operator": "<=",
+      "value": "2026-09-30"
+    }
+  },
+  "forbidden_operations": [],
+  "max_locality_cost": 6.0
+}

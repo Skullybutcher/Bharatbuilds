@@ -1,0 +1,12 @@
+{
+  "type": "EXCEPTION_ADDED",
+  "action": "upload_recommendation",
+  "exception_condition": {
+    "field": "category",
+    "operator": "==",
+    "value": "X"
+  },
+  "affected_rule_ids": [
+    "R-EXC-V2"
+  ]
+}

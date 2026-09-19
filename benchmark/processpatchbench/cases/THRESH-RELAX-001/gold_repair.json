@@ -1,0 +1,13 @@
+{
+  "required_effect": {
+    "gate": {
+      "field": "cgpa",
+      "operator": ">=",
+      "value": 7.5
+    }
+  },
+  "forbidden_operations": [
+    "REMOVE_NODE:NODE-APPR"
+  ],
+  "max_locality_cost": 9.0
+}

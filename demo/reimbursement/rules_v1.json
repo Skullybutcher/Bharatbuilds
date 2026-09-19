@@ -1,0 +1,22 @@
+[
+  {"rule_id": "REIMB-LIMIT-101", "kind": "threshold", "subject": "claim", "action": "eligible",
+   "condition": {"field": "amount", "operator": "<=", "value": 100000, "datatype": "integer"},
+   "normalized_expression": "amount <= 100000", "effective_from": "2026-06-01", "effective_to": "2026-09-17",
+   "status": "superseded", "supersedes": null,
+   "provenance": {"policy_version_id": "REIMB-V1", "document_sha256": "r1", "page": 1, "section": "2.1",
+                  "source_text": "Claims up to amount <= 100000 are accepted without extra review."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 1.0, "review_state": "accepted"}},
+  {"rule_id": "REIMB-APPR-101", "kind": "obligation", "subject": "claimant", "action": "manager_approval",
+   "condition": null, "normalized_expression": "manager_approval = true",
+   "effective_from": "2026-06-01", "effective_to": "2026-09-17", "status": "superseded", "supersedes": null,
+   "provenance": {"policy_version_id": "REIMB-V1", "document_sha256": "r1", "page": 1, "section": "2.2",
+                  "source_text": "All claims must receive manager approval."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 1.0, "review_state": "accepted"}},
+  {"rule_id": "REIMB-ORD-101", "kind": "prerequisite", "subject": "workflow", "action": "payment",
+   "condition": {"prerequisite": "verification", "target": "payment", "relation": "BEFORE"},
+   "normalized_expression": "verification BEFORE payment",
+   "effective_from": "2026-06-01", "effective_to": null, "status": "active", "supersedes": null,
+   "provenance": {"policy_version_id": "REIMB-V1", "document_sha256": "r1", "page": 2, "section": "2.3",
+                  "source_text": "Payment must occur after verification."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 1.0, "review_state": "accepted"}}
+]

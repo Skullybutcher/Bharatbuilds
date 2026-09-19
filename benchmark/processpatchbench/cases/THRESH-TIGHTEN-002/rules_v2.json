@@ -1,0 +1,30 @@
+[
+  {
+    "rule_id": "R-IN-V2",
+    "kind": "threshold",
+    "subject": "applicant",
+    "action": "eligible",
+    "condition": {
+      "field": "income",
+      "operator": "<=",
+      "value": 40000
+    },
+    "normalized_expression": "income <= 40000",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "active",
+    "supersedes": "R-IN-V1",
+    "provenance": {
+      "policy_version_id": "PV2",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "1.1",
+      "source_text": "Households with income <= 40000 are eligible."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "accepted"
+    }
+  }
+]

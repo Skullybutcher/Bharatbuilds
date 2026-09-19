@@ -1,0 +1,14 @@
+{
+  "kinds": [
+    "missing_safeguard"
+  ],
+  "domains": {
+    "missing_safeguard": [
+      {
+        "field": "category",
+        "operator": "==",
+        "value": "X"
+      }
+    ]
+  }
+}

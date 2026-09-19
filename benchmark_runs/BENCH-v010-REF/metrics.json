@@ -1,0 +1,33 @@
+{
+  "total": 26,
+  "by_status": {
+    "AUTO_REPAIRED": 19,
+    "CORRECTLY_NO_OP": 3,
+    "CORRECTLY_ESCALATED": 4
+  },
+  "auto_repair_rate": 0.731,
+  "correct_noop_rate": 1.0,
+  "correct_escalation_rate": 1.0,
+  "extraction_accuracy": {
+    "kind": 1.0,
+    "operator": 1.0,
+    "value": 1.0,
+    "condition": 1.0,
+    "source_span": 1.0
+  },
+  "delta_classification_accuracy": 1.0,
+  "witness_validity": 1.0,
+  "witness_completeness": 1.0,
+  "localization_recall": 1.0,
+  "repair_success": 1.0,
+  "preservation_rate": 1.0,
+  "median_patch_cost": 3.0,
+  "median_latency_s": {
+    "extraction": 0.0,
+    "delta": 0.0,
+    "witness": 0.0,
+    "localize": 0.0,
+    "repair": 0.0
+  },
+  "provenance_coverage": 1.0
+}

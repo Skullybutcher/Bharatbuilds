@@ -1,0 +1,23 @@
+[
+  {"rule_id": "RULE-ELIG-014", "kind": "threshold", "subject": "applicant", "action": "eligible",
+   "condition": {"field": "cgpa", "operator": ">=", "value": 7.5, "datatype": "decimal"},
+   "normalized_expression": "cgpa >= 7.5", "effective_from": "2026-09-18", "effective_to": null,
+   "status": "active", "supersedes": "RULE-ELIG-009",
+   "provenance": {"policy_version_id": "POLICY-V2", "document_sha256": "v2-placeholder", "page": 2, "section": "4.1",
+                  "source_text": "Applicants must have CGPA >= 7.5."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 0.98, "review_state": "accepted"}},
+  {"rule_id": "RULE-REC-014", "kind": "conditional_obligation", "subject": "applicant", "action": "upload_recommendation",
+   "condition": {"field": "cgpa", "operator": "<", "value": 8.0, "datatype": "decimal"},
+   "normalized_expression": "IF cgpa < 8.0 THEN recommendation_required = true ELSE false",
+   "effective_from": "2026-09-18", "effective_to": null, "status": "active", "supersedes": "RULE-REC-009",
+   "provenance": {"policy_version_id": "POLICY-V2", "document_sha256": "v2-placeholder", "page": 3, "section": "4.2",
+                  "source_text": "A faculty recommendation is required only when CGPA < 8.0."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 0.93, "review_state": "accepted"}},
+  {"rule_id": "RULE-ORD-014", "kind": "prerequisite", "subject": "workflow", "action": "final_submission",
+   "condition": {"prerequisite": "dept_approval", "target": "final_submission", "relation": "BEFORE"},
+   "normalized_expression": "dept_approval BEFORE final_submission",
+   "effective_from": "2026-09-18", "effective_to": null, "status": "active", "supersedes": "RULE-ORD-009",
+   "provenance": {"policy_version_id": "POLICY-V2", "document_sha256": "v2-placeholder", "page": 3, "section": "4.3",
+                  "source_text": "Department approval must occur before final submission."},
+   "extraction": {"model": "hand-authored-fixture", "confidence": 0.99, "review_state": "accepted"}}
+]

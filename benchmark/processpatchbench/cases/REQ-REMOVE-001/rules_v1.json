@@ -1,0 +1,26 @@
+[
+  {
+    "rule_id": "R-REC-V1",
+    "kind": "obligation",
+    "subject": "applicant",
+    "action": "upload_recommendation",
+    "condition": null,
+    "normalized_expression": "recommendation_required = true",
+    "effective_from": "2026-09-18",
+    "effective_to": null,
+    "status": "superseded",
+    "supersedes": null,
+    "provenance": {
+      "policy_version_id": "PV1",
+      "document_sha256": "bench",
+      "page": 2,
+      "section": "4.2",
+      "source_text": "All applicants must provide a faculty recommendation."
+    },
+    "extraction": {
+      "model": "hand-authored-gold",
+      "confidence": 0.95,
+      "review_state": "superseded"
+    }
+  }
+]

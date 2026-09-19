@@ -1,0 +1,17 @@
+{
+  "required_effect": {
+    "required_probe": {
+      "action": "upload_transcript",
+      "case_true": {
+        "backlogs": 2
+      },
+      "case_false": {
+        "backlogs": 0
+      }
+    }
+  },
+  "forbidden_operations": [
+    "REMOVE_NODE:NODE-STEP"
+  ],
+  "max_locality_cost": 9.0
+}
