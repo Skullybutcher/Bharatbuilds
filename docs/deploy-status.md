@@ -1,106 +1,50 @@
-# Deploy status — live outside-in audit (2026-09-19)
+# Deploy status — live status page (re-audited 2026-09-19)
 
-Target: `https://main.d1bq8os9dwj0d.amplifyapp.com/`. Method: unauthenticated
-curl from outside AWS, exactly what a judge's browser would do. No console
-access, no credentials, nothing changed.
+Target: `https://main.d1bq8os9dwj0d.amplifyapp.com/` + its HttpApi
+(`https://ssv1hifpvl.execute-api.ap-south-1.amazonaws.com/prod`, read from the
+live `/config.js`). Method: unauthenticated curl from outside AWS. Prior
+doom-report: T25 audit same URL (localhost `config.js`, 404 `/api/*`, stale
+shell) — all three fixed since.
 
-## Verdict table
+## Verdict table (today's evidence)
 
 | Check | Result | Evidence |
 |---|---|---|
-| UI shell `/` | WORKS | 200 `text/html`; renders brand header, build badge, nav skeleton |
-| `/config.js` | SERVES BUT STALE | 200, byte-identical to the checked-in Amplify default (see below) |
-| `/api/health` through the site | BROKEN (404) | No rewrite/proxy to the HttpApi — by repo design the UI must call the HttpApi URL directly |
-| Protected route without token | UNTESTABLE via site | `POST /api/builds` 404s before any auth layer runs; direct-API 401 check deferred until the API URL is wired |
-| Deployed frontend version | STALE | Shell links only `./styles.css` — no `./fonts/fonts.css`, no `./vendor/phosphor.css`, old meta description: predates the T12 design-system build |
+| `/config.js` points at the real API | WORKS | Serves `window.PROCESSPATCH_API = ... "https://ssv1hifpvl.execute-api.ap-south-1.amazonaws.com/prod"` — zero `localhost:8000` |
+| Deployed UI is current | WORKS | Shell (2763 B) carries fonts, phosphor icons, theme boot, and palette markers (was 1731 B pre-T12) |
+| API reachable + auth wall | WORKS | `/auth/config` 200 with real pool (`processpatch-demo-…`, client `3ri60…`); unauthenticated `POST /builds` → 401 |
+| CORS origin echo | WORKS | `Access-Control-Allow-Origin: https://main.d1bq8os9dwj0d.amplifyapp.com` + `Vary: origin` on live responses |
+| Preflight from a real browser | BLOCKED (new finding) | `OPTIONS /builds` with Origin → **401** (`WWW-Authenticate: Bearer`): the authorizer runs on preflight, and a non-2xx preflight fails every browser call that needs one — i.e. all POSTs and everything carrying `Authorization`. curl is green; browsers are not |
+| `/health` is 401 | MINOR / STALE DOC | `docs/auth.md` lists `/health` as NO_AUTH, but `infra/template.yaml` exempts only `/`, `/demo/canonical`, `/auth/config` — deployed matches the template, so the doc (or the template) needs a one-liner. Flagged, not fixed here |
+| Cognito callback whitelist | PRIOR VERIFIED, not re-probed | T35 verified evil-origin `redirect_mismatch` vs ours → login page; today's direct probes of the authorize endpoint didn't complete from this network — no change claimed either way |
+| Demo password set by human | REMAINING (owner action) | Unverifiable from outside; see `docs/auth.md` "Deployed demo login" (print-once block from `deploy.sh`) |
+| Full cloud E2E | REMAINING | `scripts/cloud_smoke.sh` exists; needs a run with real creds + URL by the human |
 
-## The confirmed known issue (precise)
+## Done on 2026-09-19 (old fix-runbook, shrunk)
 
-`/config.js` serves this, verbatim:
-
-```js
-// Generated at Amplify build time from $API_URL (deploy default: localhost).
-window.PROCESSPATCH_API = window.PROCESSPATCH_API || "http://localhost:8000";
-```
-
-`$API_URL` was never injected at build time — this is the repo default, not a
-generated file. Exact judge-visible failure: clicking Compile Amendment makes
-the browser fetch `http://localhost:8000/demo/canonical?...`, which fails
-with `ERR_CONNECTION_REFUSED` (a judge's laptop runs no API), and the UI
-renders "Request failed: Failed to fetch" plus the hint "Start the API with
-`python -m services.api.server`" — a local-dev instruction that is wrong on a
-deployed site and will read as a broken demo.
-
-Root causes, both verified: (1) **no buildspec in the repo consumes
-`$API_URL`** — there is no `amplify.yml` or buildspec anywhere, so nothing
-could have generated `config.js` even if the variable were set
-(`docs/architecture.md` says "API_URL injected at build"; the wiring was
-never implemented); (2) `/api/*` 404s because Amplify serves static
-`frontend/` only — the fix is pointing the UI at the HttpApi, not proxying.
-
-## Fix runbook (human; console + CLI, no code changes needed for steps 0–1, 3–5)
-
-**Step 0 — get the real API URL** from the stack that `infra/deploy.sh`
-already queries:
-
-```bash
-aws cloudformation describe-stacks --stack-name <stack> \
-  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text
-```
-
-(Outputs tab of the CloudFormation console shows the same value; see the
-Outputs docs below. This mirrors `infradeploy.sh` lines 16–25.)
-
-**Step 1 — set `API_URL` on the Amplify app.** Amplify console → Hosting →
-Environment variables → Manage variables → Variable `API_URL`, Value
-`<ApiUrl from step 0>` → Save. Console path per AWS docs (Hosting →
-Environment variables → Manage variables; variables apply across branches
-unless overridden).
-
-**Step 2 — wire `$API_URL` into `config.js` at build time.** Nothing in the
-repo does this today, so pick one: (a) Amplify console → Hosting → Build
-settings → Edit build spec, add a pre-build command that generates the file,
-e.g. `printf 'window.PROCESSPATCH_API = "%s";\n' "$API_URL" >
-frontend/config.js` (the app reads `window.PROCESSPATCH_API` at boot, so
-this format is compatible); or (b) ask Buffy to add repo-side buildspec
-wiring (infra-adjacent, backend-owned — logged as a follow-up, not done
-here).
-
-**Step 3 — redeploy so the new build picks up the variable.** App overview
-page → branch → deployment → **Redeploy this version** (env vars only take
-effect on a fresh build).
-
-**Step 4 — confirm CORS allows the Amplify origin.** API Gateway console →
-the HTTP API → CORS: `allowOrigins` must include
-`https://main.d1bq8os9dwj0d.amplifyapp.com`. The repo design already intends
-this (`infra/template.yaml` sets `AllowOrigins: [FrontendOrigin]` and
-`deploy.sh` redeploys with `FrontendOrigin=$BRANCH_URL`) — verify it stuck;
-if not, fix via console or `aws apigatewayv2 update-api --api-id <id>
---cors-configuration AllowOrigins=https://main.d1bq8os9dwj0d.amplifyapp.com`.
-Cognito callback URLs are wired the same way (`CallbackURLs` includes
-`${FrontendOrigin}/`), so sign-in redirect breaks identically if this is
-wrong — check it in the same pass.
-
-**Step 5 — re-audit live.** `curl /config.js` must show the real URL, not
-localhost; a browser session must show zero `localhost:8000` calls in the
-network tab; an unauthenticated `POST` to a protected route on the real API
-URL must return 401 (authorizer working), not 404 or CORS errors.
+Config generation, CORS allow-list, callback whitelist, and DemoAdmin +
+print-once password all shipped via the T33/T35/T37 deploy work — detail in
+those agents.md log rows, not repeated here. The one piece still open from
+that runbook is a **browser-visible preflight failure**: per AWS, when a
+`$default` route plus authorizer catches `OPTIONS`, add an `OPTIONS /{proxy+}`
+route without authorization so preflight returns 2xx (AWS docs, "Configuring
+CORS for an HTTP API with a `$default` route and an authorizer"). That's an
+infra change for Buffy/human — the ACAO echo being correct is necessary but
+not sufficient, and no curl-based check can catch it.
 
 ## AWS docs cited
 
-- Amplify environment variables (console path, branch overrides):
-  https://docs.aws.amazon.com/amplify/latest/userguide/setting-env-vars.html
-- Redeploy pattern (overview → branch → deployment → Redeploy this version):
-  https://docs.aws.amazon.com/amplify/latest/userguide/custom-build-instance.html
-- HTTP API CORS (`allowOrigins`, console + CLI):
+- HTTP API CORS + the `$default`-route preflight case:
   https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html
-- CloudFormation Outputs (Outputs tab / `describe-stacks`):
+- Amplify environment variables:
+  https://docs.aws.amazon.com/amplify/latest/userguide/setting-env-vars.html
+- CloudFormation Outputs:
   https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html
 
-## Judge-readiness checklist (after the fix)
+## Judge-readiness checklist (current state)
 
-1. `/config.js` serves the real API URL; no `localhost:8000` anywhere in it.
-2. Compile Amendment in a clean browser completes without console errors.
-3. Unauthenticated protected call returns 401, never 404 or a CORS failure.
-4. Sign-in redirect returns to the Amplify domain (Cognito callbacks wired).
-5. `scripts/judge_demo.py` still prints ALL 6 BEATS VERIFIED against local.
+1. `/config.js` serves the real API URL; network tab shows zero `localhost:8000` calls.
+2. Unauthenticated protected call returns 401 (authorizer working, verified live).
+3. In a REAL browser (not curl): sign in and complete an authenticated POST — blocked until the unauthenticated `OPTIONS /{proxy+}` route ships (preflight 401s today).
+4. Demo password set by human; sign-in as demo-admin verified before showtime.
+5. `scripts/judge_demo.py` ALL 6 BEATS VERIFIED + `scripts/cloud_smoke.sh` green against the live API.

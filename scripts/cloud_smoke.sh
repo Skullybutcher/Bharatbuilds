@@ -31,17 +31,28 @@ echo "$AUTHCFG"
 CLIENT=$(echo "$AUTHCFG" | jqpy "d['client_id']")
 DOMAIN=$(echo "$AUTHCFG" | jqpy "d['domain']")
 
-# ---- PASSWORD grant -> tokens (same creds the UI host would produce) -------
+# ---- PASSWORD auth via InitiateAuth (USER_PASSWORD_AUTH) --------------------
+# NOTE: the OAuth2 /oauth2/token endpoint only serves AllowedOAuthFlows ([code]);
+# the password grant lives on the InitiateAuth API (ALLOW_USER_PASSWORD_AUTH).
 say "login ($EMAIL)"
-TOKENS=$(curl -fsS -X POST "https://$DOMAIN/oauth2/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=password" \
-  --data-urlencode "client_id=$CLIENT" \
-  --data-urlencode "username=$EMAIL" \
-  --data-urlencode "password=$PASS" \
-  --data-urlencode "scope=openid email") || { echo "login failed — check the password from the deploy log" >&2; exit 2; }
-TOKEN=$(echo "$TOKENS" | jqpy "d['id_token'] or d['access_token']")
-[ -n "$TOKEN" ] && [ "$TOKEN" != "None" ] || { echo "no token in response" >&2; exit 2; }
+REGION=$(echo "$API" | sed -E 's#https://[^.]+\.execute-api\.([a-z0-9-]+)\.amazonaws\.com.*#\1#')
+TOKENS=$(curl -fsS -X POST "https://cognito-idp.$REGION.amazonaws.com/" \
+  -H "Content-Type: application/x-amz-json-1.1" \
+  -H "X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth" \
+  -d '{"AuthFlow":"USER_PASSWORD_AUTH","ClientId":"'"$CLIENT"'","AuthParameters":{"USERNAME":"'"$EMAIL"'","PASSWORD":"'"$PASS"'"}}') \
+  || { echo "login failed — check the password" >&2; exit 2; }
+IDTOK=$(echo "$TOKENS" | jqpy "d['AuthenticationResult']['IdToken']")
+ACCTOK=$(echo "$TOKENS" | jqpy "d['AuthenticationResult']['AccessToken']")
+# Some HTTP-API authorizer configs accept the ID token, others want the access
+# token — probe /builds with each and keep whichever the stack honors.
+TOKEN=""
+for CAND in "$IDTOK" "$ACCTOK"; do
+  [ -n "$CAND" ] && [ "$CAND" != "None" ] || continue
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' "$API/builds" -H "Authorization: Bearer $CAND")
+  if [ "$CODE" = "200" ]; then TOKEN="$CAND"; break; fi
+  echo "  token rejected on /builds (HTTP $CODE) — trying next"
+done
+[ -n "$TOKEN" ] || { echo "both tokens rejected by the API authorizer — check AuthorizationScopes/audience config" >&2; exit 2; }
 echo "token: ${TOKEN:0:24}…"
 AH="Authorization: Bearer $TOKEN"
 

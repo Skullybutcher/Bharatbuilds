@@ -203,7 +203,11 @@ Resources:
         DefaultAuthorizer: CognitoAuthorizer
         Authorizers:
           CognitoAuthorizer:
-            AuthorizationScopes: [openid, email]
+            # NO AuthorizationScopes — Cognito ID tokens (what the UI and the
+            # smoke script send) never carry a scope claim, so requiring
+            # openid/email 403s EVERY caller. The browser flow only worked
+            # pre-auth because nobody could log in. Audience + issuer checks
+            # are the real gate (T38).
             JwtConfiguration:
               audience: [!Ref WebClient]
               issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
