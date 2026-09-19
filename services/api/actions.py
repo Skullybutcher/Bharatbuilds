@@ -700,6 +700,7 @@ def describe_execution(arn: str):
     import boto3  # lazy
     d = boto3.client("stepfunctions").describe_execution(executionArn=arn)
     return {"executionArn": arn, "status": d.get("status"), "started": str(d.get("startDate")),
+            "error": d.get("error"), "cause": (d.get("cause") or "")[:1500],
             "output": (d.get("output") or "")[:2000]}
 
 
