@@ -10,10 +10,11 @@ PARAMS="$(dirname "$0")/parameters.json"
 
 command -v sam >/dev/null || { echo "install AWS SAM CLI first"; exit 1; }
 command -v aws >/dev/null || { echo "install AWS CLI first"; exit 1; }
+[ -n "${AMPLIFY_TOKEN:-}" ] || { echo "AMPLIFY_TOKEN is required; add it as a GitHub Actions secret before deployment" >&2; exit 2; }
 
 # Auth params are passed explicitly below (resolved from stack outputs), so
 # exclude them here to avoid duplicate --parameter-overrides keys.
-OVERRIDES=$(python3 -c "import json;print(' '.join(f\"ParameterKey={k},ParameterValue={v}\" for k,v in json.load(open('$PARAMS')).items() if k not in ('FrontendOrigin','PP_USER_POOL_ID','PP_CLIENT_ID','PP_AUTH_DOMAIN')))")
+OVERRIDES=$(python3 -c 'import json,sys; excluded={"FrontendOrigin","PP_USER_POOL_ID","PP_CLIENT_ID","PP_AUTH_DOMAIN"}; parameters=json.load(open(sys.argv[1], encoding="utf-8")); print(" ".join("ParameterKey={},ParameterValue={}".format(key,value) for key,value in parameters.items() if key not in excluded))' "$PARAMS")
 BOOTSTRAP_ORIGIN="https://main.dummy.amplifyapp.com"
 # shellcheck disable=SC2086
 sam build --template-file infra/template.yaml

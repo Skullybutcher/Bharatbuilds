@@ -50,4 +50,6 @@ jobs:
         run: aws sts get-caller-identity
       - uses: aws-actions/setup-sam@v2
       - name: Deploy backend
+        env:
+          AMPLIFY_TOKEN: ${{ secrets.AMPLIFY_TOKEN }}
         run: bash infra/deploy.sh

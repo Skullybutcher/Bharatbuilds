@@ -84,6 +84,9 @@ with the real Amplify branch URL on the second pass. The
 scripts expand with stdlib python. Model calls are restricted to extraction (Bedrock InvokeModel
 scoped to `ModelId`, default `amazon.nova-micro-v1:0`).
 
+For GitHub Actions, create the repository secret `AMPLIFY_TOKEN`. The workflow
+maps it to the deployment script, which checks it before running SAM.
+
 ## Validate without credentials
 
 `make infra-validate` parses the template (CFN-aware YAML), checks every
