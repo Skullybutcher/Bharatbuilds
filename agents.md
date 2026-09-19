@@ -58,6 +58,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T5 | Backend standing by: fixes/reviews requested by T1–T4; no frontend edits | **Buffy** | everything except `frontend/**` | STANDBY |
 | T6 | Repair GitHub Actions AWS OIDC deployment authentication | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 | T7 | Diagnose recurring GitHub Actions OIDC trust rejection | **GitHub Copilot** | `docs/aws-setup.md`, `agents.md` | DONE |
+| T8 | Eliminate GitHub OIDC role ARN secret mismatch | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -84,6 +85,9 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 ## 6. Activity log (append-only, newest first)
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
+
+
+- 2026-09-19 19:00 | GitHub Copilot | T8 | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE: removed the unreadable `AWS_DEPLOY_ROLE_ARN` secret as a role-selection failure point; workflow now uses verified role ARN and runs `aws sts get-caller-identity`; AWS trust/provider verified; workflow assertion, infra validation, 178/178 verify, and 70/70 pytest PASS | human should push this commit and rerun Actions; commit: "Use verified IAM role for GitHub OIDC deploy"
 
 
 - 2026-09-19 18:30 | GitHub Copilot | T7 | `docs/aws-setup.md`, `agents.md`, AWS IAM role trust | DONE: verified GitHub OIDC provider and audience; updated `GitHubActionsProcessPatchDeploy` trust from a single exact ref subject to repository-scoped `repo:Skullybutcher/Bharatbuilds:*`; workflow retains `id-token: write` and `contents: read` | rerun the workflow; commit: "Broaden GitHub OIDC trust to repository subjects"

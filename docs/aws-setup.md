@@ -39,16 +39,16 @@ Provider URL: https://token.actions.githubusercontent.com
 Audience: sts.amazonaws.com
 ```
 
-The role stored in the repository secret `AWS_DEPLOY_ROLE_ARN` must trust that
-provider with `sts:AssumeRoleWithWebIdentity` and restrict the subject to this
-repository. A suffix wildcard accommodates GitHub branch and environment
-subject formats:
+The role used by the workflow must trust that provider with
+`sts:AssumeRoleWithWebIdentity` and restrict the subject to this repository. A
+suffix wildcard accommodates GitHub branch and environment subject formats:
 
 ```text
 repo:Skullybutcher/Bharatbuilds:*
 ```
 
-Set the repository secret to the ARN of the role, for example:
+The workflow uses the verified role ARN directly so a stale or malformed
+repository secret cannot select a different role:
 
 ```text
 arn:aws:iam::262786914860:role/GitHubActionsProcessPatchDeploy
