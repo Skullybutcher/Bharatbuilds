@@ -23,3 +23,20 @@ jobs:
         run: python scripts/benchmark.py --run-id "BENCH-CI-$GITHUB_SHA"
       - name: Infra validation (no credentials)
         run: python scripts/validate_infra.py
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: aws-actions/setup-sam@v2
+      - name: Deploy backend
+        run: bash infra/deploy.sh
