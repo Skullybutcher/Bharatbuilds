@@ -59,6 +59,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T6 | Repair GitHub Actions AWS OIDC deployment authentication | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 | T7 | Diagnose recurring GitHub Actions OIDC trust rejection | **GitHub Copilot** | `docs/aws-setup.md`, `agents.md` | DONE |
 | T8 | Eliminate GitHub OIDC role ARN secret mismatch | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
+| T9 | Add one-run GitHub OIDC claim diagnostics | **GitHub Copilot** | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE |
 
 Backlog (unassigned): Cognito MFA toggle, trace CSV bulk ingestion, benchmark
 v0.4 families, SFN ASL tests for auth-related resume gates.
@@ -85,6 +86,9 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 ## 6. Activity log (append-only, newest first)
 
 Format: `- YYYY-MM-DD HH:MM | agent | task | files touched | result | notes/commit-msg-proposal`
+
+
+- 2026-09-19 19:30 | GitHub Copilot | T9 | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE: added non-secret GitHub repository/ref/event/run diagnostics before OIDC, made STS audience explicit, added run-specific session name; workflow assertion, live trust, infra validation, 178/178 verify, and 70/70 pytest PASS | push once and inspect the five context lines if AWS still rejects; commit: "Diagnose GitHub OIDC claims before AWS authentication"
 
 
 - 2026-09-19 19:00 | GitHub Copilot | T8 | `.github/workflows/ci.yml`, `docs/aws-setup.md`, `agents.md` | DONE: removed the unreadable `AWS_DEPLOY_ROLE_ARN` secret as a role-selection failure point; workflow now uses verified role ARN and runs `aws sts get-caller-identity`; AWS trust/provider verified; workflow assertion, infra validation, 178/178 verify, and 70/70 pytest PASS | human should push this commit and rerun Actions; commit: "Use verified IAM role for GitHub OIDC deploy"

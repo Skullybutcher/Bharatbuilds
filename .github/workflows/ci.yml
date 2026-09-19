@@ -33,10 +33,19 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Check GitHub OIDC context
+        run: |
+          echo "repository=${{ github.repository }}"
+          echo "ref=${{ github.ref }}"
+          echo "event=${{ github.event_name }}"
+          echo "workflow=${{ github.workflow }}"
+          echo "run_id=${{ github.run_id }}"
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::262786914860:role/GitHubActionsProcessPatchDeploy
           aws-region: ap-south-1
+          audience: sts.amazonaws.com
+          role-session-name: github-actions-${{ github.run_id }}
       - name: Verify AWS identity
         run: aws sts get-caller-identity
       - uses: aws-actions/setup-sam@v2
