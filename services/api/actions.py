@@ -738,6 +738,45 @@ def compare_traces(bid: str):
     return _cmp(_need(bid))
 
 
+def drift_report(workflow_id: str | None = None, scope=None, workspace=None):
+    """T70 — post-activation drift monitor. Replays recent traces against the
+    CURRENTLY ACTIVE procedure and reports the disagreement rate over time.
+    compare_traces is the pre-patch half of the loop ("did we fix what traces
+    flagged?"); this is the post-activation half ("is reality drifting away
+    from the active graph?"). Read-only; list-scoped like /traces.
+
+    No ?workflow_id= falls back to the workflow the active procedure serves,
+    so a judge can hit /drift with zero parameters and get a real answer."""
+    from services.traces.store import drift_report as _rep
+    from services.registry.store import list_procedure_versions
+    if not workflow_id:
+        actives = sorted([v for v in list_procedure_versions()
+                          if v.get("status") == "active"],
+                         key=lambda v: v.get("created_at", 0), reverse=True)
+        # workspace scope filters first when enforcement is on
+        if workspace is not None:
+            actives = [v for v in actives
+                       if (v.get("workspace_id") or "default") == workspace]
+        elif scope is not None:
+            actives = [v for v in actives
+                       if (v.get("workspace_id") or "default") in scope]
+        if not actives:
+            raise KeyError("no active procedure — activate a build first")
+        workflow_id = actives[0].get("workflow_id")
+    from services.registry.store import get_active_procedure
+    active = get_active_procedure(workflow_id)
+    # workspace resolution: explicit ?workspace_id= wins; otherwise the active
+    # procedure's own workspace — always membership-checked when enforcement is on
+    ws = workspace or ((active or {}).get("workspace_id") or "default")
+    if scope is not None and ws not in scope:
+        raise PermissionError("active procedure is outside your workspaces")
+    try:
+        return _rep(workflow_id, ws)
+    except KeyError as e:
+        raise KeyError(str(e).replace("no active procedure for workflow ",
+                                      "no active procedure for ")) from e
+
+
 def nominate_witness(bid: str, body: dict):
     """Human-nominated candidate witness from a runtime trace (T15).
 

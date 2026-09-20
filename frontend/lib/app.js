@@ -7,7 +7,7 @@
    authMaybeExchange, authFetchCfg, esc, get, post,
    openEvidence, closeEvidence, downloadBundle, archiveBuild, toggleArchived,
    runReverify, setWorkspace, openBundlePicker, openBundleFile,
-   openFileEvidence, openFileError. */
+   openFileEvidence, openFileError, vDrift, driftHtml, fillDrift. */
 let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null;
 /* Theme: light (paper — the ledger default) unless stored dark or OS dark. */
 function applyTheme(t){if(t==='light'||t==='dark'||t==='lab'){if(t==='light'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',t);}}else{document.documentElement.removeAttribute('data-theme');}
@@ -16,7 +16,7 @@ function toggleTheme(){const cur=document.documentElement.getAttribute('data-the
  const next={light:'dark',dark:'lab',lab:'light'}[cur]||'light';applyTheme(next);try{localStorage.setItem('pp_theme',next);}catch(e){}}
 try{const t=localStorage.getItem('pp_theme')||'lab';applyTheme(t);}catch(e){}
 try{if(window.PROCESSPATCH_API){API=window.PROCESSPATCH_API;}}catch(e){}
-const TABS=['Overview','Impact','Witnesses','Procedure','Patch','Tests','Approval','Traces','Benchmarks','Builds'];
+const TABS=['Overview','Impact','Witnesses','Procedure','Patch','Tests','Approval','Traces','Drift','Benchmarks','Builds'];
 let active='Overview';
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 const api=()=>{const el=document.getElementById('apiBase');if(el&&!el.value)el.value=API;return (el&&el.value||API).replace(/\/$/,'');};
@@ -56,7 +56,7 @@ async function post(p,b){const r=await fetch(api()+p,{method:'POST',headers:{'Co
 function setView(h){document.getElementById('view').innerHTML=h;}
 function loading(msg){setView('<div class="card"><div class="loading" role="status">'+esc(msg||'Loading…')+'<span class="skel"></span><span class="skel"></span></div></div>');}
 function showErr(e){setView('<div class="card"><div class="err" role="alert"><h3>We couldn’t complete that request</h3><p>'+esc(e.message||e)+'</p><small>Check your connection and sign-in status, then try again.</small></div><button class="btn ghost" onclick="render()" style="margin-top:16px">Return to workspace</button></div>');}
-const NAV_ICONS={Overview:'graph',Impact:'crosshair',Witnesses:'fingerprint',Procedure:'flow-arrow',Patch:'git-diff',Tests:'check-square',Approval:'seal-check',Traces:'radioactive',Benchmarks:'chart-bar',Builds:'stack'};
+const NAV_ICONS={Overview:'graph',Impact:'crosshair',Witnesses:'fingerprint',Procedure:'flow-arrow',Patch:'git-diff',Tests:'check-square',Approval:'seal-check',Traces:'radioactive',Drift:'trend-up',Benchmarks:'chart-bar',Builds:'stack'};
 function renderTabs(){const t=document.getElementById('tabs');t.innerHTML='<div class="sec">Build</div>'+TABS.map(x=>'<button class="nav-item'+(x===active?' active':'')+'" '+(x===active?'aria-current="page"':'')+' onclick="go(\''+x+'\')"><i class="ph ph-'+(NAV_ICONS[x]||'square')+'" aria-hidden="true"></i>'+esc(x)+'</button>').join('')+'<div class="sec">AWS</div><div class="aws-chip" id="awsBox"></div>';const ab=document.getElementById('awsBox');if(ab)ab.innerHTML='<b>Cloud execution</b>'+(EXECArn?('running · '+esc(EXECArn.slice(0,34))+'…'):'none yet — use Cloud (top right)');const aub=document.getElementById('authBtn');if(aub)aub.textContent=AUTH.user?('Sign out · '+AUTH.user.role):'Sign in';}
 function go(x){active=x;renderTabs();render();}
 function badge(){const b=document.getElementById('buildBadge');if(!BUILD){b.textContent='no build yet';b.className='badge';return;}const n=(BUILD.witnesses||[]).length;const st=BUILD.status||'?';b.textContent=BUILD.build_id+' · '+st+' · '+n+' witnesses';b.className='badge '+(st==='PATCH_VALIDATED'||st==='PATCH_ACTIVE'?'pass':(n?'fail':'warn'));}
@@ -90,7 +90,7 @@ function dragPolicy(){const ta=document.getElementById('policyText');if(!ta)retu
  ['dragleave','drop'].forEach(ev=>ta.addEventListener(ev,e=>{e.preventDefault();ta.classList.remove('drag');}));
  ta.addEventListener('drop',e=>{const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];if(f)readPolicyFile(f);});}
 function readPolicyFile(f){const r=new FileReader();r.onload=()=>{const ta=document.getElementById('policyText');if(ta){ta.value=String(r.result||'');ta.focus();}};r.readAsText(f);}
-try{({Overview:vOverview,Impact:vImpact,Witnesses:vWit,Procedure:vProc,Patch:vPatch,Tests:vTests,Approval:vApproval,Traces:vTraces,Benchmarks:vBench,Builds:vHist})[active]();}catch(e){showErr(e);}}
+try{({Overview:vOverview,Impact:vImpact,Witnesses:vWit,Procedure:vProc,Patch:vPatch,Tests:vTests,Approval:vApproval,Traces:vTraces,Drift:vDrift,Benchmarks:vBench,Builds:vHist})[active]();}catch(e){showErr(e);}}
 /* ---------- actions ---------- */
 async function runBuild(){const d=document.getElementById('domain').value;loading('Compiling amendment (deterministic pipeline)…');try{BUILD=await get('/demo/canonical?domain='+d);}catch(e){showErr(e);return;}drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
 async function refreshBuild(){if(BUILD){try{BUILD=await get('/builds/'+BUILD.build_id);}catch(e){}render();}}
@@ -137,10 +137,11 @@ setView('<div class="card"><p class="kicker">Build status</p><div class="card-he
 +'<div class="cols4">'+[['Semantic changes',(BUILD.impact||{}).semantic_changes||((BUILD.semantic_delta||{}).affected_rule_ids||[]).length||'—'],['Verified witnesses',w.length],['Affected nodes',((BUILD.impact||{}).artifacts||{}).nodes_affected||'—'],['Patch checks',(v.passed||'—')+'/'+(v.total||'—')]].map(a=>'<div class="card flat stat"><div class="num">'+esc(a[1])+'</div><div class="lbl">'+esc(a[0])+'</div></div>').join('')+'</div>'
 +'<div class="pipeline-strip" aria-label="Pipeline">Policy change <span class="sep">→</span> Compile <span class="sep">→</span> Witness <span class="sep">→</span> Localized patch <span class="sep">→</span> Regression tests <span class="sep">→</span> Validated procedure <span class="sep">→</span> <b style="color:var(--txt)">Human approval</b></div></div>'
 +'<div class="card">'+gateSpine()+'</div>'
++'<div id="driftSignal"></div>'
 +hero+'<div class="card"><div class="card-head"><h3>Synthetic portal — driven by procedure JSON</h3></div><label class="field">CGPA <input id="cgpa" value="7.80"/></label> <label class="field">Amount <input id="amt" value="40000"/></label> '
 +'<button class="btn" onclick="checkPortal(false)">Check (current portal)</button><button class="btn ghost" onclick="checkPortal(true)">Check (patched preview)</button><div id="portalOut" class="mono" style="margin-top:16px" role="status" aria-live="polite"></div></div>'
 +'<div class="card"><div class="card-head"><h3>Policy input</h3></div><label class="field" for="policyText">Policy text</label><textarea aria-label="Policy amendment text" id="policyText" rows="4" placeholder="Paste policy text, or upload a .md file"></textarea><br/><input aria-label="Upload policy file" type="file" accept=".md,.txt" onchange="loadPolicyFile(this)"/> <button class="btn" onclick="submitPolicy()">Compile pasted policy</button> <small>Unparseable or qualified input stays PENDING at Gate 1.</small></div>');
-fillCoverage();}
+fillCoverage();fillDrift();}
 /* ---------- Impact ---------- */
 let drilled=null;
 async function vImpact(){const im=BUILD.impact||{};const b=im.behavioral||{},tc=im.test_cohort||{},v=im.verification||{};const max=Math.max(1,...Object.values(b));
@@ -361,6 +362,28 @@ const body={case:c,outcome:{eligible:document.getElementById('trElig').checked,o
 const r=await post('/traces',wsBody(body));const el=document.getElementById('traceOut');if(el)el.textContent=r.code===200?('ingested '+(r.data&&r.data.trace_id||'')):('error: '+JSON.stringify(r.data));vTraces();}
 async function ingestCsv(){const csv=document.getElementById('traceCsv').value;if(!csv.trim()){alert('paste CSV first');return;}const r=await post('/traces/csv',wsBody({csv:csv,workflow_id:(BUILD&&BUILD.procedure||{}).workflow_id||null}));const el=document.getElementById('csvOut');if(r.code!==200){if(el)el.textContent='error: '+((r.data&&r.data.error)||JSON.stringify(r.data));}else{if(el)el.textContent='ingested '+r.data.ingested+' · duplicates '+r.data.duplicates;}vTraces();}
 async function nominateTrace(tid){if(!BUILD)return;loading('Verifying nominated witness through the build pipeline…');const r=await post('/builds/'+BUILD.build_id+'/nominate-witness',{trace_id:tid,reviewer:authReviewer()});if(r.code!==200){alert('Refused: '+((r.data&&r.data.error)||JSON.stringify(r.data)));return;}const d=r.data||{};if(d.verified){BUILD=await get('/builds/'+BUILD.build_id);}vTraces();if(d.verified){setTimeout(()=>alert('Witness '+d.witness.witness_id+' verified via the build pipeline and added to this build.'),50);}else{setTimeout(()=>alert(d.reason||'pipeline found no new witness for this case'),50);}}
+/* ---------- Drift (T71: renders GET /drift exactly) ---------- */
+function driftHtml(d){d=d||{};const rate=d.disagreement_rate;
+const head=(typeof rate==='number'&&isFinite(rate))?((Math.round(rate*1000)/10)+'% disagreeing'):'no evaluated traces';
+const counts=[['Agree',d.agree||0],['Disagree',d.disagree||0],['Evaluated',d.evaluated||0],['Checked',d.checked||0]];
+const tone=s=>s==='DISAGREE'?'fail':(s==='AGREE'?'pass':'warn');
+const rows=(d.results||[]).map(r=>'<tr><td class="mono">'+esc(r.trace_id||'—')+'</td><td class="mono">'+esc(evTs(r.occurred_at))+'</td><td><span class="tag '+tone(r.status)+'">'+esc(r.status||'?')+'</span></td><td class="mono">'+esc((r.mismatches||[]).join(', ')||r.detail||'—')+'</td></tr>').join('')
+||'<tr><td colspan="4" class="mut">no traces replayed against the active procedure yet</td></tr>';
+return '<div class="card"><p class="kicker">Post-activation drift — do runtime traces still agree with the live graph?</p>'
++'<div class="card-head"><h3>'+esc(head)+'</h3><span><button class="btn ghost sm" onclick="vDrift()">Refresh</button></span></div>'
++'<div class="cols4">'+counts.map(a=>'<div class="card flat stat"><div class="num">'+esc(a[1])+'</div><div class="lbl">'+esc(a[0])+'</div></div>').join('')+'</div>'
++'<p class="mut">'+esc(d.honesty_note||'')+'</p>'
++'<div class="mono">workflow '+esc(d.workflow_id||'—')+' · active '+esc(d.procedure_version_id||'—')+' · workspace '+esc(d.workspace_id||'—')+'</div>'
++((d.disagree_trace_ids||[]).length?'<p style="margin-top:8px"><span class="tag fail">reality moved in '+esc(d.disagree_trace_ids.length)+' trace'+(d.disagree_trace_ids.length===1?'':'s')+': '+esc(d.disagree_trace_ids.join(', '))+'</span></p>':'')
++'<div class="card flat"><p class="kicker">Replay results ('+(d.results||[]).length+')</p><table><thead><tr><th>trace</th><th>when</th><th>status</th><th>mismatches</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';}
+async function vDrift(){loading('Loading drift report…');let d=null,err='';try{d=await get('/drift'+wsQuery());}catch(e){err=(e&&e.message)||String(e);}
+if(/-> 403/.test(err)){setView('<div class="card"><div class="empty" role="status"><b>Workspace '+esc(WS_FILTER)+' refused.</b> You are not a member of this workspace — every denial is audited server-side. Switch workspaces on the Builds tab.</div></div>');return;}
+if(/-> 404/.test(err)){setView('<div class="card"><div class="empty" role="status"><i class="ph ph-trend-up e-ico" aria-hidden="true"></i><b>No active procedure yet.</b> Drift lights up after the first activation — approve and activate a build, then fresh traces are replayed against the live graph here.<br/><br/><button class="btn sm" onclick="go(\'Approval\')">Go to Approval</button></div></div>');return;}
+if(!d||typeof d!=='object'){showErr(new Error(err||'drift report unavailable'));return;}
+setView(driftHtml(d));}
+async function fillDrift(){const el=document.getElementById('driftSignal');if(!el)return;let d=null;try{d=await get('/drift'+wsQuery());}catch(e){return;}
+if(!d||typeof d!=='object')return;const r=d.disagreement_rate;if(!(typeof r==='number'&&isFinite(r)&&r>0))return;
+el.innerHTML='<div class="result-line bad" role="status">Reality moved — '+esc((Math.round(r*1000)/10)+'%')+' of '+esc(d.evaluated)+' evaluated traces disagree with the active procedure ('+esc(d.procedure_version_id||'—')+'). <button class="btn ghost sm" onclick="go(\'Drift\')">Open Drift</button></div>';}
 /* ---------- Benchmarks ---------- */
 async function vBench(){loading('Loading benchmark…');try{BENCH=await get('/benchmark-runs/latest');}catch(e){setView('<div class="card"><div class="empty" role="status"><i class="ph ph-chart-bar e-ico" aria-hidden="true"></i><b>No benchmark runs yet.</b> Generate one with <span class="mono">make benchmark</span> in a terminal.<br/><br/><button class="btn ghost sm" onclick="try{navigator.clipboard.writeText(\'make benchmark\');this.textContent=\'Copied — paste it in a terminal\';}catch(e){}">Copy command</button></div></div>');return;}
 const m={};(BENCH.cases||[]).forEach(c=>{const f=c.case_id.split('-')[0];m[f]=m[f]||{};m[f][c.status]=(m[f][c.status]||0)+1;});

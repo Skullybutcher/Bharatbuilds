@@ -381,6 +381,14 @@ def api_handler(event, context):
         return call(A.ingest_trace, body)
     if method == "GET" and raw_path.startswith("/traces/"):
         return call(A.get_trace, raw_path.split("/")[2])
+    if method == "GET" and raw_path == "/drift":
+        try:
+            _scope, _ws = _authz.resolve_list_filter(identity, (qs.get("workspace_id") or [None])[0], raw_path)
+        except _authz.AuthzError as e:
+            return _out(event, {"error": e.args[0]}, e.status)
+        # call() maps KeyError->404 (no active procedure) and PermissionError->403,
+        # matching the local server's status codes.
+        return call(A.drift_report, (qs.get("workflow_id") or [None])[0], _scope, _ws)
     if method == "GET" and raw_path.startswith("/portal"):
         return call(A.portal, {k: v[0] for k, v in qs.items()})
     seg = raw_path.split("/")
