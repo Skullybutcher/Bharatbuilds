@@ -148,11 +148,11 @@ def approval_guardrails(build: dict) -> dict:
 
 
 def request_patch_review(build_id: str, reviewer_opened_hash: str | None = None) -> dict:
-    reqs = _load("patch_reviews.json", [])
+    # One pending-review row per build (SK = build_id): a fresh request
+    # replaces only its own record, not the whole collection.
     rec = {"build_id": build_id, "status": "PATCH_REVIEW_PENDING",
            "opened_hash": reviewer_opened_hash, "timestamp": time.time()}
-    reqs = [r for r in reqs if r.get("build_id") != build_id] + [rec]
-    _save("patch_reviews.json", reqs)
+    put_item("patch_reviews.json", build_id, rec)
     return rec
 
 
@@ -226,12 +226,22 @@ def create_candidate_version(build: dict) -> dict:
                      if v.get("procedure_version_id") == candidate["procedure_version_id"]), None)
     if existing:
         return existing
-    saved = save_procedure_version({**candidate, "status": "candidate"}, status="candidate")
-    cands = _load("candidates.json", [])
-    cands.append({"build_id": build.get("build_id"),
-                  "procedure_version_id": saved.get("procedure_version_id"),
-                  "status": "candidate", "ts": time.time()})
-    _save("candidates.json", cands)
+    try:
+        saved = save_procedure_version({**candidate, "status": "candidate"}, status="candidate")
+    except ValueError:
+        # Lost the create race: two workers passed the pre-check and the
+        # create-only write enforced immutability. The winner's record IS this
+        # candidate — adopt it (idempotent re-mint) instead of failing the
+        # execution with 'already exists'.
+        saved = next((v for v in list_procedure_versions()
+                      if v.get("procedure_version_id") == candidate["procedure_version_id"]), None)
+        if saved is None:
+            raise
+    cand_row = {"record_id": f"{build.get('build_id')}#{saved.get('procedure_version_id')}",
+                "build_id": build.get("build_id"),
+                "procedure_version_id": saved.get("procedure_version_id"),
+                "status": "candidate", "ts": time.time()}
+    put_item("candidates.json", cand_row["record_id"], cand_row)
     audit("CANDIDATE_CREATED", {"build_id": build.get("build_id"),
                                 "procedure_version_id": saved.get("procedure_version_id")})
     return saved
@@ -266,9 +276,14 @@ def activate_procedure(build_id: str, build: dict, reviewer: dict, reason: str,
         raise ValueError("APPROVAL INVALIDATED: candidate graph differs from approved hash.")
     for v in vers:
         if v.get("workflow_id") == cand.get("workflow_id"):
-            v["status"] = "active" if v.get("procedure_version_id") == cid else "superseded"
-    _save("procedure_versions.json", vers)
-    saved = next(v for v in vers if v.get("procedure_version_id") == cid)
+            want = "active" if v.get("procedure_version_id") == cid else "superseded"
+            if v.get("status") != want:
+                # Per-record status flip: a candidate minted concurrently for
+                # this workflow can no longer be deleted by this rewrite, and
+                # each record's write is independent (no partial-state window).
+                put_item("procedure_versions.json", v["procedure_version_id"],
+                         {**v, "status": want})
+    saved = {**cand, "status": "active"}
     rec = {"approval_id": f"APR-{time.strftime('%Y%m%d')}-{len(approvals) + 1:04d}",
            "build_id": build_id, "approval_type": "PROCEDURE_ACTIVATION",
            "reviewer": reviewer, "role": "FINAL_APPROVER", "decision": "APPROVE",
@@ -280,9 +295,12 @@ def activate_procedure(build_id: str, build: dict, reviewer: dict, reason: str,
 
 
 def _mark_candidate(build: dict, status: str) -> None:
-    cands = _load("candidates.json", [])
-    cands.append({"build_id": build.get("build_id"), "status": status, "ts": time.time()})
-    _save("candidates.json", cands)
+    # One status row per (build, status), keyed by record_id: a repeated mark
+    # replaces its own row instead of colliding on SK=build_id (the T50 shape,
+    # one collection over).
+    rec = {"record_id": f"{build.get('build_id')}#{status}",
+           "build_id": build.get("build_id"), "status": status, "ts": time.time()}
+    put_item("candidates.json", rec["record_id"], rec)
 
 
 def approvals_for(build_id: str) -> list:

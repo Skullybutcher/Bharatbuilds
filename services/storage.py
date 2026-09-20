@@ -90,7 +90,7 @@ def _item_id(name: str, item: dict, n: int) -> str:
     # arms a second gate: two items share an SK, BatchWriteItem rejects the
     # batch ("Provided list of item keys contains duplicates"), and every
     # future save of the collection wedges. Live failure: Gate-3 arming, T50.
-    dedicated = (item.get("review_id") or item.get("approval_id")
+    dedicated = (item.get("record_id") or item.get("review_id") or item.get("approval_id")
                  or item.get("policy_version_id") or item.get("procedure_version_id")
                  or item.get("executionArn"))
     if dedicated:
@@ -172,12 +172,21 @@ def _dd_save(name: str, obj) -> None:
                                      "GSI_PK": "COLL", "GSI_SK": name})
                 b.delete_item(Key={"PK": f"COLL#{name}", "SK": META_SK})
             return
-        old = _dd_items(t, name)
+        # Diff-based bulk save: put only new/changed records, delete only records
+        # that disappeared. The old delete-all-then-put-all erased any record a
+        # concurrent per-record writer added between our read and our write — a
+        # bulk save could destroy another worker's fresh approval or procedure
+        # version. Untouched records keep their version bookkeeping.
+        old = {i["SK"]: i for i in _dd_items(t, name)}
+        new = _sks(name, obj)
+        new_keys = {sk for sk, _ in new}
+        gone = [sk for sk in old if sk != META_SK and sk not in new_keys]
+        changed = [(sk, item) for sk, item in new
+                   if sk not in old or old[sk].get("data_json") != json.dumps(item, default=str)]
         with t.batch_writer() as b:
-            for i in old:
-                b.delete_item(Key={"PK": i["PK"], "SK": i["SK"]})
-        with t.batch_writer() as b:
-            for sk, item in _sks(name, obj):
+            for sk in gone:
+                b.delete_item(Key={"PK": f"COLL#{name}", "SK": sk})
+            for sk, item in changed:
                 b.put_item(Item={"PK": f"COLL#{name}", "SK": sk,
                                  "data_json": json.dumps(item, default=str),
                                  "GSI_PK": "COLL", "GSI_SK": name})
@@ -214,8 +223,8 @@ def _shape(name: str) -> str:
 
 def _record_ids(rec: dict) -> set:
     """Every id a record can be addressed by (mirrors _item_id)."""
-    ids = {rec.get(k) for k in ("build_id", "review_id", "approval_id", "policy_version_id",
-                                "procedure_version_id", "executionArn")}
+    ids = {rec.get(k) for k in ("record_id", "build_id", "review_id", "approval_id",
+                                "policy_version_id", "procedure_version_id", "executionArn")}
     if rec.get("build_id") and rec.get("gate"):
         ids.add(f"{rec['build_id']}#{rec['gate']}")
     return {i for i in ids if i}

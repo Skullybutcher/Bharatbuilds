@@ -8,7 +8,7 @@ import hashlib
 import json
 import time
 
-from services.storage import _load, _save
+from services.storage import _load, _save, put_item, ConcurrencyError
 
 COMPILER_VERSION = "0.1.0"
 EXTRACTOR_VERSION = "processpatch-extractor/0.1.0"
@@ -40,11 +40,11 @@ def create_workspace(name: str) -> dict:
 
 
 def save_policy_version(workspace_id: str, label: str, text: str, rules: list) -> dict:
-    vers = _load("policy_versions.json", [])
+    # Per-record upsert: the id IS the key (label), so a re-save replaces only
+    # its own record instead of rewriting the whole collection.
     rec = {"policy_version_id": label, "workspace_id": workspace_id, "version_label": label,
            "sha256": sha(text), "rules": rules, "status": "active", "created_at": time.time()}
-    vers = [v for v in vers if v.get("policy_version_id") != label] + [rec]
-    _save("policy_versions.json", vers)
+    put_item("policy_versions.json", label, rec)
     return rec
 
 
@@ -53,16 +53,19 @@ SCHEMA_VERSION = "1"
 
 def save_procedure_version(workflow: dict, status: str = "active") -> dict:
     # Immutable: an existing id is never overwritten. Callers mint unique ids
-    # (patched versions embed the build hash).
-    vers = _load("procedure_versions.json", [])
-    pid = workflow.get("procedure_version_id", f"WF-V{len(vers) + 1}")
-    if any(v.get("procedure_version_id") == pid for v in vers):
-        raise ValueError(f"procedure version {pid} already exists and is immutable")
+    # (patched versions embed the build hash). Create-only per-record write —
+    # the database enforces immutability, so two workers minting the same id
+    # cannot both win, and a re-mint cannot overwrite the first graph.
+    pid = workflow.get("procedure_version_id")
+    if not pid:
+        raise ValueError("procedure version requires procedure_version_id")
     rec = {"procedure_version_id": pid, "workflow_id": workflow.get("workflow_id"),
            "version_label": workflow.get("version_label"), "graph_json": workflow,
            "sha256": sha(workflow), "status": status, "created_at": time.time()}
-    vers = vers + [rec]
-    _save("procedure_versions.json", vers)
+    try:
+        put_item("procedure_versions.json", pid, rec, expect=0)
+    except ConcurrencyError as e:
+        raise ValueError(f"procedure version {pid} already exists and is immutable") from e
     return rec
 
 
