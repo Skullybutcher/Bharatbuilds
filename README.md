@@ -59,40 +59,79 @@ This account is intentionally limited to the `pp-reviewers` group. It cannot
 activate procedure versions or administer Cognito. Do not use this account for
 real data or production workloads; it is a public demo credential.
 
-API highlights: `GET /demo/canonical`, `POST /builds` (idempotent),
-`GET /builds/{id}/{diff,witnesses,patch,certificate,impact,guardrails,audit}`,
-rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,
-`POST .../patch/{approve,reject,request-revision}`, witness replay,
-`POST /procedures/{v}/activate` (hash-verified), `POST /builds/{id}/resume`
-(server-side Step Functions resume, clients never hold task tokens),
-runtime-trace ingestion `POST /traces` + `GET /builds/{id}/trace-compare`
-(real-world evidence, read-only comparison, docs/traces.md), bulk CSV ingest
-`POST /traces/csv` (all-or-nothing, idempotent),
-multi-procedure workspaces `POST /procedures` + build against any registered
-version by `procedure_version_id` (fail-closed DAG validation, docs/workspaces.md),
-approved builds export a sha256-sealed evidence pack
-(`GET /builds/{id}/governance-bundle`), reviews, approvals, guardrails,
-witnesses, patch, certificate, and audit over canonical bytes. Export is
-refused (409) for builds with no human approval on record, so an unapproved
-candidate can never masquerade as a governed artifact. A runtime trace can be
-nominated as a witness candidate (`POST /builds/{id}/nominate-witness`), but
-the nomination only re-runs the verified pipeline behind an honesty gate,
-the trace must disagree with the stale procedure. A nomination never creates
-a witness by assertion.
-Re-verify recomputes an approved build's entire proof from the accepted rule IR
-(`POST /builds/{id}/reverify`): compile key, patched workflow, patch ops,
-certificate content, validation, witnesses, and the exact Gate-2 artifact
-hashes a human signed, a VERIFIED/MISMATCH verdict with per-check detail, and
-tampered evidence or compiler drift is named, never papered over. After
-activation, the drift monitor (`GET /drift`) replays recent runtime traces
-against the ACTIVE procedure's graph under the standing policy and reports a
-disagreement rate with each drifted dimension named, the standing half of the
-CI loop (trace-compare is the pre-activation half; both share one mismatch
-definition). Builds are workspace-scoped: `ws-*` Cognito groups gate every
-list and per-build surface, denials are audited, and identical compiles across
-workspaces stay isolated. The local server and the Lambda `ApiFn` share one
-implementation (`services/api/actions.py`) so both surfaces stay identical.
+## API highlights
 
+- **Canonical example:** `GET /demo/canonical`
+- **Build creation:** `POST /builds` with idempotency support
+- **Build artifacts:** `GET /builds/{id}/{diff,witnesses,patch,certificate,impact,guardrails,audit}`
+- **Rule review:** `POST /builds/{id}/rules/{rid}/{accept,edit,reject,escalate}`
+- **Patch review:** `POST /builds/{id}/patch/{approve,reject,request-revision}`
+- **Witness replay:** replay witnesses against the compiled procedure
+- **Procedure activation:** `POST /procedures/{v}/activate`, with hash verification
+- **Build resumption:** `POST /builds/{id}/resume`, using server-side Step Functions resume; clients never hold task tokens
+- **Runtime traces:** `POST /traces` and `GET /builds/{id}/trace-compare` for read-only, real-world evidence comparison; see [`docs/traces.md`](docs/traces.md)
+- **Bulk trace ingestion:** `POST /traces/csv`, with all-or-nothing and idempotent CSV ingestion
+- **Multi-procedure workspaces:** `POST /procedures`, then build against any registered version via `procedure_version_id`; DAG validation is fail-closed; see [`docs/workspaces.md`](docs/workspaces.md)
+
+### Governed evidence exports
+
+Approved builds can export a SHA-256-sealed evidence pack through:
+
+```http
+GET /builds/{id}/governance-bundle
+```
+
+The bundle covers canonical bytes, reviews, approvals, guardrails, witnesses, patches, certificates, and audit records.
+
+Exports are refused with `409 Conflict` when no human approval is recorded. An unapproved candidate therefore cannot be presented as a governed artifact.
+
+### Witness nomination
+
+A runtime trace can be nominated as a witness candidate:
+
+```http
+POST /builds/{id}/nominate-witness
+```
+
+Nomination does not create a witness by assertion. It reruns the verified pipeline behind an honesty gate: the trace must disagree with the stale procedure before it can qualify as evidence.
+
+### Full re-verification
+
+Re-verify an approved build with:
+
+```http
+POST /builds/{id}/reverify
+```
+
+Re-verification recomputes the entire proof from the accepted rule IR, including:
+
+- Compile key
+- Patched workflow
+- Patch operations
+- Certificate content
+- Validation results
+- Witnesses
+- Exact Gate-2 artifact hashes signed by a human
+
+The endpoint returns a `VERIFIED` or `MISMATCH` verdict with per-check details. Tampered evidence and compiler drift are explicitly identified rather than silently accepted.
+
+### Drift monitoring
+
+After activation, the drift monitor is available at:
+
+```http
+GET /drift
+```
+
+It replays recent runtime traces against the active procedure graph under the standing policy, reporting the disagreement rate and every drifted dimension.
+
+`trace-compare` is the pre-activation half of the CI loop; `/drift` is the standing post-activation half. Both use the same mismatch definition.
+
+### Workspace isolation
+
+Builds are workspace-scoped. `ws-*` Cognito groups gate list endpoints and every per-build surface, while denials are audited.
+
+Identical compiles remain isolated across workspaces. The local server and Lambda `ApiFn` share the same implementation in `services/api/actions.py`, keeping both surfaces behaviorally identical.
 ## Layout
 
 `services/` deterministic pipeline + impact/governance/registry/bench/aws_handlers ·
