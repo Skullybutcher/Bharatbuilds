@@ -224,6 +224,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   padding:10px 14px;color:var(--mut-2);font-size:12.5px;margin:var(--sp-1) 0}
 .diff-add{color:var(--pass-ink)}
 .diff-del{color:var(--fail-ink)}
+/* ---------- audit timeline (T59: renders the governance ledger) ---------- */
+.tl{list-style:none;margin:var(--sp-1) 0 0;padding:0}
+.tl-day{font-size:var(--fs-12);color:var(--mut);font-weight:700;margin:var(--sp-2) 0 var(--sp-1)}
+.tl-day:first-child{margin-top:0}
+.tl-ev{display:flex;gap:var(--sp-1);align-items:baseline;padding:6px 0;border-top:1px dashed var(--line)}
+.tl-ts{font-family:var(--font-mono);font-size:var(--fs-12);color:var(--mut);white-space:nowrap}
+.tl-actor{font-size:var(--fs-12);color:var(--mut-2);margin-left:auto;white-space:nowrap}
+.tl-det{font-family:var(--font-mono);font-size:var(--fs-12);color:var(--mut);white-space:pre-wrap;word-break:break-word}
+/* ---------- archived builds (T59: unmistakable retired treatment) ---------- */
+tbody tr.archived td{color:var(--mut);background:rgba(148,163,184,.04)}
+tbody tr.archived:hover td{background:rgba(148,163,184,.08)}
 .bar{height:8px;border-radius:4px;background:var(--raise);margin:var(--sp-1) 0;overflow:hidden}
 .bar > div{height:100%;border-radius:4px}
 /* ---------- buttons / inputs ---------- */

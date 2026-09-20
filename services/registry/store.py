@@ -151,10 +151,17 @@ def list_builds(include_archived: bool = False) -> list:
 
 
 def audit(event: str, payload: dict) -> dict:
-    log = _load("audit.json", [])
+    """Append ONE ledger record.
+
+    This used to rewrite the whole audit file per event — under concurrent
+    workers the audit trail (the one thing that must never drop a row) was the
+    most race-prone write in the system: two simultaneous operations could
+    silently lose one of their events. One record per event now, keyed by a
+    zero-padded timestamp so list reads stay chronological."""
+    import uuid
+    from services.storage import put_item
     rec = {"ts": time.time(), "event": event, **payload}
-    log.append(rec)
-    _save("audit.json", log)
+    put_item("audit.json", f"{rec['ts']:.9f}-{uuid.uuid4().hex[:8]}", rec)
     return rec
 
 

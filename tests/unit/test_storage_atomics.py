@@ -47,8 +47,9 @@ class _FakeTable:
         key = (Item["PK"], Item["SK"])
         cur = self.rows.get(key)
         if ConditionExpression:
-            expect = ExpressionAttributeValues[":e"]
-            ok = (not cur) if expect == 0 else bool(cur and cur.get("ver") == expect)
+            expect = (ExpressionAttributeValues or {}).get(":e")
+            ok = ((not cur) if "attribute_not_exists" in ConditionExpression
+                  else bool(cur and cur.get("ver") == expect))
             if not ok:
                 raise _CondFailed()
         self.rows[key] = dict(Item)

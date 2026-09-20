@@ -201,6 +201,16 @@ def _save(name: str, obj) -> None:
 # one record per write item, with the version the caller read passed back in.
 _FILE_VERSIONS: dict = {}   # files backend: single process, so versions live here
 
+# Collections whose records are addressed by key rather than listed. Everything
+# else is a list collection. This decides the shape a MISSING files-backend
+# collection is created with — getting it wrong writes a dict where readers
+# expect a list, and list reads then iterate dict KEYS (strings).
+DICT_COLLECTIONS = {"builds.json"}
+
+
+def _shape(name: str) -> str:
+    return "dict" if name in DICT_COLLECTIONS else "list"
+
 
 def _record_ids(rec: dict) -> set:
     """Every id a record can be addressed by (mirrors _item_id)."""
@@ -212,12 +222,20 @@ def _record_ids(rec: dict) -> set:
 
 
 def _file_get_item(name: str, item_id: str):
+    """(payload, version). Version conventions: 0 = absent, >=1 = written
+    through put_item (optimistic checks apply), -1 = exists but was written by
+    a legacy bulk save, so it carries no version to check against."""
     data = _file_load(name, {})
     if isinstance(data, dict):
-        return data.get(item_id), _FILE_VERSIONS.get((name, item_id), 0)
+        item = data.get(item_id)
+        if item is None:
+            return None, 0
+        v = _FILE_VERSIONS.get((name, item_id))
+        return item, (v if v is not None else -1)
     for rec in data:
         if item_id in _record_ids(rec):
-            return rec, _FILE_VERSIONS.get((name, item_id), 0)
+            v = _FILE_VERSIONS.get((name, item_id))
+            return rec, (v if v is not None else -1)
     return None, 0
 
 
@@ -226,25 +244,31 @@ def _dd_get_item(name: str, item_id: str):
                          ConsistentRead=True).get("Item") or {}
     if not row.get("data_json"):
         return None, 0
-    return json.loads(row["data_json"]), int(row.get("ver", 0))
+    return json.loads(row["data_json"]), int(row.get("ver", -1))
 
 
 def _dd_put_item(name: str, item_id: str, item: dict, expect: int | None) -> int:
     t = _dd()
     row = t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
                      ConsistentRead=True).get("Item") or {}
-    cur = int(row.get("ver", 0))
+    if not row.get("data_json"):
+        cur = 0
+    else:
+        cur = int(row.get("ver", -1))  # -1: legacy row written without a version
     if expect is not None and cur != expect:
         raise ConcurrencyError(f"{name}/{item_id}: expected version {expect}, found {cur}")
+    new_ver = (cur if cur > 0 else 0) + 1
     kwargs = {"Item": {"PK": f"COLL#{name}", "SK": item_id,
                        "data_json": json.dumps(item, default=str),
-                       "ver": cur + 1, "GSI_PK": "COLL", "GSI_SK": name}}
-    if expect is not None:
-        # create-only (0) or exact-version match — the database enforces it, so
-        # a writer that read a stale version cannot win the race.
-        kwargs["ConditionExpression"] = ("attribute_not_exists(SK) OR ver = :e"
-                                         if expect == 0 else "ver = :e")
+                       "ver": new_ver, "GSI_PK": "COLL", "GSI_SK": name}}
+    if expect == 0:
+        # create-only: the database enforces that nothing was there
+        kwargs["ConditionExpression"] = "attribute_not_exists(SK)"
+    elif expect is not None and expect > 0:
+        # exact-version match — a writer that read a stale version cannot win
+        kwargs["ConditionExpression"] = "ver = :e"
         kwargs["ExpressionAttributeValues"] = {":e": expect}
+    # expect -1 (legacy row) or None: unconditional overwrite, as before
     try:
         t.put_item(**kwargs)
     except Exception as e:  # noqa: BLE001
@@ -252,7 +276,7 @@ def _dd_put_item(name: str, item_id: str, item: dict, expect: int | None) -> int
             raise ConcurrencyError(
                 f"{name}/{item_id}: lost a write race (expected version {expect})") from e
         raise RuntimeError(f"storage put failed for {name}/{item_id}: {type(e).__name__}: {e}") from e
-    return cur + 1
+    return new_ver
 
 
 def get_item(name: str, item_id: str) -> "tuple[dict | None, int]":
@@ -276,12 +300,13 @@ def put_item(name: str, item_id: str, item: dict, expect: int | None = None) -> 
         cur, ver = _file_get_item(name, item_id)
         if expect is not None and ver != expect:
             raise ConcurrencyError(f"{name}/{item_id}: expected version {expect}, found {ver}")
+        new_ver = (ver if ver > 0 else 0) + 1
         data = _file_load(name, None)
+        if data is None:
+            data = {} if _shape(name) == "dict" else []
         if isinstance(data, dict):
             data = dict(data)
             data[item_id] = item
-        elif data is None:
-            data = {item_id: item}
         else:
             rows, idx = list(data), None
             for i, rec in enumerate(rows):
@@ -294,8 +319,8 @@ def put_item(name: str, item_id: str, item: dict, expect: int | None = None) -> 
                 rows[idx] = item
             data = rows
         _file_save(name, data)
-        _FILE_VERSIONS[(name, item_id)] = ver + 1
-        return ver + 1
+        _FILE_VERSIONS[(name, item_id)] = new_ver
+        return new_ver
     try:
         return _dd_put_item(name, item_id, item, expect)
     except ConcurrencyError:

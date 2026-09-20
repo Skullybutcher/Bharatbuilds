@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from services.storage import _load, _save
+from services.storage import (_load, _save, get_item, put_item, ConcurrencyError)
 from services.registry.store import audit, sha
 
 ROLES = {"POLICY_REVIEWER", "PROCEDURE_OWNER", "FINAL_APPROVER"}
@@ -44,21 +44,27 @@ def _review_id(build_id: str, rule_id: str) -> str:
 
 
 def open_rule_reviews(build_id: str, rules: list[dict]) -> list[dict]:
-    reviews = _load("rule_reviews.json", [])
-    have = {(r.get("build_id"), r.get("rule_id")) for r in reviews}
+    """One review record per (build, rule), written per record. The review id is
+    deterministic (REV#build#rule), so concurrent openers converge on one record
+    instead of duplicating: the loser of the create race adopts the winner."""
     out = []
     for r in rules:
-        if (build_id, r.get("rule_id")) in have:
-            out.append(next(x for x in reviews
-                            if x.get("build_id") == build_id and x.get("rule_id") == r.get("rule_id")))
+        rid = _review_id(build_id, r.get("rule_id"))
+        rec, ver = get_item("rule_reviews.json", rid)
+        if rec:
+            out.append(rec)
             continue
-        rec = {"review_id": _review_id(build_id, r.get("rule_id")), "build_id": build_id,
+        new = {"review_id": rid, "build_id": build_id,
                "rule_id": r.get("rule_id"),
                "decision": "PENDING", "machine_value": r,
                "human_value": None, "reason": None, "timestamp": None}
-        reviews.append(rec)
-        out.append(rec)
-    _save("rule_reviews.json", reviews)
+        try:
+            put_item("rule_reviews.json", rid, new, expect=ver)
+        except ConcurrencyError:
+            rec, _ = get_item("rule_reviews.json", rid)  # another opener won
+            out.append(rec)
+            continue
+        out.append(new)
     audit("RULE_REVIEW_PENDING", {"build_id": build_id, "count": len(out)})
     return out
 
@@ -71,16 +77,21 @@ def review_rule(build_id: str, rule_id: str, decision: str, human_value: dict | 
                 reason: str | None = None, reviewer: str = "USR-001") -> dict:
     if decision not in ("ACCEPT", "EDIT", "REJECT", "ESCALATE"):
         raise ValueError(f"unknown review decision {decision!r}")
-    reviews = _load("rule_reviews.json", [])
-    for rec in reviews:
-        if rec.get("build_id") == build_id and rec.get("rule_id") == rule_id:
-            rec.update({"decision": decision,
-                        "human_value": human_value if decision == "EDIT" else None,
-                        "reason": reason, "reviewer": reviewer, "timestamp": time.time()})
-            _save("rule_reviews.json", reviews)
-            audit(f"RULE_{decision}", {"build_id": build_id, "rule_id": rule_id, "reviewer": reviewer})
-            return rec
-    raise KeyError(f"no review for {rule_id} in {build_id}")
+    rid = _review_id(build_id, rule_id)
+    rec, ver = get_item("rule_reviews.json", rid)
+    if not rec:
+        raise KeyError(f"no review for {rule_id} in {build_id}")
+    rec.update({"decision": decision,
+                "human_value": human_value if decision == "EDIT" else None,
+                "reason": reason, "reviewer": reviewer, "timestamp": time.time()})
+    try:
+        # Optimistic: two reviewers deciding the same rule cannot both win; the
+        # loser reloads instead of silently overwriting the winner's decision.
+        put_item("rule_reviews.json", rid, rec, expect=ver)
+    except ConcurrencyError as e:
+        raise ValueError("this review changed while you were deciding — reload and retry") from e
+    audit(f"RULE_{decision}", {"build_id": build_id, "rule_id": rule_id, "reviewer": reviewer})
+    return rec
 
 
 def unresolved_rule_reviews(build_id: str) -> int:
@@ -145,6 +156,29 @@ def request_patch_review(build_id: str, reviewer_opened_hash: str | None = None)
     return rec
 
 
+def _record_approval(base: dict) -> dict:
+    """Mint a unique approval id and persist the record — the ONLY writer of
+    approvals.json rows. The id is sequence-derived, so two concurrent approvers
+    can compute the same one; the create-only version check turns that into a
+    retry with the next sequence instead of a duplicate id (an id collision here
+    would silently merge two different decisions into one evidence row)."""
+    date = time.strftime("%Y%m%d")
+    approvals = _load("approvals.json", [])
+    seq = 1 + max([int(str(a["approval_id"]).rsplit("-", 1)[-1])
+                   for a in approvals
+                   if str(a.get("approval_id", "")).startswith(f"APR-{date}-")] or [0])
+    from services.schemas import check as _scheck
+    for attempt in range(8):
+        candidate = {**base, "approval_id": f"APR-{date}-{seq + attempt:04d}"}
+        _scheck("approval", candidate, f"approval/{candidate.get('build_id')}")
+        try:
+            put_item("approvals.json", candidate["approval_id"], candidate, expect=0)
+            return candidate
+        except ConcurrencyError:
+            continue
+    raise RuntimeError("could not mint a unique approval id under contention")
+
+
 def decide_patch(build_id: str, build: dict, decision: str, reviewer: dict,
                  reason: str, role: str = "PROCEDURE_OWNER") -> dict:
     if decision not in ("APPROVE_CANDIDATE", "REJECT_PATCH", "REQUEST_REVISION"):
@@ -162,19 +196,15 @@ def decide_patch(build_id: str, build: dict, decision: str, reviewer: dict,
         gates = approval_guardrails(build)
         if not gates["approvable"]:
             raise ValueError(f"APPROVE disabled: {gates['blockers']}")
-    rec = {"approval_id": f"APR-{time.strftime('%Y%m%d')}-{len(approvals) + 1:04d}",
-           "build_id": build_id, "approval_type": "PATCH_REVIEW",
-           "reviewer": reviewer, "role": role, "decision": decision, "reason": reason,
-           "timestamp": time.time(), "artifacts": _artifact_hashes(build)}
-    from services.schemas import check as _scheck
-    _scheck("approval", rec, f"decide/{build_id}")
+    base = {"build_id": build_id, "approval_type": "PATCH_REVIEW",
+            "reviewer": reviewer, "role": role, "decision": decision, "reason": reason,
+            "timestamp": time.time(), "artifacts": _artifact_hashes(build)}
     if decision == "REJECT_PATCH":
         _mark_candidate(build, "inactive")
     if decision == "APPROVE_CANDIDATE":
         # Mint BEFORE persisting so the stored approval carries the id.
-        rec["candidate_version_id"] = create_candidate_version(build)["procedure_version_id"]
-    approvals.append(rec)
-    _save("approvals.json", approvals)
+        base["candidate_version_id"] = create_candidate_version(build)["procedure_version_id"]
+    rec = _record_approval(base)
     audit(f"PATCH_{decision}", {"build_id": build_id, "approval_id": rec["approval_id"]})
     return rec
 
@@ -243,9 +273,7 @@ def activate_procedure(build_id: str, build: dict, reviewer: dict, reason: str,
            "build_id": build_id, "approval_type": "PROCEDURE_ACTIVATION",
            "reviewer": reviewer, "role": "FINAL_APPROVER", "decision": "APPROVE",
            "reason": reason, "timestamp": time.time(), "artifacts": _artifact_hashes(build)}
-    approvals_all = _load("approvals.json", [])
-    approvals_all.append(rec)
-    _save("approvals.json", approvals_all)
+    rec = _record_approval(rec)
     audit("PROCEDURE_ACTIVATED", {"build_id": build_id,
                                  "procedure_version_id": saved.get("procedure_version_id")})
     return {"approval": rec, "procedure_version": saved}
@@ -304,33 +332,33 @@ def purge_build_records(build_id: str) -> dict:
 
 
 # ---- Step Functions human-gate callbacks ------------------------------------
+CLAIM_STALE_S = 60  # a DECIDING claim older than this is reclaimable
+
+
+def _cb_key(build_id: str, gate: str) -> str:
+    return f"{build_id}#{gate}"
+
+
 def save_callback(build_id: str, gate: str, task_token: str | None,
                   execution_arn: str | None = None) -> dict:
     """Persist the taskToken at WAIT time so a later human action can resume
-    the execution WITHOUT the client ever holding the token."""
-    cbs = _load("callbacks.json", [])
+    the execution WITHOUT the client ever holding the token. One record per
+    (build, gate)."""
     rec = {"build_id": build_id, "gate": gate, "task_token": task_token,
            "execution_arn": execution_arn, "status": "WAITING", "timestamp": time.time()}
-    cbs = [c for c in cbs if not (c.get("build_id") == build_id and c.get("gate") == gate)] + [rec]
-    _save("callbacks.json", cbs)
+    _, ver = get_item("callbacks.json", _cb_key(build_id, gate))
+    put_item("callbacks.json", _cb_key(build_id, gate), rec, expect=ver)
     audit("GATE_WAITING", {"build_id": build_id, "gate": gate})
     return rec
 
 
 def get_callback(build_id: str, gate: str) -> dict | None:
-    return next((c for c in _load("callbacks.json", [])
-                 if c.get("build_id") == build_id and c.get("gate") == gate), None)
+    return get_item("callbacks.json", _cb_key(build_id, gate))[0]
 
 
-def resume_callback(build_id: str, gate: str, body: dict) -> dict:
-    """Apply the human decision through the normal domain path, then resume
-    the waiting execution server-side. Works locally (records RESUMED) and on
-    AWS (SendTaskSuccess)."""
-    import json as _json
-    cb = get_callback(build_id, gate)
-    if not cb:
-        raise KeyError(f"no waiting callback for {build_id}/{gate}")
-    output: dict
+def _apply_gate_decision(build_id: str, gate: str, body: dict) -> dict:
+    """The domain side effect of one gate decision. Runs at most ONCE per gate:
+    resume_callback claims the gate before calling this."""
     if gate == "rule_review":
         for rid, dec in (body.get("decisions") or {}).items():
             review_rule(build_id, rid, dec, body.get("human_value"),
@@ -372,6 +400,50 @@ def resume_callback(build_id: str, gate: str, body: dict) -> dict:
                       "reason": body.get("reason", "")}
     else:
         raise ValueError(f"unknown gate {gate}")
+    return output
+
+
+def resume_callback(build_id: str, gate: str, body: dict) -> dict:
+    """Apply the human decision through the normal domain path, then resume
+    the waiting execution server-side. Works locally (records RESUMED) and on
+    AWS (SendTaskSuccess).
+
+    Concurrency: the gate is CLAIMED first (WAITING -> DECIDING, enforced by the
+    record version), so two reviewers acting on the same gate cannot both
+    consume it — the loser gets an explicit 'already in progress' instead of a
+    double-spent decision. A claim older than CLAIM_STALE_S is reclaimable so a
+    crashed decider cannot brick a gate, and a decided gate that is re-fired
+    (crash recovery) re-signals Step Functions with the RECORDED output and
+    repeats no side effect."""
+    import json as _json
+    key = _cb_key(build_id, gate)
+    cb, ver = get_item("callbacks.json", key)
+    if not cb:
+        raise KeyError(f"no waiting callback for {build_id}/{gate}")
+
+    claimed_ver = ver
+    if cb.get("status") in ("DECIDED_LOCALLY", "RESUMED"):
+        output = dict(cb.get("output") or {})
+    else:
+        if (cb.get("status") == "DECIDING"
+                and time.time() - cb.get("claimed_at", 0) < CLAIM_STALE_S):
+            raise ValueError("gate decision already in progress — reload and retry")
+        claim = {**cb, "status": "DECIDING", "claimed_at": time.time()}
+        try:
+            claimed_ver = put_item("callbacks.json", key, claim, expect=ver)
+        except ConcurrencyError as e:
+            raise ValueError("gate decision already in progress — reload and retry") from e
+        try:
+            output = _apply_gate_decision(build_id, gate, body)
+        except Exception:
+            # give the gate back so the reviewer can retry without waiting out
+            # the stale-claim window
+            try:
+                put_item("callbacks.json", key,
+                         {**claim, "status": "WAITING"}, expect=claimed_ver)
+            except ConcurrencyError:
+                pass
+            raise
 
     sent = False
     if cb.get("task_token"):
@@ -381,10 +453,11 @@ def resume_callback(build_id: str, gate: str, body: dict) -> dict:
                 taskToken=cb["task_token"], output=_json.dumps(output, default=str))
             sent = True
         except Exception as e:  # noqa: BLE001
-            output["resume_error"] = f"{type(e).__name__}: {e}"[:200]
-    cbs = [c for c in _load("callbacks.json", [])
-           if not (c.get("build_id") == build_id and c.get("gate") == gate)]
-    _save("callbacks.json", cbs + [{**cb, "status": "RESUMED" if sent else "DECIDED_LOCALLY",
-                                    "output": output}])
+            output = {**output, "resume_error": f"{type(e).__name__}: {e}"[:200]}
+    final = {**cb, "status": "RESUMED" if sent else "DECIDED_LOCALLY", "output": output}
+    try:
+        put_item("callbacks.json", key, final, expect=claimed_ver)
+    except ConcurrencyError:
+        pass  # finalize is best-effort; the decision is already durably recorded
     audit("GATE_RESUMED", {"build_id": build_id, "gate": gate, "sent_to_sfn": sent})
     return output
