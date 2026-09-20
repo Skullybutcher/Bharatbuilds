@@ -153,9 +153,24 @@ def create_build(body: dict):
     return _store(build)
 
 
-def list_builds():
+def list_builds(include_archived: bool = False):
     from services.registry.store import list_builds as _lb
-    return {"builds": _lb()}
+    return {"builds": _lb(include_archived=include_archived),
+            "include_archived": bool(include_archived)}
+
+
+def archive_build(bid: str, body: dict | None = None):
+    """Hide a build from the default listing without destroying evidence.
+    Reversible via /unarchive; audit-logged; still readable by id."""
+    from services.registry.store import set_build_archived
+    rec = set_build_archived(_need(bid)["build_id"], True)
+    return {"build_id": rec["build_id"], "archived": True}
+
+
+def unarchive_build(bid: str, body: dict | None = None):
+    from services.registry.store import set_build_archived
+    rec = set_build_archived(_need(bid)["build_id"], False)
+    return {"build_id": rec["build_id"], "archived": False}
 
 
 def get_build_view(bid: str):

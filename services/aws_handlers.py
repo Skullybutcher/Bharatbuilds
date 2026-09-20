@@ -337,7 +337,8 @@ def api_handler(event, context):
     if method == "GET" and raw_path == "/demo/canonical":
         return call(A.canonical, (qs.get("domain") or ["research_grant"])[0])
     if method == "GET" and raw_path == "/builds":
-        return call(A.list_builds)
+        _inc = str((qs.get("include_archived") or ["0"])[0]).strip().lower() in ("1", "true", "yes", "on")
+        return call(A.list_builds, _inc)
     if method == "POST" and raw_path == "/builds":
         return call(A.create_build, body)
     if method == "GET" and raw_path == "/benchmarks":
@@ -392,7 +393,8 @@ def api_handler(event, context):
                 return call(A.review_action, bid, rid, verb, body)
         posts = {"patch/validate": A.validate_patch, "patch/review-request": A.patch_review_request,
                  "patch/approve": A.approve, "patch/reject": A.reject,
-                 "patch/request-revision": A.request_revision}
+                 "patch/request-revision": A.request_revision,
+                 "archive": A.archive_build, "unarchive": A.unarchive_build}
         if method == "POST" and tail in posts:
             fn = posts[tail]
             if tail == "patch/validate":

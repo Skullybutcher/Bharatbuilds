@@ -12,6 +12,11 @@ from services.api import actions
 from services.api import authz
 
 
+def _truthy(v) -> bool:
+    """Query-flag parsing: ?include_archived=1 / true / yes / on."""
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
 class _AuthzHTTP(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -67,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/demo/canonical":
             return 200, actions.canonical(qs.get("domain", ["research_grant"])[0])
         if method == "GET" and path == "/builds":
-            return 200, actions.list_builds()
+            return 200, actions.list_builds(_truthy(qs.get("include_archived", ["0"])[0]))
         if method == "POST" and path == "/builds":
             return 200, actions.create_build(body)
         if method == "GET" and path == "/benchmarks":
@@ -197,6 +202,12 @@ class Handler(BaseHTTPRequestHandler):
             if method == "POST" and tail == "execute":
                 try:
                     return 200, actions.start_execution({"build_id": bid, **body})
+                except KeyError:
+                    return 404, {"error": "unknown build"}
+            if method == "POST" and tail in ("archive", "unarchive"):
+                try:
+                    fn = actions.archive_build if tail == "archive" else actions.unarchive_build
+                    return 200, fn(bid, body)
                 except KeyError:
                     return 404, {"error": "unknown build"}
             return 404, {"error": "not found", "path": path}

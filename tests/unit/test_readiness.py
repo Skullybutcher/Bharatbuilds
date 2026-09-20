@@ -115,7 +115,9 @@ def test_model_rules_cannot_opt_into_automatic_acceptance(monkeypatch, tmp_path)
 def test_storage_outage_returns_service_unavailable(monkeypatch):
     monkeypatch.setenv("PROCESSPATCH_AUTH", "off")
 
-    def fail():
+    def fail(*_args, **_kwargs):
+        # arity-agnostic: this simulates a storage outage whatever the route
+        # passes (GET /builds now forwards the include_archived flag)
         raise RuntimeError("private database detail")
 
     monkeypatch.setattr(actions, "list_builds", fail)

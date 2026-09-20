@@ -96,9 +96,30 @@ def find_build_by_key(key: str) -> dict | None:
     return None
 
 
-def list_builds() -> list:
+def set_build_archived(build_id: str, archived: bool = True) -> dict | None:
+    """Console-level archival: the build leaves the default listing but stays
+    fully readable, resumable and auditable — governance evidence is never
+    destroyed. Idempotency is deliberately unaffected: an archived build still
+    counts as compiled for `find_build_by_key`, because archiving hides a build
+    from the working list, it does not un-happen the compile."""
     builds = _load("builds.json", {})
-    return sorted(builds.values(), key=lambda b: b.get("created_at", 0), reverse=True)
+    b = builds.get(build_id)
+    if not b:
+        return None
+    b["archived"] = bool(archived)
+    if archived:
+        b["archived_at"] = time.time()
+    else:
+        b.pop("archived_at", None)
+    _save("builds.json", builds)
+    audit("BUILD_ARCHIVED" if archived else "BUILD_UNARCHIVED", {"build_id": build_id})
+    return b
+
+
+def list_builds(include_archived: bool = False) -> list:
+    builds = _load("builds.json", {})
+    rows = [b for b in builds.values() if include_archived or not b.get("archived")]
+    return sorted(rows, key=lambda b: b.get("created_at", 0), reverse=True)
 
 
 def audit(event: str, payload: dict) -> dict:
