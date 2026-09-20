@@ -38,6 +38,9 @@ pip install -e ".[dev]"        # pytest + pyyaml (clean-machine repro)
 make app                        # ONE command: full app on http://localhost:8080
 python scripts/verify.py        # 178 assertions, no network/LLM/AWS
 make verify                     # same
+python scripts/verify_bundle.py evidence.json
+                                # recompute a governance bundle's seal
+                                # yourself, stdlib only, no AWS, no our-code
 make benchmark                  # ProcessPatchBench v0.3.0, 31 scenarios
 make infra-validate             # SAM/ASL/dashboard checks, no credentials
 python scripts/demo.py          # terminal person-first demo
@@ -61,22 +64,33 @@ API highlights: `GET /demo/canonical`, `POST /builds` (idempotent),
 rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,
 `POST .../patch/{approve,reject,request-revision}`, witness replay,
 `POST /procedures/{v}/activate` (hash-verified), `POST /builds/{id}/resume`
-(server-side Step Functions resume — clients never hold task tokens),
+(server-side Step Functions resume, clients never hold task tokens),
 runtime-trace ingestion `POST /traces` + `GET /builds/{id}/trace-compare`
-(real-world evidence, read-only comparison — docs/traces.md), bulk CSV ingest
+(real-world evidence, read-only comparison, docs/traces.md), bulk CSV ingest
 `POST /traces/csv` (all-or-nothing, idempotent),
 multi-procedure workspaces `POST /procedures` + build against any registered
-version by `procedure_version_id` (fail-closed DAG validation — docs/workspaces.md),
+version by `procedure_version_id` (fail-closed DAG validation, docs/workspaces.md),
 approved builds export a sha256-sealed evidence pack
-(`GET /builds/{id}/governance-bundle`) — reviews, approvals, guardrails,
+(`GET /builds/{id}/governance-bundle`), reviews, approvals, guardrails,
 witnesses, patch, certificate, and audit over canonical bytes. Export is
 refused (409) for builds with no human approval on record, so an unapproved
 candidate can never masquerade as a governed artifact. A runtime trace can be
 nominated as a witness candidate (`POST /builds/{id}/nominate-witness`), but
-the nomination only re-runs the verified pipeline behind an honesty gate —
+the nomination only re-runs the verified pipeline behind an honesty gate,
 the trace must disagree with the stale procedure. A nomination never creates
 a witness by assertion.
-benchmark endpoints. The local server and the Lambda `ApiFn` share one
+Re-verify recomputes an approved build's entire proof from the accepted rule IR
+(`POST /builds/{id}/reverify`): compile key, patched workflow, patch ops,
+certificate content, validation, witnesses, and the exact Gate-2 artifact
+hashes a human signed, a VERIFIED/MISMATCH verdict with per-check detail, and
+tampered evidence or compiler drift is named, never papered over. After
+activation, the drift monitor (`GET /drift`) replays recent runtime traces
+against the ACTIVE procedure's graph under the standing policy and reports a
+disagreement rate with each drifted dimension named, the standing half of the
+CI loop (trace-compare is the pre-activation half; both share one mismatch
+definition). Builds are workspace-scoped: `ws-*` Cognito groups gate every
+list and per-build surface, denials are audited, and identical compiles across
+workspaces stay isolated. The local server and the Lambda `ApiFn` share one
 implementation (`services/api/actions.py`) so both surfaces stay identical.
 
 ## Layout
@@ -85,14 +99,14 @@ implementation (`services/api/actions.py`) so both surfaces stay identical.
 `shared/schemas/` all contracts · `demo/` two domains · `frontend/` 10-tab UI ·
 `benchmark/processpatchbench/` 31 heterogeneous cases + manifest ·
 `benchmark_runs/` reference runs · `tests/` 8 suites · `infra/` full SAM setup ·
-`docs/` 21 notes (incl. auth, traces, workspaces) · `scripts/` verify/demo/benchmark/smoke/infra-validate/judge_demo.
+`docs/` 21 notes (incl. auth, traces, workspaces) · `scripts/` verify/demo/benchmark/smoke/infra-validate/judge_demo/verify_bundle.
 
 ## Trust
 
 A deterministic parser extracts the bounded rule language into typed candidates
 with source spans; a Bedrock model fallback engages only when the parser yields
 nothing usable (and is schema-validated + Gate-1 reviewed like everything
-else). Deterministic code decides correctness. Humans approve exact hashes —
+else). Deterministic code decides correctness. Humans approve exact hashes,
 and are authenticated while doing it: Cognito groups gate reviews (pp-reviewers)
 and activation (pp-admins), and verified identities are stamped into the audit
 trail (docs/auth.md). Ambiguity → NEEDS_REVIEW, conflict →

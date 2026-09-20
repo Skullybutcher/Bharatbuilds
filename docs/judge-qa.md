@@ -18,7 +18,7 @@ answers "which steps are now wrong, what is the fix, and who approved it?"
 The deterministic parser is the fast path and emits candidates with source
 spans; the Bedrock fallback engages only when the parser yields nothing
 usable, and its output is schema-validated and Gate-1 reviewed like everything
-else — model output is never auto-accepted, and without credentials the
+else, model output is never auto-accepted, and without credentials the
 fallback reports `EXTRACTION_UNAVAILABLE` instead of guessing. Ambiguity routes
 to `NEEDS_REVIEW` and contradiction without precedence to `COMPILATION
 BLOCKED`, so a bad extraction stalls the pipeline rather than corrupting it.
@@ -26,22 +26,22 @@ The UI labels every result `FIXTURE`, `DETERMINISTIC_PARSER`, or
 `BEDROCK_CANDIDATE`, so provenance is always visible. (`docs/trust-boundary.md`,
 `README.md`)
 
-## 3. Why human approval — and why three gates?
+## 3. Why human approval, and why three gates?
 
 Machines verify within a tested model; only a human can accept the residual
 risk, which is why patches are `VALIDATED_WITHIN_TESTED_MODEL` and never
 "compliance guaranteed". Gate 1 reviews rule interpretation ("did we read the
 policy right?"), Gate 2 approves the candidate patch ("do tests and provenance
 justify it?"), and Gate 3 activates the exact immutable candidate with a
-hash-verified operation. Cognito groups enforce who may do what —
-`pp-reviewers` for Gates 1–2, `pp-admins` for activation — with verified
+hash-verified operation. Cognito groups enforce who may do what:
+`pp-reviewers` for Gates 1–2, `pp-admins` for activation, with verified
 identities stamped into the audit trail. (`README.md`, `docs/auth.md`,
 `docs/workspaces.md`)
 
 ## 4. Why not let the LLM rewrite the procedure directly?
 
 The trust boundary forbids it: the model may propose candidates, classify rule
-types, extract spans, and flag ambiguity — but it may not declare compliance,
+types, extract spans, and flag ambiguity, but it may not declare compliance,
 decide pass/fail, validate patches, deploy, choose precedence, or hide
 uncertainty. Deterministic code owns constraints, witness search, regression,
 impact aggregation, and certificates; humans own rule acceptance, patch
@@ -55,7 +55,7 @@ A witness is a verified counterexample produced by the pipeline: one
 representative case per failure mode where expected and actual outcomes
 disagree (e.g., CGPA 7.80, expected eligible, portal ineligible). Tests are
 the regression suites that replay those witnesses and add boundary,
-preservation, integrity, ordering, metamorphic, and provenance checks — 16/16
+preservation, integrity, ordering, metamorphic, and provenance checks, 16/16
 in the canonical demo. Witnesses are the failing cases; the suite proves the
 patch fixes them without breaking anything else. (`README.md`)
 
@@ -63,17 +63,17 @@ patch fixes them without breaking anything else. (`README.md`)
 
 Ambiguity resolves to `NEEDS_REVIEW`: a human settles the reading at Gate 1
 before compilation proceeds. Contradiction without a stated precedence
-resolves to `COMPILATION BLOCKED` — the pipeline refuses to guess, and a
+resolves to `COMPILATION BLOCKED`, the pipeline refuses to guess, and a
 `RESOLVE_AUTHORITY` stage handles precedence only where authority is actually
 stated. Every fork fails closed: there is no witness without the verified
 pipeline behind it. (`README.md`, `docs/architecture.md`)
 
-## 7. Traces vs. witnesses — what's the difference?
+## 7. Traces vs. witnesses, what's the difference?
 
 Traces are ingested real-world executions and are evidence only: the engine
 replays each case deterministically and reports agreement against the stale
 and patched graphs through a read-only comparison. A disagreeing trace never
-becomes a witness on its own — witnesses come exclusively from the verified
+becomes a witness on its own, witnesses come exclusively from the verified
 compile → diff → search pipeline. This is deliberate: production anecdotes
 inform, but they must not auto-rewrite procedures. (`README.md`,
 `docs/trust-boundary.md`, doctrine in `agents.md` §5)
@@ -82,7 +82,7 @@ inform, but they must not auto-rewrite procedures. (`README.md`,
 
 Procedures here are tens of nodes (order of 20–100 per workflow), so
 DynamoDB/JSON plus in-memory traversal beats a graph database on simplicity
-and cost — Neptune waits for cross-workflow scale. The system is serverless
+and cost, Neptune waits for cross-workflow scale. The system is serverless
 and bursty with no always-on compute: a 40-state Step Functions machine, seven
 Lambdas, single-table DynamoDB, and versioned S3 evidence. The same Python
 runs locally on files and on Lambda on DynamoDB via a storage switch, so scale
@@ -91,21 +91,21 @@ is a deployment setting, not a rewrite. (`docs/architecture.md`,
 
 ## 9. What's not real yet?
 
-Witness search is bounded deterministic sampling, not SMT solving — Z3
+Witness search is bounded deterministic sampling, not SMT solving, Z3
 containerization is a documented future step, not a current claim. The
 benchmark is 31 hand-authored scenarios with a 16-case frozen held-out split
 scored on gold Rule IR downstream: evidence of repair mechanics, not
 independent real-world generality. No production deployment is recorded in the
-repo — infrastructure is validated statically without credentials and the
+repo, infrastructure is validated statically without credentials and the
 first deploy follows the runbook. (`docs/architecture.md`,
 `docs/benchmark.md`, `README.md`, `docs/deployment-runbook.md`)
 
-## 10. Why Step Functions — and why does local run identical code?
+## 10. Why Step Functions, and why does local run identical code?
 
 Step Functions provides the orchestration substrate: a 40-state build machine
 whose `WAIT_FOR_*` states hold on task tokens for human decisions without
 polling loops or schedulers. The local server and the Lambda `ApiFn` share one
-implementation (`services/api/actions.py`), so both surfaces stay identical —
+implementation (`services/api/actions.py`), so both surfaces stay identical,
 the `make app` demo exercises the exact logic that runs in the cloud, with
 only the storage backend swapped. That is also why the cloud approval path
 reuses the same gates via server-side resume instead of duplicating side
@@ -116,34 +116,50 @@ effects. (`docs/architecture.md`, `README.md`)
 You check three things, and all three are computed, never asserted. The
 governance bundle (`GET /builds/{id}/governance-bundle`) packs reviews,
 approvals, guardrail evaluation, witnesses, patch, certificate, and audit
-into one artifact sealed with a sha256 over canonical bytes — and the
+into one artifact sealed with a sha256 over canonical bytes, and the
 endpoint refuses (409) builds with no human approval on record, so an
 unapproved candidate can never masquerade as governed. The coverage endpoint
 (`GET /builds/{id}/coverage`) reports which affected nodes and rule fields
 at least one verified witness exercises, computed with the same localizer
 the impact engine uses. Both endpoints are read-only; neither can change the
-build they describe. (`services/api/actions.py`: `governance_bundle`,
-`coverage`)
+build they describe. And you do not have to trust our arithmetic: the seal is
+plain sha256 over canonical JSON, and `scripts/verify_bundle.py` recomputes
+it from the downloaded bundle with the standard library alone, no AWS, no
+our-code, no network. If we tampered with the evidence, the hashes would
+disagree. (`services/api/actions.py`: `governance_bundle`,
+`coverage`; `scripts/verify_bundle.py`)
 
 ## 12. What happens when reality disagrees with the model?
 
 A disagreeing trace can be nominated (`POST /builds/{id}/nominate-witness`),
 but nomination is a suggestion from reality, not a promotion. The endpoint
 first recomputes trace-compare and refuses (409) unless the trace actually
-disagrees with the stale procedure — the honesty gate, identical criteria.
+disagrees with the stale procedure (the honesty gate, identical criteria).
 A nominated case then runs through `find_witnesses` plus the full regression
 validator exactly like pipeline-discovered witnesses; if the pipeline already
 covers it, the answer is `verified: false`, not a duplicate witness. Every
 nomination is audited with the reviewer's id. (`services/api/actions.py`:
 `nominate_witness`; `docs/traces.md`)
 
-## 13. What does coverage mean — and what does it NOT mean?
+And the loop does not end at activation. `GET /drift` replays recent runtime
+traces against the ACTIVE procedure's graph under the standing policy's rules
+and reports a disagreement rate with each drifted dimension named, evidence
+of model decay, not anecdotes. It resolves the most recent active procedure
+with zero parameters, is workspace-scoped, and refuses (404) when nothing is
+active rather than inventing a baseline. Traces stay evidence-only: the
+monitor reports drift, it never auto-updates the model. Pre-activation
+(trace-compare) and post-activation (drift) share one mismatch helper, so the
+two halves of the loop cannot disagree about what a mismatch is.
+(`services/traces/store.py`: `drift_report`; `services/api/actions.py`:
+`drift_report`)
+
+## 13. What does coverage mean, and what does it NOT mean?
 
 Covered means exactly one thing: a verified witness exercises that node or
-field — nothing else counts, and the endpoint says so in its own note. Node
+field, nothing else counts, and the endpoint says so in its own note. Node
 share is computed with the same localizer as the impact engine; field share
 counts affected rule fields cited by at least one witness case. What it does
-NOT mean: passing tests, exercised code paths, or a compliance percentage —
-uncovered blast radius is reported, not hidden, precisely because it marks
+NOT mean: passing tests, exercised code paths, or a compliance percentage.
+Uncovered blast radius is reported, not hidden, precisely because it marks
 where the next regression would ship from. Treat low coverage as a work
 list, never as a grade to game. (`services/api/actions.py`: `coverage`)

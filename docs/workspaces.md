@@ -1,4 +1,4 @@
-# Multi-procedure workspaces — compile amendments against ANY procedure
+# Multi-procedure workspaces, compile amendments against ANY procedure
 
 The registry always supported workspaces and immutable procedure versions;
 they were only reachable through the two demo domains. They are now a first-
@@ -18,7 +18,7 @@ just the demos.
 ## Rules
 
 - **Fail-closed registration**: `POST /procedures` runs the full DAG
-  integrity check (`validate_dag`) — cycles, dangling edges, duplicate edges,
+  integrity check (`validate_dag`), cycles, dangling edges, duplicate edges,
   multiple/unreachable start nodes are rejected with `INVALID_WORKFLOW` (409).
   An unparseable or inconsistent graph can never become a compile target.
 - **Immutability preserved**: registering an existing
@@ -62,4 +62,4 @@ curl -X POST $API/builds -H 'Content-Type: application/json' \
 ```
 
 Witnesses, impact, patch, certificate, and the three human gates work
-identically for custom procedures — the pipeline is domain-agnostic by design.
+identically for custom procedures, the pipeline is domain-agnostic by design.

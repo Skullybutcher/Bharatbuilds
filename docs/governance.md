@@ -20,7 +20,7 @@ preservation ≠ PASS; provenance_coverage < 1.0; candidate_hash_changed_since_r
 Approval binds reviewer, role (POLICY_REVIEWER / PROCEDURE_OWNER /
 FINAL_APPROVER), reason, timestamp, and artifact hashes (policy, before/after,
 patch, certificate). Since v0.3.0, `reviewer` and `role` are stamped by the
-Cognito-verified identity (`services/api/authz.py`) — callers cannot supply or
+Cognito-verified identity (`services/api/authz.py`), callers cannot supply or
 spoof these fields (docs/auth.md). Activation re-verifies hashes server-side;
 stale review → APPROVAL INVALIDATED. Rejections are retained (inactive
 candidate + comment); revisions chain P-019 revised_by P-020. Full audit

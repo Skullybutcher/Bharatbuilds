@@ -1,6 +1,6 @@
 # Positioning
 
-**ProcessPatch is an operational rule compiler — CI for real-world procedures.**
+**ProcessPatch is an operational rule compiler, CI for real-world procedures.**
 When a policy is amended, it compiles the amendment into a verified,
 human-approved patch to the deployed procedure, with concrete counterexamples
 (witnesses) as regression tests. It sits in the gap between policy-as-code
@@ -27,23 +27,23 @@ the compile-and-repair step neither covers.
 
 | Tool | What it does | What it doesn't do that ProcessPatch does |
 |---|---|---|
-| OPA | Evaluates hand-written Rego to allow/deny at enforcement points; audit + replay. | Extract rules from natural-language amendments; prove a deployed procedure stale with named witnesses; synthesize the repaired procedure; bind activation to human approval of exact hashes — and export the whole case as a sha256-sealed evidence pack refused (409) without that approval. |
-| Celonis | Reconstructs how processes run from event logs; conformance vs. the modeled process. | Start from a policy amendment instead of logs — it finds deviations but doesn't compile the fix; nor does it report coverage where covered means a verified witness exercises the node, computed by the same engine that found the fault. |
-| Temporal | Durable execution with HITL approval signals and audit history. | Derive what the procedure should *become* after a rule change (semantic diff, witnesses, localized patch) — and let a disagreeing real-world trace nominate a candidate that only the verified pipeline can promote. Engines are complement: ProcessPatch itself orchestrates on Step Functions. |
-| Guardrails / Ragas | Validate LLM text output (validators, faithfulness metrics). | Touch operational procedures at all — and their verdicts come from models, while ProcessPatch verdicts are deterministic code with the model strictly proposing. |
+| OPA | Evaluates hand-written Rego to allow/deny at enforcement points; audit + replay. | Extract rules from natural-language amendments; prove a deployed procedure stale with named witnesses; synthesize the repaired procedure; bind activation to human approval of exact hashes, and export the whole case as a sha256-sealed evidence pack refused (409) without that approval. |
+| Celonis | Reconstructs how processes run from event logs; conformance vs. the modeled process. | Start from a policy amendment instead of logs, it finds deviations but doesn't compile the fix; nor does it report coverage where covered means a verified witness exercises the node, computed by the same engine that found the fault. |
+| Temporal | Durable execution with HITL approval signals and audit history. | Derive what the procedure should *become* after a rule change (semantic diff, witnesses, localized patch), and let a disagreeing real-world trace nominate a candidate that only the verified pipeline can promote. Engines are complement: ProcessPatch itself orchestrates on Step Functions. |
+| Guardrails / Ragas | Validate LLM text output (validators, faithfulness metrics). | Touch operational procedures at all, and their verdicts come from models, while ProcessPatch verdicts are deterministic code with the model strictly proposing. |
 
 ## Honest positioning
 
 ProcessPatch owns the compile-and-repair gap and nothing else. It does **not**
 guarantee compliance: patches are `VALIDATED_WITHIN_TESTED_MODEL`
 (`README.md`). Its benchmark is 31 hand-authored scenarios with a 16-case
-frozen held-out split scored on gold Rule IR downstream (`docs/benchmark.md`)
-— evidence of repair mechanics, not real-world generality. Witness search is
+frozen held-out split scored on gold Rule IR downstream (`docs/benchmark.md`):
+evidence of repair mechanics, not real-world generality. Witness search is
 deterministic sampling, not SMT solving (`docs/architecture.md`). No step
 auto-accepts model output: ambiguity → `NEEDS_REVIEW`, contradiction →
 `COMPILATION BLOCKED`, and three human gates bind exact hashes (`README.md`,
 `docs/trust-boundary.md`). Per `docs/novelty.md`, no single technique is
-claimed novel — the experiment is the witness-first repair loop with
+claimed novel, the experiment is the witness-first repair loop with
 hash-bound governance.
 
 ## Sources

@@ -1,4 +1,4 @@
-# ProcessPatchBench (57C) — v0.3.0, 31 scenarios (15 dev / 16 eval)
+# ProcessPatchBench (57C), v0.3.0, 31 scenarios (15 dev / 16 eval)
 
 ## Methodology (read before citing numbers)
 
@@ -15,11 +15,11 @@ GOLD RULE IR → compiler → witness → localizer → repair → regression
 
 Downstream compiler/repair evaluation deliberately uses hand-authored gold Rule
 IR so extraction errors do not contaminate repair metrics. Do NOT claim "raw
-natural-language policies achieve 100% end-to-end repair" — that is not what
+natural-language policies achieve 100% end-to-end repair", that is not what
 this benchmark demonstrates.
 
 The 16-case eval split is a **held-out authored (frozen) evaluation split**,
-authored by the same process as dev — not an independent external dataset of
+authored by the same process as dev, not an independent external dataset of
 unseen real-world policies. Later, external policies can become a stronger test.
 
 Families: threshold relax/tighten, requirement add/remove, conditional,

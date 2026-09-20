@@ -1,17 +1,17 @@
-# Auth — Cognito, hosted UI (PKCE), group-gated HITL actions
+# Auth, Cognito, hosted UI (PKCE), group-gated HITL actions
 
 Closes the deferred "Cognito/JWT auth" item. Doctrine unchanged: **humans
-approve activation** — auth just proves *which* human, and gates who may do it.
+approve activation**, auth just proves *which* human, and gates who may do it.
 Model output is still never auto-accepted; verified identities are stamped into
 the audit trail, so approvals bind the exact human who made them.
 
 ## Model
 
 - **Cognito UserPool** (`AWS::Cognito::UserPool`), email usernames, invite-only
-  (no self-signup — an admin creates users and assigns groups).
+  (no self-signup, an admin creates users and assigns groups).
 - **Two groups**:
-  - `pp-admins` — approve candidates + activate procedure versions (Gates 2/3).
-  - `pp-reviewers` — rule review (Gate 1) + patch decisions (Gate 2).
+  - `pp-admins`, approve candidates + activate procedure versions (Gates 2/3).
+  - `pp-reviewers`, rule review (Gate 1) + patch decisions (Gate 2).
   - Users in neither group are **read-only**.
 - **Public client** (`WebClient`): no secret, PKCE only, hosted-UI login,
   `code` flow with `openid email` scopes. Access/id tokens are 8 hours.
@@ -20,7 +20,7 @@ the audit trail, so approvals bind the exact human who made them.
      bad tokens before Lambda), except explicit `NO_AUTH` routes:
      `GET /`, `GET /health`, `GET /demo/canonical`, `GET /auth/config`.
   2. Inside `ApiFn`/local server, `services/api/authz.py` re-checks claims and
-     **stamps the verified identity into the request body** — a caller can no
+     **stamps the verified identity into the request body**, a caller can no
      longer spoof `reviewer`/`role`, which previously were trusted as-is.
 
 ## Roles → routes (enforced in `services/api/authz.py`)
@@ -43,14 +43,14 @@ evaluation. `demo-admin@processpatch.demo` is the
 `AWS::Cognito::UserPoolUser` declared in `infra/template.yaml` (`DemoAdmin`,
 confirmation SUPPRESS), attached to `pp-admins` (`DemoAdminMembership`).
 CloudFormation cannot set a password, so `infra/deploy.sh` generates a random
-one, sets it `--permanent`, and prints a `DEMO LOGIN` block exactly once —
+one, sets it `--permanent`, and prints a `DEMO LOGIN` block exactly once,
 never written to disk or git, so a lost password means re-running that step
 (the script prints the manual `admin-set-user-password` fallback, and a
 `NOTE` when the user is missing on pre-existing stacks). As a `pp-admins`
 member the demo login unlocks Gates 2/3 (patch approve + activation) on top
 of everything `pp-reviewers` can do; there is no reviewer demo account, so
 Gate-1 review on the deployed demo goes through the same admin login. Never
-commit, screenshot, or stream the password — rotate it with
+commit, screenshot, or stream the password, rotate it with
 `admin-set-user-password` after the demo window.
 
 The public reviewer account is `judge@processpatch.demo` with password
@@ -114,6 +114,6 @@ aws cognito-idp admin-add-user-to-group --user-pool-id <pool> \
 - Hosted-UI domain prefix is `processpatch-<env>-<account-id>` (globally
   unique; change in `UserPoolDomain` if it collides).
 - The HttpApi CORS `FrontendOrigin` must equal the Amplify origin in
-  production — the deploy scripts set it automatically from stack outputs.
+  production, the deploy scripts set it automatically from stack outputs.
 - Audit entries now carry verified emails (Gate 1/2/3), so the approval trail
   is attributable end to end.

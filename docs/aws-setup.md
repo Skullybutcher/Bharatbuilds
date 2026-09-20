@@ -4,7 +4,7 @@
 
 AWS CLI + SAM CLI + an AWS account. Region default `ap-south-1`
 (override via `--region` / `infra/deploy.ps1 -Region`).
-The GitHub repo **must be public** for the First Commit submission — and for
+The GitHub repo **must be public** for the First Commit submission, and for
 Amplify hosting you need a GitHub token in `AMPLIFY_TOKEN` (used once as the
 `AmplifyAccessToken` CloudFormation parameter, `NoEcho`; never committed).
 
@@ -79,7 +79,7 @@ origin on the first CloudFormation pass because existing stacks retain old
 parameter values and Cognito rejects `*` callback URLs; it replaces that value
 with the real Amplify branch URL on the second pass. The
 `AmplifyAccessToken` secret is passed via
-`$AMPLIFY_TOKEN` — `sam deploy --parameter-overrides` takes explicit
+`$AMPLIFY_TOKEN`, `sam deploy --parameter-overrides` takes explicit
 `ParameterKey=…,ParameterValue=…` pairs (not `file://…`), which the deploy
 scripts expand with stdlib python. Model calls are restricted to extraction (Bedrock InvokeModel
 scoped to `ModelId`, default `amazon.nova-micro-v1:0`).

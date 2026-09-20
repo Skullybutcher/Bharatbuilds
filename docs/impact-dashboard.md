@@ -1,7 +1,7 @@
 # Impact Dashboard (57A)
 
 Answers: what changed, where it propagated, who is affected. Computed ONLY from
-build artifacts — never `LLM_estimate(...)`.
+build artifacts, never `LLM_estimate(...)`.
 
 ## Data contract
 
@@ -30,7 +30,7 @@ follows typed IMPLEMENTS_RULE edges, not generic graph connectivity.
 ## Counting discipline
 
 Behavioral counts (wrong_rejections, unnecessary_burdens, …) count
-**representative verified witnesses** — one per failure mode — not affected
+**representative verified witnesses**, one per failure mode, not affected
 people. Never present "1 wrong rejection" as "only one person affected".
 Population-scale impact belongs to the cohort section, and even that cohort is
 synthetic: broader impact must come from explicitly supplied real data.

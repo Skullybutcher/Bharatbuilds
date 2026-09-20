@@ -1,4 +1,4 @@
-# Runtime trace ingestion — real-world evidence, read-only
+# Runtime trace ingestion, real-world evidence, read-only
 
 First step of the "what comes next" roadmap (runtime traces): the pipeline can
 now ingest **executed decisions** from deployed systems and compare them with
@@ -10,7 +10,7 @@ Traces are **evidence, never truth**. A trace is one recorded execution of a
 procedure for one case: the case fields, what the deployed system actually did
 (`outcome`), and optionally which steps were performed. Ingestion validates and
 stores; **comparison is read-only**. No trace ever becomes a verified witness
-by itself — disagreement only nominates *candidate witnesses*, which acquire
+by itself, disagreement only nominates *candidate witnesses*, which acquire
 witness status exclusively through the normal verified pipeline
 (`find_witnesses` → patch → `validate`). This preserves the core rule:
 **no red node without a verified witness**.
@@ -36,7 +36,7 @@ POST /traces
 
 - `case` values must be scalars (the engine replays them literally).
 - `outcome` booleans are coercion-tolerant at the edge (`"ELIGIBLE"`,
-  `"late"`, `"blocked"`, `1/0` → boolean) but **reject** anything ambiguous —
+  `"late"`, `"blocked"`, `1/0` → boolean) but **reject** anything ambiguous,
   fail-closed, like every other boundary.
 - `trace_id` is content-derived (`TRC-<hash>`): re-ingesting the same
   case/outcome is idempotent.
@@ -56,12 +56,35 @@ procedure and the patched preview, then reports per-dimension agreement:
 | unmodeled actions | `outcome.completed_actions` | actions absent from the graph |
 
 Verdicts per trace: `AGREE` / `DISAGREE` vs each graph, plus a note when a
-trace **matches the patched preview but disagrees with the stale procedure**
-— the strongest possible candidate-witness signal, because real-world evidence
+trace **matches the patched preview but disagrees with the stale procedure**:
+the strongest possible candidate-witness signal, because real-world evidence
 and the deterministic model independently agree on what the fix should be.
 Traces whose cases disagree with *both* graphs indicate model/context drift and
 are flagged for human review, never silently dropped. Invalid workflows are
 reported as `SKIPPED` with the reason (fail-closed, never swallowed).
+
+## Post-activation drift monitor (`GET /drift`)
+
+Trace-compare answers the pre-activation question: *did the patch fix what
+traces flagged?* The drift monitor answers the standing question: *is reality
+drifting away from the ACTIVE procedure?* It replays recent traces against the
+**active procedure's graph** under the standing policy's active rules and
+reports a `disagreement_rate` headline with per-trace results, each DISAGREE
+names the drifted dimension. Evidence of model decay, not anecdotes.
+
+- **Zero parameters works**: with no query args it resolves the most recent
+  active procedure automatically (404 when nothing is active, it refuses to
+  invent a baseline; 403 outside workspace membership).
+- **One mismatch definition**: pre- and post-activation comparisons share a
+  single helper, so the two halves of the loop cannot disagree about what a
+  mismatch is (pinned by test).
+- **Traces stay evidence-only**: the monitor reports drift, it never
+  auto-updates the model, same doctrine as everywhere else.
+- The console's Drift view renders the report verbatim; the Overview shows a
+  signal only when the rate is above zero.
+
+(`services/traces/store.py`: `drift_report`, `services/api/actions.py`:
+`drift_report`.)
 
 ## API surface
 
@@ -69,11 +92,12 @@ reported as `SKIPPED` with the reason (fail-closed, never swallowed).
 |---|---|
 | `POST /traces` | ingest one trace (validated, idempotent) |
 | `POST /traces/csv` | bulk-ingest pasted CSV (all-or-nothing, idempotent) |
-| `POST /builds/{id}/nominate-witness` | nominate a trace as a candidate witness (human suggests, the verified pipeline disposes — see below) |
-| `GET /builds/{id}/coverage` | witness coverage of the blast radius (read-only honesty metric — see Impact tab) |
+| `POST /builds/{id}/nominate-witness` | nominate a trace as a candidate witness (human suggests, the verified pipeline disposes, see below) |
+| `GET /builds/{id}/coverage` | witness coverage of the blast radius (read-only honesty metric, see Impact tab) |
 | `GET /traces[?workflow_id=…]` | list stored traces |
 | `GET /traces/{trace_id}` | fetch one |
 | `GET /builds/{id}/trace-compare` | read-only comparison for a build |
+| `GET /drift` | post-activation drift monitor (see below) |
 
 The UI's **Traces** tab shows the comparison summary, per-trace verdicts, an
 inline ingestion form, and the stored list. Auth: ingesting requires
@@ -82,7 +106,7 @@ inline ingestion form, and the stored list. Auth: ingesting requires
 ## Bulk CSV ingestion
 
 `POST /traces/csv` with `{"csv": "…", "workflow_id": "WF-…"}` ingests many
-rows at once — the path for "we exported a month of decisions from the legacy
+rows at once, the path for "we exported a month of decisions from the legacy
 system":
 
 ```csv
@@ -95,7 +119,7 @@ cgpa,amount,year,category,eligible,required,steps_done,occurred_at
   `prohibited`/`required`/`steps_done`/`source`/`workflow_id`/`occurred_at`);
   values are coerced to numbers where they parse, kept as strings otherwise.
 - `required` is `;`-separated action ids → `outcome.required{action:true}`.
-- **All-or-nothing**: every row is validated *before* anything is stored — a
+- **All-or-nothing**: every row is validated *before* anything is stored, a
   bad row fails the whole batch with `row N: reason`, leaving zero partial
   state (fail-closed, like every other boundary).
 - **Idempotent**: re-submitting the same CSV reports duplicates and stores
@@ -106,24 +130,24 @@ cgpa,amount,year,category,eligible,required,steps_done,occurred_at
 Same abstraction as everything else: `traces.json` locally, the DynamoDB
 single table on Lambda (via `services.storage`). No new infrastructure.
 
-## Nomination — from evidence to witness (the honest way)
+## Nomination, from evidence to witness (the honest way)
 
 A trace that **disagrees with the build's stale procedure** (the same criteria
 `trace-compare` uses) can be *nominated* as a candidate witness:
 `POST /builds/{id}/nominate-witness` with `{"trace_id": "…"}`.
 
-Doctrine preserved — the nomination is a **suggestion from reality**, never a
+Doctrine preserved: the nomination is a **suggestion from reality**, never a
 promotion:
 
-1. **Honesty gate** — the endpoint recomputes trace-compare and refuses (409)
+1. **Honesty gate**: the endpoint recomputes trace-compare and refuses (409)
    unless the trace actually disagrees with the stale graph. A trace that
    agrees with everything has nothing to contribute.
-2. **Verified pipeline disposes** — the trace's case is pushed through
+2. **Verified pipeline disposes**: the trace's case is pushed through
    `find_witnesses` + the full regression validator exactly like
    pipeline-discovered witnesses. If the pipeline already covers the case, the
-   answer is `verified: false` ("already covers — no new witness needed"), not
+   answer is `verified: false` ("already covers; no new witness needed"), not
    a duplicate witness.
-3. **Audited** — every nomination is recorded (`WITNESS_NOMINATED`) with the
+3. **Audited**: every nomination is recorded (`WITNESS_NOMINATED`) with the
    reviewer id (identity-stamped when auth enforcement is on).
 
 UI: the Traces tab shows a **Nominate witness** action on disagreeing traces;
