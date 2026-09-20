@@ -698,7 +698,11 @@ def describe_execution(arn: str):
             raise KeyError(arn)
         return rec
     import boto3  # lazy
-    d = boto3.client("stepfunctions").describe_execution(executionArn=arn)
+    sf = boto3.client("stepfunctions")
+    try:
+        d = sf.describe_execution(executionArn=arn)
+    except sf.exceptions.ExecutionDoesNotExist:
+        raise KeyError(arn)  # unknown execution -> 404, not a 500
     return {"executionArn": arn, "status": d.get("status"), "started": str(d.get("startDate")),
             "error": d.get("error"), "cause": (d.get("cause") or "")[:1500],
             "output": (d.get("output") or "")[:2000]}

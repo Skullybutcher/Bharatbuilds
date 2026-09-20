@@ -66,10 +66,33 @@ def _dd():
 
 
 def _item_id(name: str, item: dict, n: int) -> str:
-    return (item.get("review_id") or item.get("approval_id")
-            or item.get("policy_version_id") or item.get("procedure_version_id")
-            or item.get("executionArn") or item.get("build_id")
+    # Dedicated natural ids win first (reviews/approvals/versions/executions).
+    # THEN gate callbacks: identified by (build_id, gate) — one WAITING slot
+    # per gate per build. Keying on build_id alone collides the moment a build
+    # arms a second gate: two items share an SK, BatchWriteItem rejects the
+    # batch ("Provided list of item keys contains duplicates"), and every
+    # future save of the collection wedges. Live failure: Gate-3 arming, T50.
+    dedicated = (item.get("review_id") or item.get("approval_id")
+                 or item.get("policy_version_id") or item.get("procedure_version_id")
+                 or item.get("executionArn"))
+    if dedicated:
+        return dedicated
+    if item.get("gate") and item.get("build_id"):
+        return f"{item['build_id']}#{item['gate']}"
+    return (item.get("build_id")
             or f"{time.time():.3f}-{n}")
+
+
+def _sks(name: str, obj) -> "list[tuple[str, dict]]":
+    """Assign each list item its deterministic SK, collapsing duplicate keys
+    last-wins (append semantics — the same rule save_callback uses in-list).
+    BatchWriteItem rejects duplicate keys outright, so a legacy duplicate pair
+    already in a collection must self-heal here rather than poison every
+    subsequent save of that collection."""
+    seen: dict = {}
+    for n, item in enumerate(obj):
+        seen[_item_id(name, item, n)] = item
+    return list(seen.items())
 
 
 def _dd_items(table, name: str) -> list:
@@ -115,8 +138,8 @@ def _dd_save(name: str, obj) -> None:
             for i in old:
                 b.delete_item(Key={"PK": i["PK"], "SK": i["SK"]})
         with t.batch_writer() as b:
-            for n, item in enumerate(obj):
-                b.put_item(Item={"PK": f"COLL#{name}", "SK": _item_id(name, item, n),
+            for sk, item in _sks(name, obj):
+                b.put_item(Item={"PK": f"COLL#{name}", "SK": sk,
                                  "data_json": json.dumps(item, default=str),
                                  "GSI_PK": "COLL", "GSI_SK": name})
     except Exception as e:  # noqa: BLE001 — re-raised, never swallowed
