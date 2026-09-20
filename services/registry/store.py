@@ -116,6 +116,20 @@ def set_build_archived(build_id: str, archived: bool = True) -> dict | None:
     return b
 
 
+def delete_build(build_id: str) -> bool:
+    """HARD DELETE of a build record. Demo-operations only: the caller is the
+    flagged purge path (PP_DEMO_PURGE), never a normal lifecycle operation.
+    Archival (`set_build_archived`) is the supported way to retire a build;
+    this exists so a demo stack can be reset, not so evidence can be erased in
+    production. The caller audits the act BEFORE calling this."""
+    builds = _load("builds.json", {})
+    if build_id not in builds:
+        return False
+    del builds[build_id]
+    _save("builds.json", builds)
+    return True
+
+
 def list_builds(include_archived: bool = False) -> list:
     builds = _load("builds.json", {})
     rows = [b for b in builds.values() if include_archived or not b.get("archived")]

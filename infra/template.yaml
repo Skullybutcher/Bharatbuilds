@@ -35,6 +35,21 @@ Parameters:
     Type: String
     Default: ''
     Description: Existing IAM role ARN for Amplify builds. The role must trust amplify.amazonaws.com.
+  AuthDebug:
+    Type: String
+    Default: '0'
+    AllowedValues: ['0', '1']
+    Description: >-
+      '1' logs AUTHDEBUG claim shapes and RESUMEDEBUG tracebacks in ApiFn.
+      Keep '0' in front of an audience: it logs token claim keys.
+  DemoPurge:
+    Type: String
+    Default: '0'
+    AllowedValues: ['0', '1']
+    Description: >-
+      '1' enables POST /builds/{id}/purge — the HARD DELETE used to reset a demo
+      stack. Keep '0' anywhere governance evidence must be undeletable; builds
+      are retired with /archive instead, which is reversible and audited.
 
 Conditions:
   HasAmplifyServiceRole: !Not [!Equals [!Ref AmplifyServiceRoleArn, '']]
@@ -52,7 +67,10 @@ Globals:
         PROCESSPATCH_MODEL_FALLBACK: 1
         MODEL_ID: !Ref ModelId
         LOG_LEVEL: INFO
-        PP_AUTH_DEBUG: '1'  # T41c: AUTHDEBUG log line in ApiFn; remove once the auth loop closes
+        # AUTHDEBUG/RESUMEDEBUG are parsed as flags (a '0' string is truthy in
+        # Python, which is why aws_handlers._flag exists).
+        PP_AUTH_DEBUG: !Ref AuthDebug
+        PP_DEMO_PURGE: !Ref DemoPurge
 
 Resources:
   # ---------------- Storage ----------------

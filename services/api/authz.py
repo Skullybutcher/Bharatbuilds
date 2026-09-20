@@ -227,6 +227,9 @@ _ACTIVATE = ("procedures", "activate")
 def _needs_admin(method: str, path: str, body: dict) -> bool:
     if method == "POST" and path.startswith("/procedures/") and path.endswith("/activate"):
         return True
+    # Hard deletion is admin-only (and still refused unless PP_DEMO_PURGE is set).
+    if method == "POST" and path.endswith("/purge"):
+        return True
     if method == "POST" and "/resume" in path and body.get("gate") == "activation":
         return True
     return False
@@ -244,6 +247,10 @@ def _writable(method: str, path: str) -> bool:
     if "/rules/" in path and path.split("/")[-1] in ("accept", "edit", "reject", "escalate"):
         return True
     if path.endswith(("patch/approve", "patch/reject", "patch/request-revision")):
+        return True
+    # Retiring a build from the console is a reviewer-level write; the hard
+    # delete next to it (`/purge`) is admin-only via _needs_admin.
+    if path.endswith(("/archive", "/unarchive")):
         return True
     return False
 

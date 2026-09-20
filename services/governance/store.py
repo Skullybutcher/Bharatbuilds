@@ -281,6 +281,28 @@ def mark_build_status(build_id: str, status: str) -> dict | None:
     return b
 
 
+# ---- demo purge (hard delete) ------------------------------------------------
+PURGEABLE_COLLECTIONS = ("callbacks.json", "rule_reviews.json", "patch_reviews.json",
+                         "approvals.json", "candidates.json")
+
+
+def purge_build_records(build_id: str) -> dict:
+    """Remove every governance row belonging to one build. HARD DELETE — used
+    only by the flagged demo purge path (PP_DEMO_PURGE).
+
+    `procedure_versions.json` is deliberately NOT touched: procedure versions
+    are the shared registry, not per-build evidence. Returning counts (not a
+    bool) keeps the purge report honest about what actually disappeared."""
+    removed = {}
+    for name in PURGEABLE_COLLECTIONS:
+        rows = _load(name, [])
+        keep = [r for r in rows if r.get("build_id") != build_id]
+        if len(keep) != len(rows):
+            _save(name, keep)
+            removed[name] = len(rows) - len(keep)
+    return removed
+
+
 # ---- Step Functions human-gate callbacks ------------------------------------
 def save_callback(build_id: str, gate: str, task_token: str | None,
                   execution_arn: str | None = None) -> dict:

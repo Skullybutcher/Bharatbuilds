@@ -7,6 +7,13 @@ services.aws_kit (lazy), so local imports stay credential-free.
 from __future__ import annotations
 
 
+def _flag(name: str) -> bool:
+    """Env flags must be parsed, not truthiness-tested: the string '0' is truthy
+    in Python, so `if os.environ.get(...)` would ENABLE a flag set to '0'."""
+    import os as _os
+    return str(_os.environ.get(name, "")).strip().lower() in ("1", "true", "yes", "on")
+
+
 def _out(event, obj, code: int = 200) -> dict:
     """API Gateway calls get an HTTP envelope; Step Functions / local calls
     get the raw payload (SAM ${FnArn} substitution = request/response)."""
@@ -289,8 +296,7 @@ def api_handler(event, context):
         # T41c DEBUG: log the authorizer context ONCE per request so claim-shape
         # questions are answered from evidence, not hypothesis. Remove after the
         # auth loop is closed.
-        import os as _dbgOS
-        if _dbgOS.environ.get("PP_AUTH_DEBUG"):
+        if _flag("PP_AUTH_DEBUG"):
             _ctx = (event.get("requestContext") or {}).get("authorizer") or {}
             import json as _dbgjson
             print("AUTHDEBUG", _dbgjson.dumps({
@@ -318,13 +324,15 @@ def api_handler(event, context):
             return _out(event, fn(*a))
         except KeyError as e:
             return _out(event, {"error": f"unknown: {e}"}, 404)
+        except PermissionError as e:
+            return _out(event, {"error": str(e)}, 403)
         except ValueError as e:
             return _out(event, {"error": str(e)}, 409)
         except RuntimeError:
             return _out(event, {"error": "service temporarily unavailable"}, 503)
         except Exception as e:  # noqa: BLE001 — 500 with a CloudWatch trace line
-            import os as _eos, json as _ejson, traceback as _etb
-            if _eos.environ.get("PP_AUTH_DEBUG") == "1":
+            import json as _ejson, traceback as _etb
+            if _flag("PP_AUTH_DEBUG"):
                 print("RESUMEDEBUG", _ejson.dumps({"path": raw_path, "method": method,
                     "exc": f"{type(e).__name__}: {e}"[:300]})[:1200])
                 _etb.print_exc()
@@ -394,7 +402,8 @@ def api_handler(event, context):
         posts = {"patch/validate": A.validate_patch, "patch/review-request": A.patch_review_request,
                  "patch/approve": A.approve, "patch/reject": A.reject,
                  "patch/request-revision": A.request_revision,
-                 "archive": A.archive_build, "unarchive": A.unarchive_build}
+                 "archive": A.archive_build, "unarchive": A.unarchive_build,
+                 "purge": A.purge_build}
         if method == "POST" and tail in posts:
             fn = posts[tail]
             if tail == "patch/validate":

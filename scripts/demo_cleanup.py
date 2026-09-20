@@ -66,6 +66,8 @@ def main() -> int:
     ap.add_argument("email")
     ap.add_argument("password")
     ap.add_argument("--apply", action="store_true", help="actually archive (default: dry run)")
+    ap.add_argument("--purge", action="store_true",
+                    help="HARD DELETE instead of archiving (needs PP_DEMO_PURGE=1 on the stack)")
     ap.add_argument("--keep", action="append", default=[], help="build id to keep visible (repeatable)")
     args = ap.parse_args()
 
@@ -100,18 +102,23 @@ def main() -> int:
         print("\ndry run — re-run with --apply to archive these")
         return 0
 
+    verb = "purge" if args.purge else "archive"
+    if args.purge:
+        print("\n--purge: HARD DELETE — evidence is destroyed, not hidden.\n"
+              "           the act is audited, but nothing is recoverable.")
     failures = 0
     for b in targets:
         bid = b["build_id"]
-        st, out = req(f"{args.api}/builds/{bid}/archive", data=b"{}", headers=ah)
-        ok = st == 200 and out.get("archived") is True
-        print(f"  {'archived' if ok else f'FAILED (HTTP {st})'}: {bid}")
+        st, out = req(f"{args.api}/builds/{bid}/{verb}", data=b"{}", headers=ah)
+        ok = st == 200 and (out.get("deleted") if args.purge else out.get("archived")) is True
+        print(f"  {'purged' if args.purge and ok else 'archived' if ok else f'FAILED (HTTP {st})'}: {bid}")
         failures += 0 if ok else 1
 
     st, after = req(f"{args.api}/builds", headers=auth)
     visible = [b.get("build_id") for b in after.get("builds", [])]
     print(f"\nconsole now shows {len(visible)}: {', '.join(visible)}")
-    print("reversible: POST /builds/{id}/unarchive")
+    print("purged — nothing to reverse (that was the point)" if args.purge
+          else "reversible: POST /builds/{id}/unarchive")
     return 1 if failures else 0
 
 

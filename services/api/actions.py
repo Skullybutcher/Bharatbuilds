@@ -173,6 +173,39 @@ def unarchive_build(bid: str, body: dict | None = None):
     return {"build_id": rec["build_id"], "archived": False}
 
 
+def _purge_enabled() -> bool:
+    import os as _os
+    return str(_os.environ.get("PP_DEMO_PURGE", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def purge_build(bid: str, body: dict | None = None):
+    """HARD DELETE a build and, by default, its governance rows.
+
+    Demo-operations only, refused unless PP_DEMO_PURGE is set on the stack:
+    destroying governance evidence must never be one env var away from being
+    normal production behaviour. `POST /builds/{id}/archive` is the supported
+    way to retire a build; this exists so a demo stack can be reset.
+
+    The PURGE is audited BEFORE anything is removed, so the act itself stays on
+    record even though the evidence it removed does not. `{"full": false}`
+    deletes only the build document and leaves governance rows behind.
+    """
+    if not _purge_enabled():
+        raise PermissionError("purge is disabled (set PP_DEMO_PURGE=1 on the API stack)")
+    b = _need(bid)  # KeyError -> 404
+    full = True if body is None else bool(body.get("full", True))
+    from services.registry.store import audit as _audit, delete_build
+    _audit("BUILD_PURGED", {"build_id": b["build_id"], "status": b.get("status"),
+                            "full": full,
+                            "by": (body or {}).get("reviewer_id", "demo-purge")})
+    removed = {}
+    if full:
+        from services.governance.store import purge_build_records
+        removed = purge_build_records(b["build_id"])
+    return {"build_id": b["build_id"], "deleted": bool(delete_build(b["build_id"])),
+            "records_removed": removed}
+
+
 def get_build_view(bid: str):
     b = _get_build(bid)
     if not b:

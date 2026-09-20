@@ -210,6 +210,13 @@ class Handler(BaseHTTPRequestHandler):
                     return 200, fn(bid, body)
                 except KeyError:
                     return 404, {"error": "unknown build"}
+            if method == "POST" and tail == "purge":
+                try:
+                    return 200, actions.purge_build(bid, body)
+                except KeyError:
+                    return 404, {"error": "unknown build"}
+                except PermissionError as e:
+                    return 403, {"error": str(e)}
             return 404, {"error": "not found", "path": path}
         if method == "GET" and path.startswith("/executions/"):
             try:
