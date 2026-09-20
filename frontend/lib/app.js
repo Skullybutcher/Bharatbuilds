@@ -4,7 +4,9 @@
    loadPolicyFile, revDecide, patchDecide, activate,
    replay, boundaryX, drill, drawer, closedrawer, openBuild, checkPortal,
    ingestTrace, registerProc, createWs, buildAgainst, authToggle,
-   authMaybeExchange, authFetchCfg, esc, get, post. */
+   authMaybeExchange, authFetchCfg, esc, get, post,
+   openEvidence, closeEvidence, downloadBundle, archiveBuild, toggleArchived,
+   runReverify, setWorkspace. */
 let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null;
 /* Theme: light (paper — the ledger default) unless stored dark or OS dark. */
 function applyTheme(t){if(t==='light'||t==='dark'||t==='lab'){if(t==='light'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',t);}}else{document.documentElement.removeAttribute('data-theme');}
@@ -91,7 +93,7 @@ try{({Overview:vOverview,Impact:vImpact,Witnesses:vWit,Procedure:vProc,Patch:vPa
 /* ---------- actions ---------- */
 async function runBuild(){const d=document.getElementById('domain').value;loading('Compiling amendment (deterministic pipeline)…');try{BUILD=await get('/demo/canonical?domain='+d);}catch(e){showErr(e);return;}drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
 async function refreshBuild(){if(BUILD){try{BUILD=await get('/builds/'+BUILD.build_id);}catch(e){}render();}}
-async function loadHistory(){if(authCfgOk()&&!AUTH.user)return;try{HISTORY=(await get('/builds')).builds||[];}catch(e){}}
+async function loadHistory(){if(authCfgOk()&&!AUTH.user)return;try{const h=await get('/builds'+wsQuery());if(h&&h.builds)HISTORY=h.builds;}catch(e){}}
 /* No-build dashboard modules — real stored data only, never decoration.
    Rendered as empty containers; filled asynchronously after setView. */
 function dashHtml(){return '<div class="activity">'
@@ -99,21 +101,21 @@ function dashHtml(){return '<div class="activity">'
 +'<div class="mini"><div class="m-head"><b>Runtime traces</b><i class="ph ph-radioactive" aria-hidden="true"></i></div><div id="dashTraces"><span class="skel"></span></div></div>'
 +'<div class="mini"><div class="m-head"><b>Procedure versions</b><i class="ph ph-flow-arrow" aria-hidden="true"></i></div><div id="dashProcs"><span class="skel"></span></div></div>'
 +'</div>';}
-function dashFill(){dashOne('dashBuilds','/builds','build_id',d=>d.builds||[],id=>openBuild(id));
- dashOne('dashTraces','/traces','trace_id',d=>d.traces||[],()=>go('Traces'));
+function dashFill(){dashOne('dashBuilds','/builds'+wsQuery(),'build_id',d=>d.builds||[],id=>openBuild(id));
+ dashOne('dashTraces','/traces'+wsQuery(),'trace_id',d=>d.traces||[],()=>go('Traces'));
  dashOne('dashProcs','/procedures','procedure_version_id',d=>d.versions||[],()=>go('Builds'));}
 async function dashOne(elId,endpoint,idKey,pluck,openFn){const el=document.getElementById(elId);if(!el)return;
  if(authCfgOk()&&!AUTH.user){el.innerHTML='<p class="mut">Sign in to view</p>';return;}
  try{const items=pluck(await get(endpoint)).slice(0,4);
  el.innerHTML=items.length?items.map((x,i)=>'<button type="button" class="row" data-row="'+i+'"><span class="r-id">'+esc(x[idKey])+'</span><span class="r-meta">'+esc(x.status||x.source||x.workflow_id||'')+'</span></button>').join(''):'<p class="mut">nothing stored yet</p>';
  el.querySelectorAll('[data-row]').forEach(row=>row.addEventListener('click',()=>openFn(String(items[Number(row.dataset.row)][idKey]))));
- }catch(e){const msg=(e.message&&e.message.includes('401'))?'Sign in to view':'unavailable';el.innerHTML='<p class="mut">'+msg+'</p>';}}
+ }catch(e){const m=e.message||'';const msg=m.includes('401')?'Sign in to view':(m.includes('403')?'not a member of this workspace':'unavailable');el.innerHTML='<p class="mut">'+msg+'</p>';}}
 async function cloudRun(){const d=document.getElementById('domain').value;loading('Registering DRAFT → starting Step Functions execution…');try{
-const b=await post('/builds',{domain:d,defer:true});const ex=await post('/builds/'+b.data.build_id+'/execute',{});EXECArn=ex.data.executionArn;
+const b=await post('/builds',wsBody({domain:d,defer:true}));const ex=await post('/builds/'+b.data.build_id+'/execute',{});EXECArn=ex.data.executionArn;
 setView('<div class="card"><div class="card-head"><h3>Cloud execution</h3></div><div class="mono">'+esc(EXECArn)+'\nstatus: '+esc(ex.data.status)+'\n'+esc(ex.data.note||'')+'</div><div id="execPoll" class="mono">polling…</div></div>');
 for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,3000));try{const s=await get('/executions/'+encodeURIComponent(EXECArn));const el=document.getElementById('execPoll');if(el)el.textContent='status: '+s.status;if(s.status!=='RUNNING')break;}catch(e){break;}}
 BUILD=await get('/builds/'+ex.data.build_id);}catch(e){showErr(e);return;}drilled=null;CANDIDATE=null;active='Overview';renderTabs();render();loadHistory();}
-async function submitPolicy(){const t=document.getElementById('policyText').value;if(!t.trim()){alert('paste policy text first');return;}const d=document.getElementById('domain').value;loading('Extracting + compiling pasted policy…');const r=await post('/builds',{domain:d,policy_text:t,policy_version_id:'POLICY-UPLOAD'});
+async function submitPolicy(){const t=document.getElementById('policyText').value;if(!t.trim()){alert('paste policy text first');return;}const d=document.getElementById('domain').value;loading('Extracting + compiling pasted policy…');const r=await post('/builds',wsBody({domain:d,policy_text:t,policy_version_id:'POLICY-UPLOAD'}));
 if(r.data.status==='NEEDS_REVIEW'||r.data.status==='CONFLICT'||r.data.status==='EXTRACTION_UNAVAILABLE'){BUILD=r.data;active='Approval';renderTabs();render();alert('Extraction needs review: '+r.data.status+' — see Gate 1.');return;}
 BUILD=r.data;drilled=null;CANDIDATE=null;active='Overview';renderTabs();render();}
 function loadPolicyFile(inp){const f=inp.files[0];if(f)readPolicyFile(f);}
@@ -258,10 +260,26 @@ setView('<div class="card"><p class="kicker">Merge protection — what exactly a
 +(dis?'<p><small>Approve disabled by merge protection above.</small></p>':'')+'</div></div>'
 +'<div class="cols2"><div class="card flat"><p class="kicker">Gate 3 · Activation</p><p><small>Activates the exact candidate id from approval (hash-verified server-side).</small></p><button class="btn ok sm" onclick="activate()">Activate candidate</button><div id="actOut" class="mono" role="status"></div></div>'
 +'<div class="card flat"><p class="kicker">Audit timeline — governance ledger</p>'+auditTimeline(log.audit)+'<p class="kicker" style="margin-top:8px">Approval records (raw)</p><div class="mono">'+esc(JSON.stringify(appr.approvals))+'</div></div></div>'
-+'<div class="card flat"><p class="kicker">Patch certificate</p><div class="mono">'+esc(JSON.stringify(BUILD.certificate))+'</div><div style="margin-top:10px"><button class="btn sm" onclick="downloadBundle()">Download governance bundle</button> <button class="btn ghost sm" onclick="openEvidence()">View evidence</button> <span class="mut">one JSON file: reviews, approvals, guardrails, witnesses, patch, certificate, audit — sha256-sealed</span></div></div></div>');}
++'<div class="card flat"><p class="kicker">Patch certificate</p><div class="mono">'+esc(JSON.stringify(BUILD.certificate))+'</div><div style="margin-top:10px"><button class="btn sm" onclick="downloadBundle()">Download governance bundle</button> <button class="btn ghost sm" onclick="openEvidence()">View evidence</button> <button class="btn ghost sm" onclick="runReverify()">Re-verify</button> <span class="mut">one JSON file: reviews, approvals, guardrails, witnesses, patch, certificate, audit — sha256-sealed</span></div><div id="revOut" style="margin-top:10px" role="status" aria-live="polite"></div></div></div>');}
 async function downloadBundle(){if(!BUILD)return;try{const r=await fetch(api()+'/builds/'+BUILD.build_id+'/governance-bundle',{headers:authHeaders()});let d=null;try{d=await r.json();}catch(e){}
 if(!r.ok){alert('Bundle refused: '+((d&&d.error)||('HTTP '+r.status)));return;}
 const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=BUILD.build_id+'-governance-bundle.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);}catch(e){showErr(e);}}
+/* ---------- Re-verify (T65: renders POST /builds/{id}/reverify exactly) ---------- */
+function revHtml(d){d=d||{};const ok=!!d.verified;const mm=d.mismatches||[];
+const rows=(d.checks||[]).map(c=>'<tr><td class="mono">'+esc(c.check)+'</td><td class="mono">'+esc(JSON.stringify(c.stored)).slice(0,80)+'</td><td class="mono">'+esc(JSON.stringify(c.recomputed)).slice(0,80)+'</td><td><span class="tag '+(c.match?'pass':'fail')+'">'+(c.match?'match':'MISMATCH')+'</span></td></tr>').join('')||'<tr><td colspan="4" class="mut">no checks returned</td></tr>';
+return '<div class="card flat"><p class="kicker">Re-verification verdict</p><div class="card-head"><h3><span class="tag '+(ok?'pass':'fail')+'">'+(ok?'VERIFIED — the proof re-derives':'MISMATCH — stored evidence drifted')+'</span></h3></div>'
++'<div class="mono">basis: '+esc(d.basis||'—')+'\ncompiler: '+esc(d.compiler_version||'—')+' · re-ran '+esc(evTs(d.reverified_at))+'</div>'
++(ok?'':'<p><span class="tag fail">mismatched: '+esc(mm.join(', ')||'unknown')+'</span></p>')
++'<table><thead><tr><th>check</th><th>stored</th><th>recomputed</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
++'<p class="mut">Re-ran the deterministic pipeline from this build\u2019s accepted Rule IR (the extractor is excluded by design) and compared every hash. This run was audited server-side as REVERIFY_'+(ok?'PASS':'FAIL')+'.</p></div>';}
+async function runReverify(){if(!BUILD)return;const el=document.getElementById('revOut');if(el)el.innerHTML='<div class="mono" role="status">Re-running the deterministic pipeline from the accepted Rule IR…</div>';
+const r=await post('/builds/'+BUILD.build_id+'/reverify',{});const box=document.getElementById('revOut');if(!box)return;
+if(r.code===200&&r.data&&typeof r.data==='object'){box.innerHTML=revHtml(r.data);return;}
+const msg=(r.data&&r.data.error)||('HTTP '+r.code);
+if(r.code===409){box.innerHTML='<div class="empty" role="status"><b>Nothing to re-verify yet.</b> '+esc(msg)+' — validate a patch first, then re-run this check.</div>';return;}
+if(r.code===404){box.innerHTML='<div class="empty" role="status"><b>Build not found.</b> '+esc(msg)+'</div>';return;}
+if(r.code===403||r.code===401){box.innerHTML='<div class="empty" role="status"><b>Not permitted.</b> '+esc(msg)+' — sign in as a workspace member; denials are audited.</div>';return;}
+box.innerHTML='<div class="empty" role="status"><b>Re-verify failed.</b> '+esc(msg)+'</div>';}
 /* ---------- Evidence view (T61: renders GET governance-bundle readably) ---------- */
 let evTrigger=null;
 function evTs(t){return (typeof t==='number'&&isFinite(t))?new Date(t*1000).toISOString():'—';}
@@ -307,7 +325,7 @@ else{const m2={approve:'patch/approve',reject:'patch/reject',revision:'patch/req
 if(r.code!==200){alert('Blocked: '+JSON.stringify(r.data));}else{if(r.data&&r.data.candidate_version_id){CANDIDATE=r.data.candidate_version_id;}BUILD=await get('/builds/'+BUILD.build_id);vApproval();render();}}
 async function activate(){if(isCloud()){const r=await post('/builds/'+BUILD.build_id+'/resume',{gate:'activation',decision:'APPROVE',reviewer:authReviewer(),reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data).slice(0,800);return;}const r=await post('/procedures/'+CANDIDATE+'/activate',{build_id:BUILD.build_id,reviewer:authReviewer(),reason:'Final approval'});document.getElementById('actOut').textContent=JSON.stringify(r.data).slice(0,800);}
 /* ---------- Runtime traces (evidence, never auto-accepted) ---------- */
-async function vTraces(){loading('Loading runtime traces…');let list=[],cmp=null;try{list=(await get('/traces')).traces||[];if(BUILD){try{cmp=await get('/builds/'+BUILD.build_id+'/trace-compare');}catch(e){}}}catch(e){showErr(e);return;}
+async function vTraces(){loading('Loading runtime traces…');let list=[],cmp=null;try{list=(await get('/traces'+wsQuery())).traces||[];if(BUILD){try{cmp=await get('/builds/'+BUILD.build_id+'/trace-compare');}catch(e){}}}catch(e){const m=(e&&e.message)||'';if(/403/.test(m)){setView('<div class="card"><div class="empty" role="status"><b>Workspace '+esc(WS_FILTER)+' refused.</b> You are not a member of this workspace — every denial is audited server-side. Switch workspaces on the Builds tab.</div></div>');return;}showErr(e);return;}
 const rows=list.map(t=>'<tr><td class="mono">'+esc(t.trace_id)+'</td><td class="mono">'+esc(JSON.stringify(t.case)).slice(0,80)+'</td><td class="mono">'+esc(JSON.stringify(t.outcome)).slice(0,80)+'</td><td>'+esc(t.source||'')+'</td></tr>').join('')||'<tr><td colspan="4" class="mut">no traces ingested yet</td></tr>';
 const traceEmpty=list.length?'':'<div class="empty" role="status"><i class="ph ph-radioactive e-ico" aria-hidden="true"></i><b>No traces ingested yet.</b> Paste a case in the ingest form and add your first trace.<br/><br/><button class="btn sm" onclick="document.getElementById(\'traceCase\').focus()">Ingest your first trace</button></div>';
 const cres=(cmp&&cmp.results)||[];
@@ -326,8 +344,8 @@ setView('<div class="card"><p class="kicker">Runtime traces — real-world evide
 +'<div class="card flat"><p class="kicker">Stored traces ('+list.length+')</p><table><thead><tr><th>id</th><th>case</th><th>outcome</th><th>source</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>');}
 async function ingestTrace(){let c;try{c=JSON.parse(document.getElementById('traceCase').value||'{}');}catch(e){alert('case must be valid JSON');return;}
 const body={case:c,outcome:{eligible:document.getElementById('trElig').checked,on_time:document.getElementById('trOntime').checked},source:document.getElementById('trSource').value||'manual',workflow_id:(BUILD&&BUILD.procedure||{}).workflow_id||null};
-const r=await post('/traces',body);const el=document.getElementById('traceOut');if(el)el.textContent=r.code===200?('ingested '+(r.data&&r.data.trace_id||'')):('error: '+JSON.stringify(r.data));vTraces();}
-async function ingestCsv(){const csv=document.getElementById('traceCsv').value;if(!csv.trim()){alert('paste CSV first');return;}const r=await post('/traces/csv',{csv:csv,workflow_id:(BUILD&&BUILD.procedure||{}).workflow_id||null});const el=document.getElementById('csvOut');if(r.code!==200){if(el)el.textContent='error: '+((r.data&&r.data.error)||JSON.stringify(r.data));}else{if(el)el.textContent='ingested '+r.data.ingested+' · duplicates '+r.data.duplicates;}vTraces();}
+const r=await post('/traces',wsBody(body));const el=document.getElementById('traceOut');if(el)el.textContent=r.code===200?('ingested '+(r.data&&r.data.trace_id||'')):('error: '+JSON.stringify(r.data));vTraces();}
+async function ingestCsv(){const csv=document.getElementById('traceCsv').value;if(!csv.trim()){alert('paste CSV first');return;}const r=await post('/traces/csv',wsBody({csv:csv,workflow_id:(BUILD&&BUILD.procedure||{}).workflow_id||null}));const el=document.getElementById('csvOut');if(r.code!==200){if(el)el.textContent='error: '+((r.data&&r.data.error)||JSON.stringify(r.data));}else{if(el)el.textContent='ingested '+r.data.ingested+' · duplicates '+r.data.duplicates;}vTraces();}
 async function nominateTrace(tid){if(!BUILD)return;loading('Verifying nominated witness through the build pipeline…');const r=await post('/builds/'+BUILD.build_id+'/nominate-witness',{trace_id:tid,reviewer:authReviewer()});if(r.code!==200){alert('Refused: '+((r.data&&r.data.error)||JSON.stringify(r.data)));return;}const d=r.data||{};if(d.verified){BUILD=await get('/builds/'+BUILD.build_id);}vTraces();if(d.verified){setTimeout(()=>alert('Witness '+d.witness.witness_id+' verified via the build pipeline and added to this build.'),50);}else{setTimeout(()=>alert(d.reason||'pipeline found no new witness for this case'),50);}}
 /* ---------- Benchmarks ---------- */
 async function vBench(){loading('Loading benchmark…');try{BENCH=await get('/benchmark-runs/latest');}catch(e){setView('<div class="card"><div class="empty" role="status"><i class="ph ph-chart-bar e-ico" aria-hidden="true"></i><b>No benchmark runs yet.</b> Generate one with <span class="mono">make benchmark</span> in a terminal.<br/><br/><button class="btn ghost sm" onclick="try{navigator.clipboard.writeText(\'make benchmark\');this.textContent=\'Copied — paste it in a terminal\';}catch(e){}">Copy command</button></div></div>');return;}
@@ -341,28 +359,41 @@ setView('<div class="card"><p class="kicker">ProcessPatchBench</p><div class="ca
 /* ---------- Builds (workspaces + history) ---------- */
 /* Archive affordance (T59: POST /builds/{id}/archive|unarchive; read-only list flag) */
 let SHOW_ARCHIVED=false;let PENDING_ARCHIVE=null;
+/* Workspace switcher (T65: drives ?workspace_id= lists + stamps compiles/ingests).
+   '' = all my workspaces (the server scopes by ws-* membership; callers with
+   no ws-* groups see "default" only). Non-member filters 403 and are audited. */
+let WS_FILTER='',WS_LIST=[],WS_ERR='';
+function wsParam(){return WS_FILTER?'workspace_id='+encodeURIComponent(WS_FILTER):'';}
+function wsQuery(extra){const p=[];if(extra)p.push(extra);if(wsParam())p.push(wsParam());return p.length?'?'+p.join('&'):'';}
+function wsBody(b){b=b||{};if(WS_FILTER)b.workspace_id=WS_FILTER;return b;}
+function wsOpts(ws){let h=ws.map(w=>'<option value="'+esc(w.workspace_id)+'"'+(WS_FILTER===w.workspace_id?' selected':'')+'>'+esc((w.name||w.workspace_id)+' ('+w.workspace_id+')')+'</option>').join('');
+if(WS_FILTER&&!ws.some(w=>w.workspace_id===WS_FILTER))h+='<option value="'+esc(WS_FILTER)+'" selected>'+esc(WS_FILTER)+'</option>';return h;}
+function setWorkspace(v){WS_FILTER=v||'';WS_ERR='';if(active==='Builds')vHist();else if(active==='Traces')vTraces();else if(!BUILD)render();}
 async function archiveBuild(id,arch){const r=await post('/builds/'+id+'/'+(arch?'archive':'unarchive'),{});PENDING_ARCHIVE=null;if(r.code!==200){alert((arch?'Archive':'Restore')+' refused: '+JSON.stringify(r.data));}vHist();}
 function toggleArchived(el){SHOW_ARCHIVED=!!(el&&el.checked);PENDING_ARCHIVE=null;vHist();}
-async function vHist(){let ws=[],vers=[];try{const [wData,vData,hData]=await Promise.all([get('/workspaces').then(d=>d.workspaces||[]).catch(()=>[]),get('/procedures').then(d=>d.versions||[]).catch(()=>[]),get('/builds'+(SHOW_ARCHIVED?'?include_archived=1':'')).then(d=>d.builds||[]).catch(()=>[])]);ws=wData;vers=vData;if(hData&&hData.length)HISTORY=hData;}catch(e){}
+async function vHist(){let ws=[],vers=[];WS_LIST=[];try{const [wData,vData]=await Promise.all([get('/workspaces').then(d=>d.workspaces||[]).catch(()=>[]),get('/procedures').then(d=>d.versions||[]).catch(()=>[])]);ws=wData;vers=vData;WS_LIST=ws;}catch(e){}
+WS_ERR='';try{const hData=await get('/builds'+wsQuery(SHOW_ARCHIVED?'include_archived=1':''));if(hData&&hData.builds)HISTORY=hData.builds;}catch(e){WS_ERR=(e&&e.message)||String(e);}
 const versBlock=vers.length?'<table><thead><tr><th>version</th><th>workflow</th><th>status</th><th></th></tr></thead><tbody>'+vers.map(v=>'<tr><td class="mono">'+esc(v.procedure_version_id)+'</td><td class="mono">'+esc(v.workflow_id||'—')+'</td><td>'+esc(v.status||'')+'</td><td><button class="btn ghost sm" onclick="buildAgainst(\''+esc(v.procedure_version_id)+'\')">Compile amendment</button></td></tr>').join('')+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-flow-arrow e-ico" aria-hidden="true"></i><b>No procedures registered.</b> Paste a procedure graph below and register it.<br/><br/><button class="btn ghost sm" onclick="document.getElementById(\'procJson\').focus()">Register a procedure</button></div>';
 const wsBlock=ws.length?'<table><thead><tr><th>id</th><th>name</th></tr></thead><tbody>'+ws.map(w=>'<tr><td class="mono">'+esc(w.workspace_id)+'</td><td>'+esc(w.name)+'</td></tr>').join('')+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-stack e-ico" aria-hidden="true"></i><b>No workspaces yet.</b> Name one below and create it.<br/><br/><button class="btn ghost sm" onclick="document.getElementById(\'wsName\').focus()">Create a workspace</button></div>';
 const histRows=HISTORY.map(b=>{const bb=(b&&typeof b==='object')?b:{build_id:String(b)};const bid=bb.build_id||'';const arch=!!bb.archived;
 const arcCtl=(PENDING_ARCHIVE===bid)?'<button class="btn danger sm" onclick="archiveBuild(\''+esc(bid)+'\','+(arch?'false':'true')+')">Confirm '+(arch?'restore':'archive')+'</button> <button class="btn ghost sm" onclick="PENDING_ARCHIVE=null;vHist()">Cancel</button>':'<button class="btn ghost sm" onclick="PENDING_ARCHIVE=\''+esc(bid)+'\';vHist()">'+(arch?'Restore':'Archive')+'</button>';
-return '<tr class="'+(arch?'archived':'')+'"><td class="mono">'+esc(bid)+(arch?' <span class="tag warn">archived</span>':'')+'</td><td>'+esc(bb.status||'')+'</td><td><button class="btn ghost sm" onclick="openBuild(\''+esc(bid)+'\')">Open</button> '+arcCtl+'</td></tr>';}).join('');
-const histBlock=HISTORY.length?'<table><thead><tr><th>build</th><th>status</th><th></th></tr></thead><tbody>'+histRows+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-stack e-ico" aria-hidden="true"></i><b>No builds yet.</b> Compile your first amendment to see it here.<br/><br/><button class="btn sm" onclick="runBuild()">Compile Amendment</button></div>';
+return '<tr class="'+(arch?'archived':'')+'"><td class="mono">'+esc(bid)+(arch?' <span class="tag warn">archived</span>':'')+'</td><td>'+esc(bb.status||'')+'</td><td class="mut">'+esc(bb.workspace_id||'default')+'</td><td><button class="btn ghost sm" onclick="openBuild(\''+esc(bid)+'\')">Open</button> '+arcCtl+'</td></tr>';}).join('');
+const histBlock=HISTORY.length?'<table><thead><tr><th>build</th><th>status</th><th>workspace</th><th></th></tr></thead><tbody>'+histRows+'</tbody></table>':'<div class="empty" role="status"><i class="ph ph-stack e-ico" aria-hidden="true"></i>'+(WS_FILTER?'<b>No builds in workspace '+esc(WS_FILTER)+' yet.</b> Compiles stamped with this workspace will appear here.':'<b>No builds yet.</b> Compile your first amendment to see it here.')+'<br/><br/><button class="btn sm" onclick="runBuild()">Compile Amendment</button></div>';
 setView('<div class="card"><p class="kicker">Workspaces — any registered procedure can be compiled</p><div class="card-head"><h3>Procedures + workspaces</h3></div>'
 +'<p class="mut">Demo domains ship built-in; register your own procedure graph (JSON) and compile amendments against it. INVALID_WORKFLOW registrations are rejected fail-closed.</p>'
 +'<div class="cols2"><div class="card flat"><p class="kicker">Registered procedure versions ('+vers.length+')</p>'
 +versBlock
 +'<label class="field" for="procJson">Procedure JSON</label><textarea id="procJson" rows="5" placeholder=\'{"workflow_id":"WF-MY","procedure_version_id":"WF-MY-V1","nodes":[],"edges":[]}\'></textarea><br/><button class="btn sm" onclick="registerProc()">Register procedure</button><div id="procOut" class="mono" role="status"></div></div>'
 +'<div class="card flat"><p class="kicker">Workspaces ('+ws.length+')</p>'+wsBlock
++'<label class="field">Active workspace <select id="wsSel" onchange="setWorkspace(this.value)"><option value="">All my workspaces</option>'+wsOpts(ws)+'</select></label>'
++'<p class="mut">Lists show this workspace only; compiles and trace ingests are stamped into it. The demo canonical build always lands in <span class="mono">default</span>. A refused workspace means non-membership — denials are audited.</p>'
 +'<label class="field">New workspace <input id="wsName" value="" placeholder="Fellowships 2027"/></label> <button class="btn ghost sm" onclick="createWs()">Create</button></div></div>'
-+'<div class="card flat"><p class="kicker">Build history</p><label class="field"><input type="checkbox" onchange="toggleArchived(this)"'+(SHOW_ARCHIVED?' checked':'')+'/> Include archived</label>'+(EXECArn?'<p class="mut">active execution: '+esc(EXECArn)+'</p>':'')+histBlock+'</div></div>');}
++'<div class="card flat"><p class="kicker">Build history</p><label class="field"><input type="checkbox" onchange="toggleArchived(this)"'+(SHOW_ARCHIVED?' checked':'')+'/> Include archived</label>'+(WS_ERR?'<p><span class="tag fail">list refused: '+esc(WS_ERR)+' — denials are audited</span></p>':'')+(EXECArn?'<p class="mut">active execution: '+esc(EXECArn)+'</p>':'')+histBlock+'</div></div>');}
 async function registerProc(){let wf;try{wf=JSON.parse(document.getElementById('procJson').value||'{}');}catch(e){alert('procedure must be valid JSON');return;}
 const r=await post('/procedures',{procedure:wf});const el=document.getElementById('procOut');
 if(el)el.textContent=r.code===200?('registered '+(r.data&&r.data.procedure_version_id||'')):('rejected: '+JSON.stringify(r.data).slice(0,300));vHist();}
 async function createWs(){const n=(document.getElementById('wsName')||{}).value||'';const r=await post('/workspaces',{name:n});if(r.code!==200){alert('error: '+JSON.stringify(r.data));}vHist();}
-async function buildAgainst(pid){loading('Compiling amendment against '+pid+'…');const r=await post('/builds',{procedure_version_id:pid});
+async function buildAgainst(pid){loading('Compiling amendment against '+pid+'…');const r=await post('/builds',wsBody({procedure_version_id:pid}));
 if(r.code!==200){showErr(new Error(JSON.stringify(r.data).slice(0,200)));return;}
 BUILD=r.data;drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
 async function openBuild(id){try{BUILD=await get('/builds/'+id);}catch(e){showErr(e);return;}CANDIDATE=null;active='Overview';renderTabs();render();}
@@ -375,6 +406,7 @@ items.push(
  {label:'Toggle theme',hint:'lab → paper → graphite',icon:'palette',run:()=>toggleTheme()},
  {label:'Download governance bundle',hint:'sha256-sealed evidence pack (approval required)',icon:'seal-check',run:()=>downloadBundle()},
  {label:'View governance evidence',hint:'sealed pack rendered: seal, approvals, coverage, audit',icon:'seal-check',run:()=>openEvidence()},
+ {label:'Re-verify this build',hint:'re-run the deterministic pipeline from the accepted IR',icon:'check-square',run:()=>runReverify()},
  {label:'Compile pasted policy',hint:'extract + compile the text in Policy input',icon:'brackets-curly',run:()=>{go('Overview');setTimeout(submitPolicy,60);}});
 return items;}
 let PAL={open:false,idx:0,items:[]};let paletteTrigger=null;
