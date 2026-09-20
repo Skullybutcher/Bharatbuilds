@@ -876,6 +876,18 @@ def describe_execution(arn: str):
         d = sf.describe_execution(executionArn=arn)
     except sf.exceptions.ExecutionDoesNotExist:
         raise KeyError(arn)  # unknown execution -> 404, not a 500
+    except Exception as e:  # noqa: BLE001 — name IAM problems instead of 500ing
+        # N2 finding (2026-09-20): AccessDenied surfaced as a bare 500, hiding
+        # the diagnosis channel exactly when an execution dies. A denied
+        # describe is an environment/permissions problem, not a missing
+        # execution — say so honestly instead of "internal error".
+        name = type(e).__name__
+        msg = str(e)
+        if "AccessDenied" in name or "AccessDenied" in msg or "not authorized" in msg:
+            raise PermissionError(
+                "execution describe denied by IAM policy — check the API Lambda "
+                f"role's states:DescribeExecution grant ({name})") from e
+        raise
     return {"executionArn": arn, "status": d.get("status"), "started": str(d.get("startDate")),
             "error": d.get("error"), "cause": (d.get("cause") or "")[:1500],
             "output": (d.get("output") or "")[:2000]}

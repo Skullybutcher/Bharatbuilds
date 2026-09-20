@@ -37,8 +37,9 @@
     "IDEMPOTENT_HIT?": {
       "Type": "Choice",
       "Choices": [{"Variable": "$.idempotency.idempotent_reuse", "BooleanEquals": true, "Next": "READY_CACHED"}],
-      "Default": "RESOLVE_AUTHORITY"
+      "Default": "CANONICALIZE_BUILD_ID"
     },
+    "CANONICALIZE_BUILD_ID": {"Type": "Pass", "Comment": "T68: HASH mints build_id PROVISIONALLY from policy+procedure (rules don't exist yet); compile_key = sha(accepted rules+procedure) is the canonical identity and local run_build has always set build_id = compile_key. Reconcile here — before any consumer — so persist, callbacks, gates, certificates and reverify all see ONE identity. Crossed identities made every activated cloud build fail reverify on fields nobody tampered with.", "Parameters": {"build_id.$": "$.idempotency.compile_key"}, "ResultPath": "$.build_id", "Next": "RESOLVE_AUTHORITY"},
     "RESOLVE_AUTHORITY": {"Type": "Pass", "Comment": "Attach source precedence metadata; conflicts fail closed downstream.", "Next": "RULE_REVIEW_REQUIRED?"},
     "RULE_REVIEW_REQUIRED?": {
       "Type": "Choice",

@@ -248,22 +248,41 @@ def _file_get_item(name: str, item_id: str):
     return None, 0
 
 
+def _dd_legacy_meta(t, name: str) -> dict | None:
+    """The pre-T58 single-item blob for a dict collection, if any. Builds were
+    one META record until T58; the deployed stack still holds live builds only
+    there, so per-record reads/writes/deletes must consult it or those records
+    become invisible to every per-record consumer (found live via N2: archive
+    500'd on every legacy build because get_item returned None)."""
+    raw = (t.get_item(Key={"PK": f"COLL#{name}", "SK": META_SK},
+                      ConsistentRead=True).get("Item") or {}).get("data_json")
+    return json.loads(raw) if raw is not None else None
+
+
 def _dd_get_item(name: str, item_id: str):
-    row = _dd().get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
-                         ConsistentRead=True).get("Item") or {}
-    if not row.get("data_json"):
-        return None, 0
-    return json.loads(row["data_json"]), int(row.get("ver", -1))
+    t = _dd()
+    row = t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
+                     ConsistentRead=True).get("Item") or {}
+    if row.get("data_json"):
+        return json.loads(row["data_json"]), int(row.get("ver", -1))
+    legacy = _dd_legacy_meta(t, name)
+    if legacy is not None and item_id in legacy:
+        return legacy[item_id], -1  # exists, but written by the legacy bulk path
+    return None, 0
 
 
 def _dd_put_item(name: str, item_id: str, item: dict, expect: int | None) -> int:
     t = _dd()
     row = t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
                      ConsistentRead=True).get("Item") or {}
-    if not row.get("data_json"):
-        cur = 0
+    if row.get("data_json"):
+        cur = int(row.get("ver", -1))
     else:
-        cur = int(row.get("ver", -1))  # -1: legacy row written without a version
+        # version conventions: 0 = absent (create-only applies), -1 = a legacy
+        # META-only row (first per-record write migrates it unconditionally,
+        # and from then on the per-record row shadows the blob)
+        legacy = _dd_legacy_meta(t, name)
+        cur = -1 if (legacy is not None and item_id in legacy) else 0
     if expect is not None and cur != expect:
         raise ConcurrencyError(f"{name}/{item_id}: expected version {expect}, found {cur}")
     new_ver = (cur if cur > 0 else 0) + 1
@@ -354,9 +373,22 @@ def delete_item(name: str, item_id: str) -> bool:
         return True
     try:
         t = _dd()
-        existed = bool((t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
-                                  ConsistentRead=True).get("Item") or {}).get("data_json"))
+        row = t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
+                         ConsistentRead=True).get("Item") or {}
+        existed = bool(row.get("data_json"))
         t.delete_item(Key={"PK": f"COLL#{name}", "SK": item_id})
+        if not existed:
+            # Legacy-only record: the per-record row is empty, the truth lives
+            # in the META blob. Remove it there or the purge of a pre-T58 build
+            # would silently no-op. Unconditional rewrite is acceptable here:
+            # the only caller is the admin-flagged demo purge.
+            legacy = _dd_legacy_meta(t, name)
+            if legacy is not None and item_id in legacy:
+                legacy.pop(item_id, None)
+                t.put_item(Item={"PK": f"COLL#{name}", "SK": META_SK,
+                                 "data_json": json.dumps(legacy, default=str),
+                                 "GSI_PK": "COLL", "GSI_SK": name})
+                existed = True
         return existed
     except Exception as e:  # noqa: BLE001
         raise RuntimeError(f"storage delete failed for {name}/{item_id}: {type(e).__name__}: {e}") from e

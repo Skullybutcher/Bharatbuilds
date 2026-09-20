@@ -6,7 +6,8 @@
    ingestTrace, registerProc, createWs, buildAgainst, authToggle,
    authMaybeExchange, authFetchCfg, esc, get, post,
    openEvidence, closeEvidence, downloadBundle, archiveBuild, toggleArchived,
-   runReverify, setWorkspace. */
+   runReverify, setWorkspace, openBundlePicker, openBundleFile,
+   openFileEvidence, openFileError. */
 let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null;
 /* Theme: light (paper — the ledger default) unless stored dark or OS dark. */
 function applyTheme(t){if(t==='light'||t==='dark'||t==='lab'){if(t==='light'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',t);}}else{document.documentElement.removeAttribute('data-theme');}
@@ -248,7 +249,7 @@ const actor=auditActor(e);const det=Object.keys(e).filter(k=>!SKIP[k]).map(k=>k+
 h+='<li class="tl-ev"><span class="tl-ts">'+((typeof e.ts==='number'&&isFinite(e.ts))?esc(new Date(e.ts*1000).toISOString().slice(11,19)):'—')+'</span><span class="tag '+auditTone(e.event)+'">'+esc(e.event||'event')+'</span><span class="tl-actor">'+esc(actor||'—')+'</span></li>'
 +(det?'<li class="tl-det">'+esc(det)+'</li>':'');});
 return h+'</ol>';}
-async function vApproval(){if(!BUILD){setView('<div class="card"><div class="empty" role="status"><i class="ph ph-seal-check e-ico" aria-hidden="true"></i><b>No build selected.</b> Compile an amendment first, then review it here.<br/><br/><button class="btn" onclick="runBuild()">Compile Amendment</button></div></div>');return;}loading('Loading governance state…');let rev,appr,g,log;try{[rev,appr,g,log]=await Promise.all([get('/builds/'+BUILD.build_id+'/rule-reviews'),get('/builds/'+BUILD.build_id+'/approvals'),get('/builds/'+BUILD.build_id+'/guardrails'),get('/builds/'+BUILD.build_id+'/audit')]);}catch(e){showErr(e);return;}
+async function vApproval(){if(!BUILD){setView('<div class="card"><div class="empty" role="status"><i class="ph ph-seal-check e-ico" aria-hidden="true"></i><b>No build selected.</b> Compile an amendment first, then review it here.<br/><br/><button class="btn" onclick="runBuild()">Compile Amendment</button> <button class="btn ghost" onclick="openBundlePicker()">Open a bundle file</button><br/><small>Have a downloaded *-governance-bundle.json? Open it here — it renders offline, no server needed.</small></div></div>');return;}loading('Loading governance state…');let rev,appr,g,log;try{[rev,appr,g,log]=await Promise.all([get('/builds/'+BUILD.build_id+'/rule-reviews'),get('/builds/'+BUILD.build_id+'/approvals'),get('/builds/'+BUILD.build_id+'/guardrails'),get('/builds/'+BUILD.build_id+'/audit')]);}catch(e){showErr(e);return;}
 const dis=(g.blockers||[]).length>0;const steps=[['Rule interpretation reviewed','unresolved reviews = 0',(g.checks||{}).unresolved_rule_review===0],['Patch tests pass','VALIDATED_WITHIN_TESTED_MODEL',(g.checks||{}).patch_validation==='VALIDATED_WITHIN_TESTED_MODEL'],['Preservation passed','unchanged behavior preserved',(g.checks||{}).preservation==='PASS'],['Provenance 100%','every node traced to policy',(g.checks||{}).provenance_coverage>=1],['Candidate hash unchanged','no hash blockers',!(g.blockers||[]).some(b=>String(b).includes('hash'))]];
 const checkPill=(k,v)=>{const good=v===true||v==='PASS'||v==='VALIDATED_WITHIN_TESTED_MODEL'||(typeof v==='number'&&v>=1);return '<span class="tag '+(good?'pass':'warn')+'">'+esc(k)+': '+esc(String(v))+'</span>';};
 setView('<div class="card"><p class="kicker">Merge protection — what exactly am I being asked to accept?</p><div class="card-head"><h3>Approval gates</h3></div>'
@@ -260,7 +261,7 @@ setView('<div class="card"><p class="kicker">Merge protection — what exactly a
 +(dis?'<p><small>Approve disabled by merge protection above.</small></p>':'')+'</div></div>'
 +'<div class="cols2"><div class="card flat"><p class="kicker">Gate 3 · Activation</p><p><small>Activates the exact candidate id from approval (hash-verified server-side).</small></p><button class="btn ok sm" onclick="activate()">Activate candidate</button><div id="actOut" class="mono" role="status"></div></div>'
 +'<div class="card flat"><p class="kicker">Audit timeline — governance ledger</p>'+auditTimeline(log.audit)+'<p class="kicker" style="margin-top:8px">Approval records (raw)</p><div class="mono">'+esc(JSON.stringify(appr.approvals))+'</div></div></div>'
-+'<div class="card flat"><p class="kicker">Patch certificate</p><div class="mono">'+esc(JSON.stringify(BUILD.certificate))+'</div><div style="margin-top:10px"><button class="btn sm" onclick="downloadBundle()">Download governance bundle</button> <button class="btn ghost sm" onclick="openEvidence()">View evidence</button> <button class="btn ghost sm" onclick="runReverify()">Re-verify</button> <span class="mut">one JSON file: reviews, approvals, guardrails, witnesses, patch, certificate, audit — sha256-sealed</span></div><div id="revOut" style="margin-top:10px" role="status" aria-live="polite"></div></div></div>');}
++'<div class="card flat"><p class="kicker">Patch certificate</p><div class="mono">'+esc(JSON.stringify(BUILD.certificate))+'</div><div style="margin-top:10px"><button class="btn sm" onclick="downloadBundle()">Download governance bundle</button> <button class="btn ghost sm" onclick="openEvidence()">View evidence</button> <button class="btn ghost sm" onclick="openBundlePicker()">Open a bundle file</button> <button class="btn ghost sm" onclick="runReverify()">Re-verify</button> <span class="mut">one JSON file: reviews, approvals, guardrails, witnesses, patch, certificate, audit — sha256-sealed · downloaded bundles reopen offline</span></div><div id="revOut" style="margin-top:10px" role="status" aria-live="polite"></div></div></div>');}
 async function downloadBundle(){if(!BUILD)return;try{const r=await fetch(api()+'/builds/'+BUILD.build_id+'/governance-bundle',{headers:authHeaders()});let d=null;try{d=await r.json();}catch(e){}
 if(!r.ok){alert('Bundle refused: '+((d&&d.error)||('HTTP '+r.status)));return;}
 const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=BUILD.build_id+'-governance-bundle.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);}catch(e){showErr(e);}}
@@ -286,27 +287,31 @@ function evTs(t){return (typeof t==='number'&&isFinite(t))?new Date(t*1000).toIS
 function evWho(r){if(typeof r==='string'&&r)return r;if(r&&typeof r==='object')return r.reviewer_id||r.display_name||r.email||null;return null;}
 function evHead(title){return '<div class="ev-head"><h3 id="evTitle" tabindex="-1">'+esc(title)+'</h3><span style="flex:1"></span><button class="btn ghost sm" onclick="closeEvidence()">Close</button></div>';}
 function evRefusedHtml(){return evHead('Governance evidence')
++evOpenFileRow()
 +'<div class="empty" role="status"><b>Sealed — no approval on record.</b> This build has no human approval yet, so there is no evidence pack to unseal. Approve the candidate at Gate 2, then open this view again.</div>';}
 function evFailedHtml(err){return evHead('Governance evidence')
++evOpenFileRow()
 +'<div class="empty" role="status"><b>Evidence unavailable.</b> '+esc(err||'fetch failed')+' — try again; the sealed download on the Approval tab holds the same bytes.</div>';}
-function evHtml(d,cov){d=d||{};const b=d.build||{};const ap=d.approvals||[];const rr=d.rule_reviews||[];
+function evHtml(d,cov,fileMode){d=d||{};const b=d.build||{};const ap=d.approvals||[];const rr=d.rule_reviews||[];
 const apRows=ap.map(a=>'<tr><td class="mono">'+esc(a.approval_id||'—')+'</td><td>'+esc(a.approval_type||'—')+'</td><td>'+esc(a.decision||'—')+'</td><td>'+esc(evWho(a.reviewer)||'—')+'</td><td class="mono">'+esc(evTs(a.timestamp))+'</td></tr>').join('')
 ||'<tr><td colspan="5" class="mut">no approvals recorded</td></tr>';
 const rrRows=rr.map(r=>'<tr><td class="mono">'+esc(r.rule_id||'—')+'</td><td>'+esc(r.decision||'—')+'</td><td>'+esc(evWho(r.reviewer)||'—')+'</td><td class="mono">'+esc(evTs(r.timestamp))+'</td></tr>').join('')
 ||'<tr><td colspan="4" class="mut">no rule reviews recorded</td></tr>';
 const cn=(cov&&cov.nodes)||null,cf=(cov&&cov.fields)||null;
-const covBlock=!cov?'<p class="mut">coverage unavailable for this build</p>'
+ const covBlock=!cov?(fileMode?'<p class="mut">coverage is not stored in the bundle file — the live evidence view fetches it per build</p>':'<p class="mut">coverage unavailable for this build</p>')
 :'<div class="mono">nodes '+esc(cn.covered)+'/'+esc(cn.total)+' · fields '+esc(cf.covered)+'/'+esc(cf.total)+'</div><p class="mut">'+esc(cov.note||'')+'</p>';
 const idRows=['build_id','policy_version_id','status','review_state','extraction_backend'].map(k=>'<tr><td class="mut">'+esc(k)+'</td><td class="mono">'+esc(b[k]==null?'—':b[k])+'</td></tr>').join('')
 +'<tr><td class="mut">created_at</td><td class="mono">'+esc(evTs(b.created_at))+'</td></tr>';
-return evHead('Governance evidence · '+(b.build_id||''))
+ return evHead('Governance evidence · '+(b.build_id||''))
+ +evOpenFileRow()
 +'<div class="card flat"><p class="kicker">Seal</p><div class="mono">algorithm SHA-256 over canonical JSON · bundle v'+esc(d.bundle_version)+'\nsha256 '+esc(d.bundle_sha256||'—')+'\ngenerated '+esc(evTs(d.generated_at))+'</div><button class="btn ghost sm" onclick="try{navigator.clipboard.writeText(\''+esc(d.bundle_sha256||'')+'\');this.textContent=\'Copied\';}catch(e){}">Copy seal</button></div>'
 +'<div class="card flat"><p class="kicker">Build identity</p><table><tbody>'+idRows+'</tbody></table></div>'
 +'<div class="card flat"><p class="kicker">Patch certificate</p><div class="mono">'+esc(JSON.stringify(d.certificate))+'</div></div>'
 +'<div class="card flat"><p class="kicker">Approvals ('+ap.length+')</p><table><thead><tr><th>approval</th><th>kind</th><th>decision</th><th>reviewer</th><th>time</th></tr></thead><tbody>'+apRows+'</tbody></table></div>'
 +'<div class="card flat"><p class="kicker">Rule reviews ('+rr.length+')</p><table><thead><tr><th>rule</th><th>decision</th><th>reviewer</th><th>time</th></tr></thead><tbody>'+rrRows+'</tbody></table></div>'
 +'<div class="card flat"><p class="kicker">Witness coverage</p>'+covBlock+'</div>'
-+'<div class="card flat"><p class="kicker">Audit chain</p>'+auditTimeline(d.audit||[])+'</div>';}
+ +'<div class="card flat"><p class="kicker">Audit chain</p>'+auditTimeline(d.audit||[])+'</div>'
+ +evVerifyHtml();}
 async function openEvidence(){if(!BUILD)return;evTrigger=document.activeElement;
 const root=document.getElementById('drawerRoot');
 root.insertAdjacentHTML('beforeend','<div class="overlay" id="evBack" onclick="closeEvidence()"></div><div class="ev-modal" id="evModal" role="dialog" aria-modal="true" aria-label="Governance evidence"><div class="loading" role="status">Loading sealed evidence…</div></div>');
@@ -318,6 +323,15 @@ const m=document.getElementById('evModal');if(!m)return;
 m.innerHTML=refused?evRefusedHtml():((d&&typeof d==='object')?evHtml(d,cov):evFailedHtml(err));
 const h=document.getElementById('evTitle');if(h)h.focus();}
 function closeEvidence(){const b=document.getElementById('evBack');if(b)b.remove();const m=document.getElementById('evModal');if(m)m.remove();if(evTrigger&&evTrigger.isConnected)evTrigger.focus();evTrigger=null;}
+/* ---------- Offline evidence (T66: a downloaded bundle renders without a server) ---------- */
+function evOpenFileRow(){return '<div style="margin:0 0 12px"><button class="btn ghost sm" onclick="openBundlePicker()">Open a bundle file</button> <span class="mut">read a downloaded *-governance-bundle.json on this machine — no server needed</span></div>';}
+function evVerifyHtml(){return '<div class="card flat"><p class="kicker">Verify this bundle</p><div class="mono">python scripts/verify_bundle.py &lt;bundle.json&gt;</div><button class="btn ghost sm" onclick="try{navigator.clipboard.writeText(\'python scripts/verify_bundle.py <bundle.json>\');this.textContent=\'Copied\';}catch(e){}">Copy command</button><p class="mut">The CLI recomputes the seal and every hash with zero dependencies; the browser does not verify anything itself.</p></div>';}
+function evValidateBundle(d){if(!d||typeof d!=='object'||Array.isArray(d))return ['whole file (expected a JSON object)'];const missing=['kind','bundle_version','build','approvals','rule_reviews','certificate','audit','bundle_sha256'].filter(k=>d[k]===undefined||d[k]===null);if(d.kind!==undefined&&d.kind!==null&&d.kind!=='processpatch-governance-bundle')missing.push('kind=="processpatch-governance-bundle" (found '+JSON.stringify(d.kind)+')');return missing;}
+function evBadFileHtml(fname,missing,detail){return evHead('Governance evidence')+evOpenFileRow()+'<div class="empty" role="status"><b>Not a governance bundle.</b> '+esc(fname||'That file')+(missing&&missing.length?(' is missing: <span class="mono">'+esc(missing.join(', '))+'</span>.'):' does not parse as a governance bundle.')+(detail?(' '+esc(detail)):'')+' Nothing was rendered — open a <span class="mono">*-governance-bundle.json</span> downloaded from the Approval tab.</div>';}
+function openBundlePicker(){const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.style.display='none';inp.onchange=()=>{openBundleFile(inp);if(inp.parentNode)inp.parentNode.removeChild(inp);};document.body.appendChild(inp);inp.click();}
+async function openBundleFile(inp){const f=inp&&inp.files&&inp.files[0];try{if(inp)inp.value='';}catch(e){}if(!f)return;let text='';try{text=await f.text();}catch(e){openFileError(f.name,[],'The file could not be read: '+((e&&e.message)||e));return;}let d=null;try{d=JSON.parse(text);}catch(e){openFileError(f.name,[],'The file is not valid JSON: '+((e&&e.message)||e));return;}const missing=evValidateBundle(d);if(missing.length){openFileError(f.name,missing,'');return;}openFileEvidence(d,f.name);}
+function openFileEvidence(d,fname){if(document.getElementById('evModal'))closeEvidence();evTrigger=document.activeElement;const root=document.getElementById('drawerRoot');root.insertAdjacentHTML('beforeend','<div class="overlay" id="evBack" onclick="closeEvidence()"></div><div class="ev-modal" id="evModal" role="dialog" aria-modal="true" aria-label="Governance evidence loaded from file"><div class="loading" role="status">Loading sealed evidence…</div></div>');const cov=(d&&d.coverage&&typeof d.coverage==='object')?d.coverage:null;const m=document.getElementById('evModal');if(!m)return;m.innerHTML='<p style="margin:0 0 12px"><span class="tag warn">Loaded from file — not live</span> <span class="mono">'+esc(fname||'bundle.json')+'</span></p>'+evHtml(d,cov,true);const h=document.getElementById('evTitle');if(h)h.focus();}
+function openFileError(fname,missing,detail){if(document.getElementById('evModal'))closeEvidence();evTrigger=document.activeElement;const root=document.getElementById('drawerRoot');root.insertAdjacentHTML('beforeend','<div class="overlay" id="evBack" onclick="closeEvidence()"></div><div class="ev-modal" id="evModal" role="dialog" aria-modal="true" aria-label="Governance evidence file error"><div class="loading" role="status">Checking bundle file…</div></div>');const m=document.getElementById('evModal');if(!m)return;m.innerHTML=evBadFileHtml(fname,missing,detail);const h=document.getElementById('evTitle');if(h)h.focus();}
 async function revDecide(rid,how){if(isCloud()){await post('/builds/'+BUILD.build_id+'/resume',{gate:'rule_review',decisions:{[rid]:how.toUpperCase()},reviewer:authReviewer()});}else{await post('/builds/'+BUILD.build_id+'/rules/'+rid+'/'+how,{reason:'UI review'});}vApproval();}
 async function patchDecide(how){const map={approve:'APPROVE_CANDIDATE',reject:'REJECT_PATCH',revision:'REQUEST_REVISION'};let r;
 if(isCloud()){r=await post('/builds/'+BUILD.build_id+'/resume',{gate:'patch_approval',decision:map[how],reviewer:authReviewer(),reason:(document.getElementById('revReason')||{}).value||'ok',role:'PROCEDURE_OWNER'});}
@@ -406,6 +420,7 @@ items.push(
  {label:'Toggle theme',hint:'lab → paper → graphite',icon:'palette',run:()=>toggleTheme()},
  {label:'Download governance bundle',hint:'sha256-sealed evidence pack (approval required)',icon:'seal-check',run:()=>downloadBundle()},
  {label:'View governance evidence',hint:'sealed pack rendered: seal, approvals, coverage, audit',icon:'seal-check',run:()=>openEvidence()},
+ {label:'Open a bundle file',hint:'render a downloaded *-governance-bundle.json offline — no server needed',icon:'folder-open',run:()=>openBundlePicker()},
  {label:'Re-verify this build',hint:'re-run the deterministic pipeline from the accepted IR',icon:'check-square',run:()=>runReverify()},
  {label:'Compile pasted policy',hint:'extract + compile the text in Policy input',icon:'brackets-curly',run:()=>{go('Overview');setTimeout(submitPolicy,60);}});
 return items;}
