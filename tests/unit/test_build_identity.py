@@ -41,8 +41,13 @@ def test_asl_mints_build_id_provisionally_then_canonicalizes_to_compile_key():
 
     canon = ASL["States"]["CANONICALIZE_BUILD_ID"]
     assert canon["Type"] == "Pass"
-    assert canon["Parameters"]["build_id.$"] == "$.idempotency.compile_key"
+    # InputPath selects the compile_key STRING and ResultPath overwrites
+    # $.build_id in place. Parameters+ResultPath would nest an OBJECT there
+    # ({build_id: ...}) and every downstream $.build_id reference would die
+    # as States.Runtime — this shape is part of the contract.
+    assert canon["InputPath"] == "$.idempotency.compile_key"
     assert canon["ResultPath"] == "$.build_id"
+    assert "Parameters" not in canon
 
     # placement: the canonicalization is the FIRST consumer of the lookup
     # result and runs before any state that uses $.build_id
