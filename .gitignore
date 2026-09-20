@@ -11,6 +11,7 @@ benchmark_runs/BENCH-LOCAL-*
 !.gitkeep
 
 *.egg-info/
+contribution_reports/
 
 # Session/context notes are local-only by design — NEVER commit
 ProcessPatch_Session_Context.md
@@ -25,3 +26,4 @@ venv/
 Thumbs.db
 desktop.ini
 chat.json
+chat (1).json
