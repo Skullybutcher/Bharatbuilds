@@ -252,6 +252,10 @@ def _writable(method: str, path: str) -> bool:
     # delete next to it (`/purge`) is admin-only via _needs_admin.
     if path.endswith(("/archive", "/unarchive")):
         return True
+    # Re-verification re-runs the deterministic pipeline and writes one audit
+    # row — a read-shaped write any reviewer may run.
+    if path.endswith("/reverify"):
+        return True
     return False
 
 
@@ -278,6 +282,10 @@ def authorize(method: str, path: str, identity: dict | None, body: dict | None =
     if _writable(method, path):
         if identity["role"] not in W_ROLES:
             raise AuthzError(403, "writes require the pp-reviewers or pp-admins group")
+        if method == "POST" and path in ("/builds", "/builds/"):
+            body = {**body, "workspace_id": check_request_workspace(identity, body, path, "compile")}
+        elif method == "POST" and path in ("/traces", "/traces/csv"):
+            body = {**body, "workspace_id": check_request_workspace(identity, body, path, "ingest")}
         if "/rules/" in path:
             body = {**body, "reviewer": identity["reviewer_id"]}
         elif path.endswith(("patch/approve", "patch/reject", "patch/request-revision")) or \
@@ -287,3 +295,103 @@ def authorize(method: str, path: str, identity: dict | None, body: dict | None =
                     "role": "FINAL_APPROVER" if identity["role"] == "admin" else "PROCEDURE_OWNER"}
         return body
     return body  # GETs and reads: any signed-in identity
+
+
+# ------------------------------------------------- workspace isolation ----
+# D3 multi-tenancy (T63): membership comes from Cognito groups. `ws-<id>` is
+# membership in that workspace; pp-admins is superuser (all workspaces); a
+# caller with zero ws-* groups belongs to {"default"} only, so the demo user
+# (pp groups, no ws groups) keeps working with zero setup. PROCESSPATCH_AUTH
+# =off (local dev): identity is None everywhere below, so behavior is
+# identical to before. Procedures/procedure versions stay a GLOBAL shared
+# registry by explicit decision (activation is workspace-agnostic today).
+WS_PREFIX = "ws-"
+DEFAULT_WS = "default"
+
+
+def ws_membership(identity):
+    """(is_admin, members) for workspace enforcement.
+
+    members None means no enforcement (off-mode / no identity): treat None
+    as 'no filtering'. Admins are superusers. Everyone else belongs to
+    their ws-* groups, or to {"default"} when they have none."""
+    if identity is None:
+        return (False, None)
+    groups = identity.get("groups") or []
+    if ADMIN_GROUP in groups:
+        return (True, None)
+    members = {g[len(WS_PREFIX):] for g in groups
+               if isinstance(g, str) and g.startswith(WS_PREFIX)
+               and g[len(WS_PREFIX):].strip()}
+    return (False, members or {DEFAULT_WS})
+
+
+def _deny_workspace(identity, workspace, path, action, build_id=None):
+    """Record every workspace denial in the governance ledger, then let the
+    caller raise. An audit-write failure must never convert a denial into a
+    500, so write errors are swallowed — the 403 below always stands."""
+    try:
+        from services.registry.store import audit as _audit
+        payload = {"workspace": workspace, "path": path, "action": action,
+                   "reviewer": (identity or {}).get("reviewer_id", "?")}
+        if build_id:
+            payload["build_id"] = build_id
+        _audit("ACCESS_DENIED", payload)
+    except Exception:
+        pass
+
+
+def resolve_list_filter(identity, requested, path):
+    """(scope, workspace) for list endpoints. scope None = unfiltered.
+
+    Honors an explicit ?workspace_id= only for members (admins: always).
+    Raises AuthzError(403) — audited — on non-member requests."""
+    if requested is not None:
+        requested = requested.strip() if isinstance(requested, str) else ""
+        requested = requested or None
+    if identity is None:
+        return (None, requested)  # off-mode legacy: plain filter, no checks
+    is_admin, members = ws_membership(identity)
+    if is_admin:
+        return (None, requested)
+    if requested is not None and requested not in members:
+        _deny_workspace(identity, requested, path, "list-filter")
+        raise AuthzError(403, f"workspace '{requested}' is not one of yours")
+    if requested is not None:
+        return (None, requested)
+    return (set(members), None)
+
+
+def require_build_member(identity, build, path):
+    """Per-build gate for the /builds/{id} subtree (both surfaces call this
+    with the loaded record; unknown builds never reach here — they 404
+    first). Legacy records without workspace_id count as 'default'."""
+    if identity is None:
+        return  # off-mode legacy
+    ws = (build or {}).get("workspace_id") or DEFAULT_WS
+    is_admin, members = ws_membership(identity)
+    if is_admin or (members is not None and ws in members):
+        return
+    _deny_workspace(identity, ws, path, "build-access", (build or {}).get("build_id"))
+    raise AuthzError(403, "build is not in a workspace you can access")
+
+
+def check_request_workspace(identity, body, path, action):
+    """Validate + normalize body workspace_id for compile/ingest POSTs.
+
+    Absent means 'default'; the value must be a member workspace (admins:
+    any). Returns the normalized id. Raises 400 (malformed) or 403 (denied,
+    audited). No-op without identity (off-mode legacy)."""
+    ws = (body or {}).get("workspace_id")
+    if ws is None:
+        return DEFAULT_WS
+    if not isinstance(ws, str) or not ws.strip():
+        raise AuthzError(400, "workspace_id must be a non-empty string")
+    ws = ws.strip()
+    if identity is None:
+        return ws
+    is_admin, members = ws_membership(identity)
+    if not is_admin and (members is None or ws not in members):
+        _deny_workspace(identity, ws, path, action)
+        raise AuthzError(403, f"workspace '{ws}' is not one of yours")
+    return ws

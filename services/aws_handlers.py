@@ -292,6 +292,7 @@ def api_handler(event, context):
     # --- auth: Cognito authorizer claims (or self-verified bearer token).
     # `off` mode (default) keeps the legacy credential-free behavior.
     from services.api import authz as _authz
+    identity = None  # off-mode and public paths: no identity, no filtering
     if _authz.mode() != "off" and not _authz.is_public(method, raw_path):
         # T41c DEBUG: log the authorizer context ONCE per request so claim-shape
         # questions are answered from evidence, not hypothesis. Remove after the
@@ -346,7 +347,11 @@ def api_handler(event, context):
         return call(A.canonical, (qs.get("domain") or ["research_grant"])[0])
     if method == "GET" and raw_path == "/builds":
         _inc = str((qs.get("include_archived") or ["0"])[0]).strip().lower() in ("1", "true", "yes", "on")
-        return call(A.list_builds, _inc)
+        try:
+            _scope, _ws = _authz.resolve_list_filter(identity, (qs.get("workspace_id") or [None])[0], raw_path)
+        except _authz.AuthzError as e:
+            return _out(event, {"error": e.args[0]}, e.status)
+        return call(A.list_builds, _inc, _scope, _ws)
     if method == "POST" and raw_path == "/builds":
         return call(A.create_build, body)
     if method == "GET" and raw_path == "/benchmarks":
@@ -365,7 +370,11 @@ def api_handler(event, context):
     if method == "POST" and raw_path == "/procedures":
         return call(A.register_procedure, body)
     if method == "GET" and raw_path == "/traces":
-        return call(A.list_traces, (qs.get("workflow_id") or [None])[0])
+        try:
+            _scope, _ws = _authz.resolve_list_filter(identity, (qs.get("workspace_id") or [None])[0], raw_path)
+        except _authz.AuthzError as e:
+            return _out(event, {"error": e.args[0]}, e.status)
+        return call(A.list_traces, (qs.get("workflow_id") or [None])[0], _scope, _ws)
     if method == "POST" and raw_path == "/traces/csv":
         return call(A.bulk_ingest_traces_csv, body)
     if method == "POST" and raw_path == "/traces":
@@ -377,6 +386,15 @@ def api_handler(event, context):
     seg = raw_path.split("/")
     if len(seg) >= 3 and seg[1] == "builds":
         bid, tail = seg[2], "/".join(seg[3:])
+        if identity is not None:
+            # Workspace gate for the whole /builds/{id} subtree (reads and
+            # writes alike): unknown ids fall through to the normal 404s.
+            _known = A.peek_build(bid)
+            if _known is not None:
+                try:
+                    _authz.require_build_member(identity, _known, raw_path)
+                except _authz.AuthzError as e:
+                    return _out(event, {"error": e.args[0]}, e.status)
         simple = {"": A.get_build_view, "diff": A.diff, "patch": A.patch,
                   "certificate": A.certificate, "impact": A.impact,
                   "witnesses": A.witnesses, "rule-reviews": A.rule_reviews,
@@ -403,7 +421,7 @@ def api_handler(event, context):
                  "patch/approve": A.approve, "patch/reject": A.reject,
                  "patch/request-revision": A.request_revision,
                  "archive": A.archive_build, "unarchive": A.unarchive_build,
-                 "purge": A.purge_build}
+                 "purge": A.purge_build, "reverify": A.reverify_build}
         if method == "POST" and tail in posts:
             fn = posts[tail]
             if tail == "patch/validate":

@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
-    def _route(self, method: str, path: str, qs: dict, body: dict):
+    def _route(self, method: str, path: str, qs: dict, body: dict, identity=None):
         if method == "GET" and path in ("/", "/health"):
             return 200, actions.health()
         if method == "GET" and path == "/auth/config":
@@ -72,7 +72,11 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/demo/canonical":
             return 200, actions.canonical(qs.get("domain", ["research_grant"])[0])
         if method == "GET" and path == "/builds":
-            return 200, actions.list_builds(_truthy(qs.get("include_archived", ["0"])[0]))
+            try:
+                _scope, _ws = authz.resolve_list_filter(identity, (qs.get("workspace_id") or [None])[0], path)
+            except authz.AuthzError as e:
+                return e.status, {"error": e.args[0]}
+            return 200, actions.list_builds(_truthy(qs.get("include_archived", ["0"])[0]), _scope, _ws)
         if method == "POST" and path == "/builds":
             return 200, actions.create_build(body)
         if method == "GET" and path == "/benchmarks":
@@ -98,7 +102,11 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/procedures":
             return 200, actions.register_procedure(body)
         if method == "GET" and path == "/traces":
-            return 200, actions.list_traces(qs.get("workflow_id", [None])[0])
+            try:
+                _scope, _ws = authz.resolve_list_filter(identity, (qs.get("workspace_id") or [None])[0], path)
+            except authz.AuthzError as e:
+                return e.status, {"error": e.args[0]}
+            return 200, actions.list_traces(qs.get("workflow_id", [None])[0], _scope, _ws)
         if method == "POST" and path == "/traces":
             return 200, actions.ingest_trace(body)
         if method == "POST" and path == "/traces/csv":
@@ -114,6 +122,15 @@ class Handler(BaseHTTPRequestHandler):
         seg = path.split("/")
         if len(seg) >= 3 and seg[1] == "builds":
             bid, tail = seg[2], "/".join(seg[3:])
+            if identity is not None:
+                # Workspace gate for the whole /builds/{id} subtree (reads and
+                # writes alike): unknown ids fall through to the normal 404s.
+                _known = actions.peek_build(bid)
+                if _known is not None:
+                    try:
+                        authz.require_build_member(identity, _known, path)
+                    except authz.AuthzError as e:
+                        return e.status, {"error": e.args[0]}
             simple = {"": actions.get_build_view, "diff": actions.diff,
                       "patch": actions.patch, "certificate": actions.certificate,
                       "impact": actions.impact, "rule-reviews": actions.rule_reviews,
@@ -217,6 +234,13 @@ class Handler(BaseHTTPRequestHandler):
                     return 404, {"error": "unknown build"}
                 except PermissionError as e:
                     return 403, {"error": str(e)}
+            if method == "POST" and tail == "reverify":
+                try:
+                    return 200, actions.reverify_build(bid, body)
+                except KeyError:
+                    return 404, {"error": "unknown build"}
+                except ValueError as e:
+                    return 409, {"error": str(e)}
             return 404, {"error": "not found", "path": path}
         if method == "GET" and path.startswith("/executions/"):
             try:
@@ -233,27 +257,27 @@ class Handler(BaseHTTPRequestHandler):
         return 404, {"error": "not found", "path": path}
 
     def _guard(self, method: str, path: str, body: dict):
-        """Enforce auth when enabled; returns (code, body) to route with.
-        `off` mode (default) keeps the legacy credential-free behavior."""
+        """Enforce auth when enabled; returns (code, body, identity) to route
+        with. `off` mode (default) keeps the legacy credential-free behavior."""
         if authz.mode() == "off":
-            return 200, body
+            return 200, body, None
         try:
             if authz.is_public(method, path):
-                return 200, body
+                return 200, body, None
             identity = authz.authenticate(dict(self.headers))
-            return 200, authz.authorize(method, path, identity, body)
+            return 200, authz.authorize(method, path, identity, body), identity
         except authz.AuthzError as e:
             raise _AuthzHTTP(e.status, e.args[0])
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         try:
-            _, _ = self._guard("GET", parsed.path, {})
+            _, _, _ident = self._guard("GET", parsed.path, {})
         except _AuthzHTTP as e:
             self._send(e.status, {"error": e.message})
             return
         try:
-            code, obj = self._route("GET", parsed.path, urllib.parse.parse_qs(parsed.query), {})
+            code, obj = self._route("GET", parsed.path, urllib.parse.parse_qs(parsed.query), {}, _ident)
         except RuntimeError:
             code, obj = 503, {"error": "service temporarily unavailable"}
         self._send(code, obj)
@@ -263,12 +287,12 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         try:
             body = self._body()
-            _, body = self._guard("POST", path, body)
+            _, body, _ident = self._guard("POST", path, body)
         except _AuthzHTTP as e:
             self._send(e.status, {"error": e.message})
             return
         try:
-            code, obj = self._route("POST", path, {}, body)
+            code, obj = self._route("POST", path, {}, body, _ident)
         except KeyError as e:  # same mapping as the Lambda surface (aws_handlers.call)
             code, obj = 404, {"error": f"unknown: {e}"}
         except ValueError as e:

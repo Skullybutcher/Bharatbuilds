@@ -87,6 +87,7 @@ def ingest_trace(body: dict) -> dict:
         "trace_id": tid,
         "workflow_id": body.get("workflow_id"),
         "procedure_version_id": body.get("procedure_version_id"),
+        "workspace_id": body.get("workspace_id") or "default",
         "case": case,
         "outcome": outcome,
         "steps_done": [str(s) for s in (body.get("steps_done") or [])],

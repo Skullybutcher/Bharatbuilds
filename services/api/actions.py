@@ -77,6 +77,7 @@ def create_build(body: dict):
     from services.registry.store import (find_build_by_key, compile_key,
                                          list_procedure_versions)
     domain = body.get("domain", "research_grant")
+    ws = _ws_of(body)
     old, new, proc = _demo(domain)
     old = body.get("old_rules", old)
     new = body.get("new_rules", new)
@@ -109,6 +110,7 @@ def create_build(body: dict):
                 pass
             return _store({"build_id": bid, "status": ext["status"], "extraction": ext,
                            "extraction_backend": backend, "new_rules": ext["rules"],
+                           "workspace_id": ws,
                            "review_state": "REVIEW_PENDING", "created_at": _t.time()})
         new = ext["rules"]
         auto = (backend == "deterministic-parser/0.1.0" and ext["status"] == "EXTRACTED"
@@ -133,6 +135,7 @@ def create_build(body: dict):
         import time as _t
         draft = {"build_id": f"DRAFT-{sha({'rules': new, 'proc': proc})[:8].upper()}",
                  "status": "DRAFT", "compile_key": key,
+                 "workspace_id": ws,
                  "policy_version_id": body.get("policy_version_id", "POLICY-V2"),
                  "policy_text": policy_text, "old_rules": old, "new_rules": new,
                  "procedure": proc, "extraction_backend": backend,
@@ -141,6 +144,7 @@ def create_build(body: dict):
     build = run_build(body.get("policy_version_id", "POLICY-V2"), old, new, proc)
     build["policy_text"] = policy_text
     build["extraction_backend"] = backend
+    build["workspace_id"] = ws
     if build.get("status") not in ("NEEDS_REVIEW", "CONFLICT"):
         try:
             from services.governance.store import open_rule_reviews, review_rule
@@ -153,10 +157,17 @@ def create_build(body: dict):
     return _store(build)
 
 
-def list_builds(include_archived: bool = False):
+def list_builds(include_archived: bool = False, scope=None, workspace=None):
+    """scope None = unfiltered (off-mode legacy + admins); otherwise only
+    builds whose workspace (legacy records count as 'default') is in scope.
+    An explicit workspace narrows to exactly it (membership pre-checked)."""
     from services.registry.store import list_builds as _lb
-    return {"builds": _lb(include_archived=include_archived),
-            "include_archived": bool(include_archived)}
+    rows = _lb(include_archived=include_archived)
+    if workspace is not None:
+        rows = [b for b in rows if (b.get("workspace_id") or "default") == workspace]
+    elif scope is not None:
+        rows = [b for b in rows if (b.get("workspace_id") or "default") in scope]
+    return {"builds": rows, "include_archived": bool(include_archived)}
 
 
 def archive_build(bid: str, body: dict | None = None):
@@ -220,6 +231,25 @@ def _need(bid: str):
     return b
 
 
+def _ws_of(body):
+    """Normalized workspace id for a compile/ingest request body.
+
+    authorize() stamps a validated value in enforced modes; off-mode legacy
+    callers carry none. Blank/missing means 'default' everywhere."""
+    ws = (body or {}).get("workspace_id")
+    ws = ws.strip() if isinstance(ws, str) else ""
+    return ws or "default"
+
+
+def peek_build(bid: str):
+    """Read-only build lookup for route-layer membership gates: returns the
+    record, or None for unknown ids so callers keep their normal 404 path."""
+    try:
+        return _need(bid)
+    except KeyError:
+        return None
+
+
 def diff(bid: str):
     return _need(bid).get("semantic_delta", {})
 
@@ -262,6 +292,93 @@ def guardrails(bid: str):
 def audit(bid: str):
     from services.registry.store import audit_for
     return {"audit": audit_for(_need(bid)["build_id"])}
+
+
+def reverify_build(bid: str, body: dict | None = None):
+    """D4: re-derive the proof. Re-runs the DETERMINISTIC pipeline from the
+    build's ACCEPTED inputs — the stored new_rules, i.e. the post-human-gate
+    Rule IR (the extractor itself may be nondeterministic; the rule-review
+    gate is what freezes it) — and compares the rebuilt artifacts against the
+    stored build AND the hash-bound approval records. A pass means anyone
+    holding the evidence can reproduce every hash; a mismatch names the
+    drifted field instead of faking a pass. Audited REVERIFY_PASS/FAIL."""
+    import time as _t
+    from services.api.pipeline import run_build
+    from services.registry.store import audit as _audit, sha as _rsha, COMPILER_VERSION
+    from services.governance.store import _workflow_semantic, approvals_for
+    b = _need(bid)
+    if not b.get("new_rules") or not b.get("procedure"):
+        raise ValueError("build has no accepted rule IR / procedure to re-verify from")
+    if not b.get("patched_workflow"):
+        raise ValueError("build has no validated patch to re-verify (compile it first)")
+    # Mirror the ORIGINAL compile inputs: the certificate binds
+    # source_document_sha256 only when the compile was given the policy text,
+    # so the re-run passes it only then — an older build whose certificate
+    # predates source binding still re-verifies instead of failing on a
+    # check the original never ran.
+    cert0 = b.get("certificate", {}) or {}
+    rerun = run_build(b.get("policy_version_id", "POLICY-V2"), b.get("old_rules", []),
+                      b.get("new_rules", []), b.get("procedure", {}),
+                      policy_text=(b.get("policy_text")
+                                   if cert0.get("source_document_sha256") is not None
+                                   else None))
+    stored_after = _rsha(_workflow_semantic(b.get("patched_workflow", {}) or {}))
+    rerun_after = _rsha(_workflow_semantic(rerun.get("patched_workflow", {}) or {}))
+
+    def _cert_semantic_hash(cert):
+        # The certificate stamps created_at at issuance — wall-clock by design —
+        # and its inner certificate_sha256 self-hash is computed OVER that
+        # timestamp, so both are excluded here; the content fields themselves
+        # are compared directly (same principle as _workflow_semantic
+        # excluding envelope fields).
+        return _rsha({k: v for k, v in cert.items()
+                      if k not in ("created_at", "certificate_sha256")})
+    checks = [
+        {"check": "build_id", "stored": b.get("build_id"),
+         "recomputed": rerun.get("build_id"), "match": b.get("build_id") == rerun.get("build_id")},
+        {"check": "compile_key", "stored": b.get("compile_key"),
+         "recomputed": rerun.get("compile_key"),
+         "match": b.get("compile_key") == rerun.get("compile_key")},
+        {"check": "procedure_after_sha256", "stored": stored_after,
+         "recomputed": rerun_after, "match": stored_after == rerun_after},
+        {"check": "patch_operations_sha256",
+         "stored": _rsha((b.get("patch", {}) or {}).get("operations", [])),
+         "recomputed": _rsha((rerun.get("patch", {}) or {}).get("operations", [])),
+         "match": _rsha((b.get("patch", {}) or {}).get("operations", [])) ==
+                  _rsha((rerun.get("patch", {}) or {}).get("operations", []))},
+        {"check": "certificate_content_sha256", "stored": _cert_semantic_hash(b.get("certificate", {}) or {}),
+         "recomputed": _cert_semantic_hash(rerun.get("certificate", {}) or {}),
+         "match": _cert_semantic_hash(b.get("certificate", {}) or {}) ==
+                  _cert_semantic_hash(rerun.get("certificate", {}) or {})},
+        {"check": "validation_failed", "stored": (b.get("validation", {}) or {}).get("failed"),
+         "recomputed": (rerun.get("validation", {}) or {}).get("failed"),
+         "match": (b.get("validation", {}) or {}).get("failed") ==
+                  (rerun.get("validation", {}) or {}).get("failed")},
+        {"check": "witness_ids",
+         "stored": sorted(w.get("witness_id", "") for w in b.get("witnesses", [])),
+         "recomputed": sorted(w.get("witness_id", "") for w in rerun.get("witnesses", [])),
+         "match": sorted(w.get("witness_id", "") for w in b.get("witnesses", [])) ==
+                  sorted(w.get("witness_id", "") for w in rerun.get("witnesses", []))},
+    ]
+    # The hashes a human actually signed (Gate 2 artifacts), if any exist.
+    appr = [a for a in approvals_for(bid) if a.get("decision") == "APPROVE_CANDIDATE"]
+    if appr:
+        art = appr[-1].get("artifacts", {}) or {}
+        checks.append({"check": "approval.accepted_rule_ir_sha256",
+                       "stored": art.get("accepted_rule_ir_sha256"),
+                       "recomputed": _rsha(b.get("new_rules", [])),
+                       "match": art.get("accepted_rule_ir_sha256") == _rsha(b.get("new_rules", []))})
+        checks.append({"check": "approval.procedure_after_sha256",
+                       "stored": art.get("procedure_after_sha256"), "recomputed": stored_after,
+                       "match": art.get("procedure_after_sha256") == stored_after})
+    mismatches = [c["check"] for c in checks if not c["match"]]
+    verified = not mismatches
+    _audit("REVERIFY_PASS" if verified else "REVERIFY_FAIL",
+           {"build_id": bid, "mismatches": mismatches})
+    return {"build_id": bid, "verified": verified, "mismatches": mismatches,
+            "compiler_version": COMPILER_VERSION,
+            "basis": "accepted rule IR (deterministic — extractor excluded)",
+            "checks": checks, "reverified_at": _t.time()}
 
 
 def governance_bundle(bid: str):
@@ -505,7 +622,8 @@ def bulk_ingest_traces_csv(body: dict):
         wf = default_wf or (row.get("workflow_id") or "").strip() or None
         occurred = (row.get("occurred_at") or "").strip() or None
         payload = {"case": case, "outcome": outcome or {}, "steps_done": steps,
-                   "source": source, "workflow_id": wf, "occurred_at": occurred}
+                   "source": source, "workflow_id": wf, "occurred_at": occurred,
+                   "workspace_id": _ws_of(body)}
         try:
             case_n, outcome_n = validate_trace(payload)
         except ValueError as e:
@@ -537,9 +655,16 @@ def bulk_ingest_traces_csv(body: dict):
     return {"ingested": len(ingested), "duplicates": duplicates, "traces": ingested}
 
 
-def list_traces(workflow_id=None):
+def list_traces(workflow_id=None, scope=None, workspace=None):
+    """Same scoping contract as list_builds; legacy records without
+    workspace_id count as 'default'."""
     from services.traces.store import list_traces as _lt
-    return {"traces": _lt(workflow_id)}
+    rows = _lt(workflow_id)
+    if workspace is not None:
+        rows = [t for t in rows if (t.get("workspace_id") or "default") == workspace]
+    elif scope is not None:
+        rows = [t for t in rows if (t.get("workspace_id") or "default") in scope]
+    return {"traces": rows}
 
 
 def get_trace(trace_id: str):

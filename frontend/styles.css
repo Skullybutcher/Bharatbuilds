@@ -300,6 +300,21 @@ svg.graph .node:focus{outline:2px solid var(--focus);outline-offset:2px}
 .drawer{position:fixed;top:12px;right:12px;bottom:12px;width:min(440px,94vw);background:var(--panel);
   border:1px solid var(--line-soft);border-radius:var(--radius-lg);padding:var(--sp-3);overflow-y:auto;z-index:40;box-shadow:var(--shadow-2)}
 .overlay{position:fixed;inset:0;background:rgba(4,6,10,.6);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);z-index:39}
+/* ---------- evidence view (T61: human-readable sealed pack) ---------- */
+.ev-modal{position:fixed;top:24px;left:50%;transform:translateX(-50%);width:min(920px,94vw);max-height:calc(100vh - 48px);overflow-y:auto;background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-lg);padding:20px 24px;z-index:86;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+#evBack{z-index:85}
+.ev-modal .ev-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ev-modal .ev-head h3{margin:0}
+.ev-modal .ev-head :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ev-modal .card{page-break-inside:avoid}
+@media print{
+ header.top,nav.side,.judgebar,.btn,.skip-link,#palOverlay,.overlay,#evBack{display:none!important}
+ body{background:#fff}
+ .ev-modal{position:static;transform:none;max-width:100%;margin:0;box-shadow:none;background:#fff;color:#111;border-color:#999}
+ .ev-modal .mono,.ev-modal td,.ev-modal th,.ev-modal .mut,.ev-modal h3{color:#111}
+ .ev-modal td,.ev-modal th,.ev-modal .card{border-color:#bbb}
+ .ev-modal .tag{background:#fff!important;color:#111!important;border-color:#666!important}
+}
 /* ---------- async states ---------- */
 .state-block{padding:var(--sp-3);text-align:left}
 .loading{color:var(--mut);padding:var(--sp-3)}
