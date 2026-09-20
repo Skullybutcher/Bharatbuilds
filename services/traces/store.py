@@ -117,6 +117,24 @@ def get_trace(trace_id: str) -> dict | None:
     return next((t for t in _load(_TRACES, []) if t.get("trace_id") == trace_id), None)
 
 
+def _outcome_mismatches(actual: dict, outcome: dict) -> list:
+    """Dimensions where the engine's execution of a case disagrees with the
+    recorded real-world outcome. Shared by compare_traces (build-scoped) and
+    drift_report (active-procedure-scoped) so the two can never drift apart."""
+    dims = []
+    for dim in ("eligible", "on_time", "prohibited"):
+        if dim in outcome and actual.get(dim) != outcome[dim]:
+            dims.append(dim)
+    eng_req = actual.get("required") or {}
+    for act, done in (outcome.get("required") or {}).items():
+        if act in eng_req and eng_req[act] != done:
+            dims.append(f"required:{act}")
+    for act in outcome.get("completed_actions", []):
+        if act not in eng_req:
+            dims.append(f"unmodeled_action:{act}")
+    return dims
+
+
 def compare_traces(build: dict) -> dict:
     """Replay each trace's case through the deterministic engine against the
     build's procedure (stale) and patched preview; report agreement.
@@ -148,27 +166,8 @@ def compare_traces(build: dict) -> dict:
             results.append({"trace_id": t["trace_id"], "status": "SKIPPED", "detail": str(e)[:120]})
             continue
         outcome = t["outcome"]
-        dims_stale, dims_new = [], []
-        for dim in ("eligible", "on_time", "prohibited"):
-            if dim in outcome:
-                if actual_stale.get(dim) != outcome[dim]:
-                    dims_stale.append(dim)
-                if actual_new.get(dim) != outcome[dim]:
-                    dims_new.append(dim)
-        eng_req_stale = {k: v for k, v in (actual_stale.get("required") or {}).items()}
-        eng_req_new = {k: v for k, v in (actual_new.get("required") or {}).items()}
-        if "required" in outcome:
-            for act, done in outcome["required"].items():
-                if act in eng_req_stale and eng_req_stale[act] != done:
-                    dims_stale.append(f"required:{act}")
-                if act in eng_req_new and eng_req_new[act] != done:
-                    dims_new.append(f"required:{act}")
-        if "completed_actions" in outcome:
-            for act in outcome["completed_actions"]:
-                if not eng_req_stale.get(act, False) and act not in eng_req_stale:
-                    dims_stale.append(f"unmodeled_action:{act}")
-                if not eng_req_new.get(act, False) and act not in eng_req_new:
-                    dims_new.append(f"unmodeled_action:{act}")
+        dims_stale = _outcome_mismatches(actual_stale, outcome)
+        dims_new = _outcome_mismatches(actual_new, outcome)
         rec = {
             "trace_id": t["trace_id"], "source": t.get("source"), "case": case,
             "trace_outcome": outcome,
@@ -189,4 +188,70 @@ def compare_traces(build: dict) -> dict:
         "candidate_witnesses": disagree,
         "results": results,
         "honesty_note": "runtime traces are evidence only; witness status requires the verified build pipeline",
+    }
+
+
+def drift_report(workflow_id: str, workspace_id: str | None = None,
+                 since: float | None = None) -> dict:
+    """Post-activation drift monitor (T70): replay recent runtime traces
+    against the CURRENTLY ACTIVE procedure and report the disagreement rate.
+
+    compare_traces is build-scoped — it answers "did this patch fix what the
+    traces flagged?". This is the missing half of the CI loop: AFTER a patch
+    activates, do new traces keep agreeing with the ACTIVE graph? A rising
+    disagreement rate is the signal that reality has moved and a new
+    amendment should be compiled — found by evidence, not by anecdote.
+
+    Read-only. Traces are evidence, never auto-accepted: a DISAGREE becomes a
+    candidate witness only through the build pipeline (same as compare_traces).
+    """
+    from services.registry.store import get_active_procedure
+    from services.compiler.compiler import compile_rules
+    from services.workflow.interpreter import execute
+    version = get_active_procedure(workflow_id)
+    if not version:
+        raise KeyError(f"no active procedure for workflow {workflow_id}")
+    graph = version.get("graph_json") or {}
+    # The standing policy's ACTIVE rules are the model the active graph runs
+    # under — the same lookup the machine's build_context performs.
+    from services.storage import _load
+    pvers = sorted([v for v in _load("policy_versions.json", [])
+                    if v.get("workspace_id") == (workspace_id or "default")
+                    and v.get("status") == "active"],
+                   key=lambda v: v.get("created_at", 0))
+    model = compile_rules(pvers[-1].get("rules", []) if pvers else [])
+    traces = [t for t in list_traces(workflow_id)
+              if t.get("workspace_id", "default") == (workspace_id or "default")
+              and (since is None or (t.get("occurred_at") or 0) >= since)]
+    results = []
+    for t in traces:
+        try:
+            actual = execute(graph, t["case"], model.ordering)
+        except ValueError as e:  # invalid workflow/case: skipped, never swallowed
+            results.append({"trace_id": t["trace_id"], "status": "SKIPPED", "detail": str(e)[:120]})
+            continue
+        mismatches = _outcome_mismatches(actual, t["outcome"])
+        results.append({"trace_id": t["trace_id"], "source": t.get("source"),
+                        "case": t["case"], "occurred_at": t.get("occurred_at"),
+                        "status": "AGREE" if not mismatches else "DISAGREE",
+                        "mismatches": mismatches})
+    evaluated = [r for r in results if r["status"] != "SKIPPED"]
+    disagree = [r["trace_id"] for r in evaluated if r["status"] == "DISAGREE"]
+    rate = (len(disagree) / len(evaluated)) if evaluated else None
+    return {
+        "kind": "processpatch-drift-report",
+        "workflow_id": workflow_id,
+        "procedure_version_id": version.get("procedure_version_id"),
+        "workspace_id": workspace_id or "default",
+        "window": {"since": since},
+        "checked": len(results),
+        "evaluated": len(evaluated),
+        "agree": len(evaluated) - len(disagree),
+        "disagree": len(disagree),
+        "disagreement_rate": rate,
+        "disagree_trace_ids": disagree,
+        "results": results,
+        "honesty_note": ("traces are evidence only — disagreement is a signal to "
+                         "compile an amendment, not an automated change; witness "
+                         "status requires the verified build pipeline"),
     }

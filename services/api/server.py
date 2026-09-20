@@ -116,6 +116,17 @@ class Handler(BaseHTTPRequestHandler):
                 return 200, actions.get_trace(path.split("/")[2])
             except KeyError:
                 return 404, {"error": "unknown trace"}
+        if method == "GET" and path == "/drift":
+            try:
+                _scope, _ws = authz.resolve_list_filter(identity, (qs.get("workspace_id") or [None])[0], path)
+            except authz.AuthzError as e:
+                return e.status, {"error": e.args[0]}
+            try:
+                return 200, actions.drift_report(qs.get("workflow_id", [None])[0], _scope, _ws)
+            except KeyError:
+                return 404, {"error": "no active procedure for this workflow — activate a build first"}
+            except PermissionError as e:
+                return 403, {"error": str(e)}
         if method == "GET" and path.startswith("/portal"):
             flat = {k: v[0] for k, v in qs.items()}
             return 200, actions.portal(flat)
