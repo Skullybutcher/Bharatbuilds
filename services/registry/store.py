@@ -83,9 +83,15 @@ def get_build(build_id: str) -> dict | None:
 
 
 def save_build(build: dict) -> dict:
-    builds = _load("builds.json", {})
-    builds[build["build_id"]] = build
-    _save("builds.json", builds)
+    """Write ONE build record (per-record, not a whole-collection rewrite).
+
+    This was a read-modify-write of every build in the table: two workers saving
+    different builds could lose one another's writes, and each save rewrote the
+    entire registry. Now a save touches only its own record (versioned by
+    storage, so a lost update is detectable).
+    """
+    from services.storage import put_item
+    put_item("builds.json", build["build_id"], build)
     return build
 
 
@@ -102,8 +108,8 @@ def set_build_archived(build_id: str, archived: bool = True) -> dict | None:
     destroyed. Idempotency is deliberately unaffected: an archived build still
     counts as compiled for `find_build_by_key`, because archiving hides a build
     from the working list, it does not un-happen the compile."""
-    builds = _load("builds.json", {})
-    b = builds.get(build_id)
+    from services.storage import get_item, put_item, ConcurrencyError
+    b, ver = get_item("builds.json", build_id)
     if not b:
         return None
     b["archived"] = bool(archived)
@@ -111,7 +117,19 @@ def set_build_archived(build_id: str, archived: bool = True) -> dict | None:
         b["archived_at"] = time.time()
     else:
         b.pop("archived_at", None)
-    _save("builds.json", builds)
+    try:
+        # Optimistic: only succeeds if the record is still the version we read,
+        # so an archive cannot clobber a concurrent status change.
+        put_item("builds.json", build_id, b, expect=ver)
+    except ConcurrencyError:
+        b, ver = get_item("builds.json", build_id)
+        if not b:
+            return None
+        b["archived"] = bool(archived)
+        b["archived_at"] = time.time() if archived else None
+        if not archived:
+            b.pop("archived_at", None)
+        put_item("builds.json", build_id, b, expect=ver)
     audit("BUILD_ARCHIVED" if archived else "BUILD_UNARCHIVED", {"build_id": build_id})
     return b
 
@@ -122,12 +140,8 @@ def delete_build(build_id: str) -> bool:
     Archival (`set_build_archived`) is the supported way to retire a build;
     this exists so a demo stack can be reset, not so evidence can be erased in
     production. The caller audits the act BEFORE calling this."""
-    builds = _load("builds.json", {})
-    if build_id not in builds:
-        return False
-    del builds[build_id]
-    _save("builds.json", builds)
-    return True
+    from services.storage import delete_item
+    return delete_item("builds.json", build_id)
 
 
 def list_builds(include_archived: bool = False) -> list:

@@ -26,6 +26,24 @@ DATA_DIR = os.environ.get("PROCESSPATCH_DATA",
                           os.path.join(os.path.dirname(__file__), "..", "data"))
 TABLE = os.environ.get("REGISTRY_TABLE", "processpatch-registry")
 
+# The legacy whole-collection blob (dict collections used to live in one META
+# item). Reads merge it for backward compatibility; per-record writes retire it.
+META_SK = "META"
+
+
+class ConcurrencyError(RuntimeError):
+    """An optimistic per-record write lost a race.
+
+    Raised instead of silently overwriting a concurrent writer — two reviewers
+    acting on the same build must not both 'win', and a gate decision must not
+    be consumed twice."""
+
+
+def _is_conditional_failure(e) -> bool:
+    """True for DynamoDB's ConditionalCheckFailedException (checked by code, not
+    by type: botocore may not be importable in every runtime that touches this)."""
+    return getattr(e, "response", {}).get("Error", {}).get("Code") == "ConditionalCheckFailedException"
+
 
 def _backend() -> str:
     return os.environ.get("PROCESSPATCH_STORAGE", "files")
@@ -113,11 +131,22 @@ def _dd_load(name: str, default):
     if _backend() != "dynamodb":
         return _file_load(name, default)
     try:
+        t = _dd()
         if isinstance(default, dict):
-            r = _dd().get_item(Key={"PK": f"COLL#{name}", "SK": "META"}, ConsistentRead=True)
-            raw = (r.get("Item") or {}).get("data_json")
-            return json.loads(raw) if raw is not None else default
-        items = sorted(_dd_items(_dd(), name), key=lambda i: i.get("SK", ""))
+            # Dict collections are stored per record (SK = record key). The
+            # legacy META blob is merged first so a stack written by the old
+            # single-item design keeps reading correctly; per-record rows win.
+            merged = {}
+            raw = (t.get_item(Key={"PK": f"COLL#{name}", "SK": META_SK},
+                              ConsistentRead=True).get("Item") or {}).get("data_json")
+            if raw is not None:
+                merged.update(json.loads(raw))
+            for i in sorted(_dd_items(t, name), key=lambda i: i.get("SK", "")):
+                if i.get("SK") == META_SK:
+                    continue
+                merged[i["SK"]] = json.loads(i["data_json"])
+            return merged or default
+        items = sorted(_dd_items(t, name), key=lambda i: i.get("SK", ""))
         return [json.loads(i["data_json"]) for i in items]
     except Exception as e:  # noqa: BLE001 — re-raised, never swallowed
         raise RuntimeError(f"storage load failed for {name}: {type(e).__name__}: {e}") from e
@@ -129,9 +158,19 @@ def _dd_save(name: str, obj) -> None:
     try:
         t = _dd()
         if isinstance(obj, dict):
-            t.put_item(Item={"PK": f"COLL#{name}", "SK": "META",
-                             "data_json": json.dumps(obj, default=str),
-                             "GSI_PK": "COLL", "GSI_SK": name})
+            # Bulk dict save = seed/migration path. It writes per record and
+            # retires the legacy META blob, so a collection can never grow into
+            # one 400 KB item again. Concurrency-safe single-record writes go
+            # through put_item(expect=...) instead.
+            old = {i["SK"] for i in _dd_items(t, name) if i.get("SK") != META_SK}
+            with t.batch_writer() as b:
+                for sk in old - set(obj):
+                    b.delete_item(Key={"PK": f"COLL#{name}", "SK": sk})
+                for key, val in obj.items():
+                    b.put_item(Item={"PK": f"COLL#{name}", "SK": key,
+                                     "data_json": json.dumps(val, default=str),
+                                     "GSI_PK": "COLL", "GSI_SK": name})
+                b.delete_item(Key={"PK": f"COLL#{name}", "SK": META_SK})
             return
         old = _dd_items(t, name)
         with t.batch_writer() as b:
@@ -152,3 +191,138 @@ def _load(name: str, default):
 
 def _save(name: str, obj) -> None:
     _dd_save(name, obj)
+
+
+# ---- per-record primitives (the concurrency-safe path) -----------------------
+# Bulk _save rewrites a whole collection. Under concurrent Lambda workers that
+# is read-modify-write: writer A's batch delete can drop writer B's insert, and
+# two writers that both read then write silently clobber each other. Anything
+# with a race (gate decisions, approvals, callbacks) must use these instead:
+# one record per write item, with the version the caller read passed back in.
+_FILE_VERSIONS: dict = {}   # files backend: single process, so versions live here
+
+
+def _record_ids(rec: dict) -> set:
+    """Every id a record can be addressed by (mirrors _item_id)."""
+    ids = {rec.get(k) for k in ("build_id", "review_id", "approval_id", "policy_version_id",
+                                "procedure_version_id", "executionArn")}
+    if rec.get("build_id") and rec.get("gate"):
+        ids.add(f"{rec['build_id']}#{rec['gate']}")
+    return {i for i in ids if i}
+
+
+def _file_get_item(name: str, item_id: str):
+    data = _file_load(name, {})
+    if isinstance(data, dict):
+        return data.get(item_id), _FILE_VERSIONS.get((name, item_id), 0)
+    for rec in data:
+        if item_id in _record_ids(rec):
+            return rec, _FILE_VERSIONS.get((name, item_id), 0)
+    return None, 0
+
+
+def _dd_get_item(name: str, item_id: str):
+    row = _dd().get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
+                         ConsistentRead=True).get("Item") or {}
+    if not row.get("data_json"):
+        return None, 0
+    return json.loads(row["data_json"]), int(row.get("ver", 0))
+
+
+def _dd_put_item(name: str, item_id: str, item: dict, expect: int | None) -> int:
+    t = _dd()
+    row = t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
+                     ConsistentRead=True).get("Item") or {}
+    cur = int(row.get("ver", 0))
+    if expect is not None and cur != expect:
+        raise ConcurrencyError(f"{name}/{item_id}: expected version {expect}, found {cur}")
+    kwargs = {"Item": {"PK": f"COLL#{name}", "SK": item_id,
+                       "data_json": json.dumps(item, default=str),
+                       "ver": cur + 1, "GSI_PK": "COLL", "GSI_SK": name}}
+    if expect is not None:
+        # create-only (0) or exact-version match — the database enforces it, so
+        # a writer that read a stale version cannot win the race.
+        kwargs["ConditionExpression"] = ("attribute_not_exists(SK) OR ver = :e"
+                                         if expect == 0 else "ver = :e")
+        kwargs["ExpressionAttributeValues"] = {":e": expect}
+    try:
+        t.put_item(**kwargs)
+    except Exception as e:  # noqa: BLE001
+        if _is_conditional_failure(e):
+            raise ConcurrencyError(
+                f"{name}/{item_id}: lost a write race (expected version {expect})") from e
+        raise RuntimeError(f"storage put failed for {name}/{item_id}: {type(e).__name__}: {e}") from e
+    return cur + 1
+
+
+def get_item(name: str, item_id: str) -> "tuple[dict | None, int]":
+    """Read one record: (payload, version). Version 0 means absent."""
+    if _backend() != "dynamodb":
+        return _file_get_item(name, item_id)
+    try:
+        return _dd_get_item(name, item_id)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"storage get failed for {name}/{item_id}: {type(e).__name__}: {e}") from e
+
+
+def put_item(name: str, item_id: str, item: dict, expect: int | None = None) -> int:
+    """Write ONE record and return its new version.
+
+    `expect` = the version you read (0 = must not exist yet). Pass it whenever a
+    lost update would be a correctness bug; the write then fails with
+    ConcurrencyError instead of overwriting the other writer.
+    """
+    if _backend() != "dynamodb":
+        cur, ver = _file_get_item(name, item_id)
+        if expect is not None and ver != expect:
+            raise ConcurrencyError(f"{name}/{item_id}: expected version {expect}, found {ver}")
+        data = _file_load(name, None)
+        if isinstance(data, dict):
+            data = dict(data)
+            data[item_id] = item
+        elif data is None:
+            data = {item_id: item}
+        else:
+            rows, idx = list(data), None
+            for i, rec in enumerate(rows):
+                if item_id in _record_ids(rec):
+                    idx = i
+                    break
+            if idx is None:
+                rows.append(item)
+            else:
+                rows[idx] = item
+            data = rows
+        _file_save(name, data)
+        _FILE_VERSIONS[(name, item_id)] = ver + 1
+        return ver + 1
+    try:
+        return _dd_put_item(name, item_id, item, expect)
+    except ConcurrencyError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"storage put failed for {name}/{item_id}: {type(e).__name__}: {e}") from e
+
+
+def delete_item(name: str, item_id: str) -> bool:
+    """Delete one record. Returns True if something was there."""
+    if _backend() != "dynamodb":
+        rec, _ = _file_get_item(name, item_id)
+        if rec is None:
+            return False
+        data = _file_load(name, None)
+        if isinstance(data, dict):
+            data.pop(item_id, None)
+        else:
+            data = [r for r in data if item_id not in _record_ids(r)]
+        _file_save(name, data)
+        _FILE_VERSIONS.pop((name, item_id), None)
+        return True
+    try:
+        t = _dd()
+        existed = bool((t.get_item(Key={"PK": f"COLL#{name}", "SK": item_id},
+                                  ConsistentRead=True).get("Item") or {}).get("data_json"))
+        t.delete_item(Key={"PK": f"COLL#{name}", "SK": item_id})
+        return existed
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"storage delete failed for {name}/{item_id}: {type(e).__name__}: {e}") from e
