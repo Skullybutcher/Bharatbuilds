@@ -64,17 +64,98 @@ exercised against real AWS yet.
 | N4 | **T65 (frontend):** workspace switcher + "Re-verify" button next to "Download governance bundle" + render reverify result as a verdict card | opencode | endpoints exist; render only real responses |
 | N5 | **Docs sweep:** README + `docs/architecture.md` + `docs/submission.md` numbers/sections for everything since T60 (D1 storage atomics, T63 isolation, T64 reverify, audit timeline) | opencode or human | keep the "verify these numbers" block honest |
 
-## 4. Bigger build items (breadth/depth — pick if time remains)
+## 4. Idea bank — everything that COULD be done (no time limit)
 
-| Item | Value | Size |
-|---|---|---|
-| **B1: second domain end-to-end** (healthcare or procurement — proposals in `docs/`, search "domain") | proves the engine generalizes: "same pipeline, three domains" is the strongest breadth claim at judging | large — compiler demo content + tests; do NOT rush it |
-| **Scheduled re-validation** (EventBridge rule → Lambda that re-runs reverify on ACTIVE builds; drift alarm) | "CI for real-world procedures" literally becomes continuous | medium |
-| **Gate notifications** (email when a gate arms / approval requested) | ops credibility; demo line "the right human gets pinged" | small-medium (SES) |
-| **T63 follow-up A (owner decision):** workspace-aware idempotency — identical compiles across workspaces currently share one record (reads then deny non-members; leak-free but confusing) | multi-tenant correctness polish | medium, needs design decision |
-| **T63 follow-up B:** trace-id hash excludes workspace — same content twice = duplicate invisible to 2nd writer | correctness polish | small |
-| **Architecture diagram** for `docs/` (the 40-state ASL + 3 gates + surfaces) | judges love it; Bob (docs) is out of credits | small |
-| **Audit-timeline enrichment**: bundle export / reverify events already land in `audit.json` — make sure T59's timeline renders the new event kinds (REVERIFY_*, ACCESS_DENIED) with sensible tones | continuity polish | small |
+### 4.0 Standout shortlist (highest judging impact first)
+1. **Public verifier CLI** — a standalone `verify_bundle.py` (zero deps, no
+   AWS, no account) that recomputes the bundle's sha256 seal + artifact hashes
+   and prints PASS/FAIL per check. Turns "trust us" into "check it yourself".
+   T64's logic already exists server-side; this lifts it out.
+2. **Post-activation drift monitor** — traces arriving AFTER activation get
+   compared against the ACTIVE procedure; disagreement rate per procedure over
+   time; threshold → new build suggestion. This closes the CI loop: CI isn't
+   just compile+gates, it's also continuous monitoring. THE story.
+3. **Second/third domain end-to-end** (healthcare clinical-trial eligibility,
+   procurement approval thresholds — seed content exists in `docs/`)
+   — proves the engine generalizes: "same pipeline, three domains".
+4. **Rollback as a gated operation** — revert an ACTIVE procedure to the
+   previous version through the SAME gate machinery (Gate 3 semantics,
+   audited ROLLBACK). Governance symmetry: even undo is gated.
+5. **Maker-checker + quorum** — hard rule: the identity that compiled cannot
+   approve (SOX-style separation), optional N-of-M approver policy per gate.
+6. **Certificate QR → public evidence page** — read-only hosted page per
+   build rendering the evidence (T61's view, no auth, no mutations); QR on the
+   printed certificate. Demo-killer visual for government use cases.
+
+### 4.1 Trust & governance depth
+- Public verifier CLI (see 4.0.1) + a `POST /verify-bundle` endpoint that
+  accepts a CLIENT-SUPPLIED bundle and re-verifies it (verify what YOU hold,
+  not just what the server stores).
+- Rollback gate (4.0.4); effective-dated activation (schedule a patch to take
+  force at a future timestamp — real policy systems need this).
+- Maker-checker separation + quorum policies (4.0.5).
+- Witness coverage targets: per-node-class minimum coverage required before
+  Gate 2 unlocks (provenance threshold exists; coverage targets don't).
+- Gate SLA/escalation: gate armed > X → escalate to another reviewer
+  (claim-staleness exists; gate-level SLA doesn't).
+- WORM evidence retention: bundle exports also written to S3 with Object Lock
+  (tamper-evident AND retention-locked).
+- Threat model doc: what could be forged, and which hash/gate stops it.
+- Cross-compiler-version interpretation diff: when COMPILER_VERSION bumps,
+  report what changed in interpretation between old and new builds.
+
+### 4.2 Engine breadth
+- Second/third domain packages (4.0.3) — rules_v1/v2 + workflow + policy.md
+  per domain; keep the bounded-language contract per domain.
+- Policy authoring linter: pre-compile lint for ambiguous terms, missing
+  thresholds, conflicting clauses — "catch it before compile".
+- Natural-language amendment assist: draft diff preview before compile
+  (Bedrock candidate path exists; stamp model+prompt version into the
+  certificate for provenance).
+- Extraction confidence per clause, human-vs-machine IR side-by-side diff UX.
+- Simulation/what-if mode: run a candidate against the synthetic cohort
+  WITHOUT activating; keep shadow results as evidence.
+- Rule IR schema versioning strategy doc (SCHEMA_VERSION="1" today) + a
+  migration path demonstrated once.
+
+### 4.3 Operations / platform
+- Scheduled re-validation: EventBridge rule re-runs reverify on ACTIVE builds
+  on a schedule; drift/derivation alarm → SNS.
+- Gate + drift notifications (SES email, then Slack/Teams webhook).
+- Webhooks on state transitions (integration surface for monitoring systems).
+- Service accounts / API keys for machine trace submitters.
+- `/metrics` endpoint (Prometheus-style) + dependency-aware `/health/deep`.
+- Rate limiting + quotas on the API; CloudWatch alarms on 5xx rates and
+  p95/p99 latencies; DynamoDB PITR documented + backup/restore runbook.
+- Load profile: concurrent-compile test proving the concurrency guarantees
+  hold at scale (unit race tests exist; a k6/locust run would prove it live).
+- Property/fuzz tests: mutate policies randomly; pipeline must never crash
+  (fail-closed NEEDS_REVIEW, not 500).
+- Cost metering per build (Bedrock tokens, Lambda-GB-s) surfaced in evidence.
+
+### 4.4 Console / UX
+- Workspace switcher + Re-verify button + reverify verdict card (T65 — the
+  only UX item that is "next", everything else is optional).
+- Accessibility pass: contrast, focus rings, keyboard-only walk of the main
+  flow; honest empty states for new workspaces.
+- Responsive/mobile pass for the console.
+- PDF export of the patch certificate (server-side, for archival mail).
+- RBAC matrix view: who can do what, rendered from authz (single source).
+- Drift dashboard: disagreement rate over time per procedure (pairs with
+  4.0.2).
+- In-app demo-reset button for the sandbox workspace (safe, flagged).
+
+### 4.5 Docs & story
+- Architecture diagram (40-state ASL + 3 gates + both surfaces + storage
+  design) — `docs/architecture.md` is text-only today.
+- Submission essay refresh: novelty framing (semantic procedure diff +
+  witness verification + gated activation + re-derivable evidence),
+  limitations section (honest, already partially in the certificate
+  disclaimer), and a 90-second video script cut from `docs/demo-script.md`.
+- Judge Q&A refresh for the new capabilities (isolation, reverify) in
+  `docs/judge-qa.md`.
+- Changelog auto-generated from the audit ledger (dogfooding: the product's
+  own ledger documents the product).
 
 ## 5. Demo-day runbook (already exists — follow it)
 
