@@ -7,7 +7,8 @@
    authMaybeExchange, authFetchCfg, esc, get, post,
    openEvidence, closeEvidence, downloadBundle, archiveBuild, toggleArchived,
    runReverify, setWorkspace, openBundlePicker, openBundleFile,
-   openFileEvidence, openFileError, vDrift, driftHtml, fillDrift. */
+   openFileEvidence, openFileError, vDrift, driftHtml, fillDrift,
+   openTour, closeTour, tourGo, tourNext, tourBack. */
 let API='http://localhost:8000', BUILD=null, BENCH=null, HISTORY=[], CANDIDATE=null, EXECArn=null;
 /* Theme: light (paper — the ledger default) unless stored dark or OS dark. */
 function applyTheme(t){if(t==='light'||t==='dark'||t==='lab'){if(t==='light'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme',t);}}else{document.documentElement.removeAttribute('data-theme');}
@@ -78,7 +79,7 @@ function preBuildTab(){const copy={Impact:['Impact map','Compile an amendment to
 function render(){badge();if(!BUILD&&BUILD_TABS.includes(active)){preBuildTab();return;}if(!BUILD&&active==='Overview'){setView('<div class="card hero"><div>'
 +'<h1>A policy changed.<br/>Which procedure steps are wrong now?</h1>'
 +'<p class="lead">Compile the amendment, prove each failure with a verified witness, ship a hash-bound patch — gated by human approval.</p>'
-+'<div class="hero-cta"><button class="btn lg" onclick="runBuild()">Compile Amendment</button><small>Verified examples · human approval before activation</small></div>'
++'<div class="hero-cta"><button class="btn lg" onclick="runBuild()">Compile Amendment</button> <button class="btn ghost lg" onclick="openTour()">Demo tour</button><small>Verified examples · human approval before activation</small></div>'
 +gateSpine()+'</div>'
 +'<div><div class="editor"><div class="ed-head"><b>Policy input</b><small>paste text or upload a .md file</small></div>'
 +'<textarea aria-label="Policy amendment text" id="policyText" rows="7" placeholder="Paste policy text, drag a .md file here, or use the file picker below"></textarea>'
@@ -434,7 +435,7 @@ async function buildAgainst(pid){loading('Compiling amendment against '+pid+'…
 if(r.code!==200){showErr(new Error(JSON.stringify(r.data).slice(0,200)));return;}
 BUILD=r.data;drilled=null;CANDIDATE=null;EXECArn=null;active='Overview';renderTabs();render();loadHistory();}
 async function openBuild(id){try{BUILD=await get('/builds/'+id);}catch(e){showErr(e);return;}CANDIDATE=null;active='Overview';renderTabs();render();}
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('evModal')){closeEvidence();return;}const dr=document.getElementById('drawerRoot');if(dr&&dr.firstChild&&!PAL.open)closedrawer();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(TOUR.open){closeTour();return;}if(document.getElementById('evModal')){closeEvidence();return;}const dr=document.getElementById('drawerRoot');if(dr&&dr.firstChild&&!PAL.open)closedrawer();}});
 /* ---------- Command palette (Ctrl+K / Cmd+K) — tabs + real actions ---------- */
 function paletteItems(){const items=TABS.map(t=>({label:t,hint:'go to tab',icon:NAV_ICONS[t]||'square',run:()=>go(t)}));
 items.push(
@@ -445,7 +446,8 @@ items.push(
  {label:'View governance evidence',hint:'sealed pack rendered: seal, approvals, coverage, audit',icon:'seal-check',run:()=>openEvidence()},
  {label:'Open a bundle file',hint:'render a downloaded *-governance-bundle.json offline — no server needed',icon:'folder-open',run:()=>openBundlePicker()},
  {label:'Re-verify this build',hint:'re-run the deterministic pipeline from the accepted IR',icon:'check-square',run:()=>runReverify()},
- {label:'Compile pasted policy',hint:'extract + compile the text in Policy input',icon:'brackets-curly',run:()=>{go('Overview');setTimeout(submitPolicy,60);}});
+ {label:'Compile pasted policy',hint:'extract + compile the text in Policy input',icon:'brackets-curly',run:()=>{go('Overview');setTimeout(submitPolicy,60);}},
+ {label:'Demo tour',hint:'guided presenter walkthrough: compile → gates → evidence → drift',icon:'compass',run:()=>openTour()});
 return items;}
 let PAL={open:false,idx:0,items:[]};let paletteTrigger=null;
 function openPalette(){if(PAL.open)return;paletteTrigger=document.activeElement;PAL={open:true,idx:0,items:paletteItems()};
@@ -471,6 +473,39 @@ const inp=document.getElementById('palInput');if(f.length)inp.setAttribute('aria
 const sel=list.querySelector('.pal-item.sel');if(sel)sel.scrollIntoView({block:'nearest'});}
 function closePalette(){PAL.open=false;const ov=document.getElementById('palOverlay');if(ov)ov.remove();if(paletteTrigger&&paletteTrigger.isConnected)paletteTrigger.focus();}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();if(PAL.open)closePalette();else openPalette();}});
+/* ---------- Demo tour (T72: presenter overlay over existing actions only) ----------
+   The tour NAVIGATES and EXPLAINS; the product performs. No step calls post(),
+   compiles, approves, or activates anything — deep-links only switch tabs and
+   focus inputs. Build-dependent beats render a skipped-with-explanation card
+   when BUILD is null instead of faking state. */
+const TOUR_STEPS=[
+ {t:'Compile the amendment',b:'The deterministic pipeline turns policy text into Rule IR — same bytes in, same build out. Unparseable input stays pending at review, fail-closed.',tab:'Overview',focus:'policyText',needsBuild:false},
+ {t:'Blast radius, made explicit',b:'Impact maps what changed and where it propagated; Witnesses holds one verified failing case per failure mode — representative cases, never headcounts.',tab:'Impact',needsBuild:true},
+ {t:'Human authority, hash-bound',b:'Gate 2 approves the exact candidate the pipeline produced. Merge protection blocks approval until every check passes — no silent overrides.',tab:'Approval',needsBuild:true},
+ {t:'Activation',b:'Gate 3 activates the exact candidate id from the approval, hash-verified server-side. The audit ledger records who decided and when.',tab:'Approval',needsBuild:true},
+ {t:'Evidence pack',b:'One JSON file — reviews, approvals, guardrails, witnesses, patch, certificate, audit — sha256-sealed. Download it, view it, verify it with the zero-dependency CLI; the browser never verifies anything itself.',tab:'Approval',needsBuild:true},
+ {t:'The loop closes',b:'Re-verify re-derives the proof from the accepted Rule IR, and Drift replays fresh traces against the live graph — proof re-derivable, reality monitored.',tab:'Drift',needsBuild:false}];
+let TOUR={open:false,idx:0};let tourTrigger=null;
+function tourDots(){return TOUR_STEPS.map((s,i)=>'<span aria-hidden="true" style="'+(i===TOUR.idx?'color:var(--accent)':'color:var(--mut)')+'">'+(i===TOUR.idx?'●':'○')+'</span>').join(' ');}
+function tourCard(){const s=TOUR_STEPS[TOUR.idx];const n=TOUR_STEPS.length;let body='';
+ if(s.needsBuild&&!BUILD){body='<p><b>No build yet</b> — this beat needs a compiled amendment, and the tour never fakes one.</p><button class="btn sm" onclick="closeTour();go(\'Overview\');setTimeout(()=>{const t=document.getElementById(\'policyText\');if(t){t.focus();}},60)">Make one on Overview</button>';}
+ else{body='<p>'+esc(s.b)+'</p>';}
+ return '<p class="kicker">Demo tour · step '+(TOUR.idx+1)+' of '+n+'</p><h3>'+esc(s.t)+'</h3>'+body
+ +'<p class="mut">'+tourDots()+'</p><span class="sr">Step '+(TOUR.idx+1)+' of '+n+': '+esc(s.t)+'</span>'
+ +'<div style="margin-top:12px"><button class="btn ghost sm" onclick="tourBack()"'+(TOUR.idx===0?' disabled':'')+'>Back</button> <button class="btn sm" onclick="tourNext()">'+(TOUR.idx===n-1?'Finish':'Next')+'</button> <button class="btn ghost sm" onclick="closeTour()">Exit</button></div>';}
+function tourRender(){const c=document.getElementById('tourCard');if(!c)return;c.innerHTML=tourCard();const h=c.querySelector('h3');if(h){h.setAttribute('tabindex','-1');h.focus();}}
+function openTour(){if(TOUR.open)return;tourTrigger=document.activeElement;TOUR={open:true,idx:0};
+ const root=document.getElementById('drawerRoot');
+ root.insertAdjacentHTML('beforeend','<div class="overlay" id="tourBack" onclick="closeTour()"></div><div class="drawer" id="tourCard" role="dialog" aria-modal="true" aria-label="Demo tour"></div>');
+ tourGo(0);}
+function closeTour(){TOUR.open=false;const b=document.getElementById('tourBack');if(b)b.remove();const m=document.getElementById('tourCard');if(m)m.remove();if(tourTrigger&&tourTrigger.isConnected)tourTrigger.focus();tourTrigger=null;}
+function tourGo(i){TOUR.idx=Math.max(0,Math.min(TOUR_STEPS.length-1,i));const s=TOUR_STEPS[TOUR.idx];
+ if(s.tab)go(s.tab);
+ tourRender();
+ if(s.focus)setTimeout(()=>{if(!TOUR.open)return;const t=document.getElementById(s.focus);if(t)t.focus();},60);}
+function tourNext(){if(!TOUR.open)return;if(TOUR.idx>=TOUR_STEPS.length-1){closeTour();return;}tourGo(TOUR.idx+1);}
+function tourBack(){if(!TOUR.open)return;tourGo(TOUR.idx-1);}
+document.addEventListener('keydown',e=>{if(!TOUR.open)return;if(e.key==='ArrowRight'){e.preventDefault();tourNext();}else if(e.key==='ArrowLeft'){e.preventDefault();tourBack();}else if(e.key==='Escape'){e.preventDefault();closeTour();}});
 async function initApp(){
  try{const ab=document.getElementById('apiBase');if(ab&&window.PROCESSPATCH_API)ab.value=window.PROCESSPATCH_API;}catch(e){}
  authLoad();

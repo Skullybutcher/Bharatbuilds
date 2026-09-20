@@ -21,6 +21,7 @@
 <button class="btn sm" onclick="runBuild()">Compile Amendment</button>
 <span class="util-cluster">
 <button class="btn ghost sm" onclick="cloudRun()" title="Run via Step Functions in AWS">Cloud<i class="ph ph-cloud-arrow-up" aria-hidden="true" style="margin-left:6px"></i></button>
+<button class="btn ghost sm" onclick="openTour()" title="Guided demo tour">Tour<i class="ph ph-compass" aria-hidden="true" style="margin-left:6px"></i></button>
 <details class="connection-settings"><summary>Connection</summary><small class="api-inline">API <input id="apiBase" value="http://localhost:8000" style="width:150px" aria-label="API base URL"/></small></details>
 <button class="btn ghost sm" onclick="toggleTheme()" id="themeBtn" aria-label="Toggle light or dark theme" title="Toggle theme"><i class="ph ph-sun" aria-hidden="true"></i></button>
 <button id="authBtn" class="btn ghost sm" onclick="authToggle()">Sign in</button>
@@ -35,6 +36,6 @@
 </main>
 </div>
 <div id="drawerRoot"></div>
-<script src="./lib/app.js?v=20260919-auth-init"></script>
+<script src="./lib/app.js?v=20260920-tour"></script>
 </body>
 </html>
