@@ -37,9 +37,10 @@ the audit trail, so approvals bind the exact human who made them.
 
 ## Deployed demo login
 
-The pool is invite-only with no self-signup, so the deployed demo ships
-exactly one login: `demo-admin@processpatch.demo` — the sole
-`AWS::Cognito::UserPoolUser` in `infra/template.yaml` (`DemoAdmin`,
+The pool is invite-only with no self-signup. The deployed demo has an admin
+login for the full approval path and a separate reviewer login for public
+evaluation. `demo-admin@processpatch.demo` is the
+`AWS::Cognito::UserPoolUser` declared in `infra/template.yaml` (`DemoAdmin`,
 confirmation SUPPRESS), attached to `pp-admins` (`DemoAdminMembership`).
 CloudFormation cannot set a password, so `infra/deploy.sh` generates a random
 one, sets it `--permanent`, and prints a `DEMO LOGIN` block exactly once —
@@ -51,6 +52,11 @@ of everything `pp-reviewers` can do; there is no reviewer demo account, so
 Gate-1 review on the deployed demo goes through the same admin login. Never
 commit, screenshot, or stream the password — rotate it with
 `admin-set-user-password` after the demo window.
+
+The public reviewer account is `judge@processpatch.demo` with password
+`JudgePass2026!`. It is attached only to `pp-reviewers`, so judges can create
+and review builds but cannot activate procedure versions or administer
+Cognito. It is a shared demo credential and must not be used with real data.
 
 ## Identity flow (cloud)
 

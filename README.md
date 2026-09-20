@@ -44,6 +44,18 @@ python scripts/demo.py          # terminal person-first demo
 python -m services.api.server 8000   # REST API only (§45 + §57E)
 ```
 
+## Public judge demo
+
+The deployed demo has a shared reviewer account for evaluation:
+
+- **Username:** `judge@processpatch.demo`
+- **Password:** `JudgePass2026!`
+- **Permissions:** create and execute builds, review rules, and decide patches.
+
+This account is intentionally limited to the `pp-reviewers` group. It cannot
+activate procedure versions or administer Cognito. Do not use this account for
+real data or production workloads; it is a public demo credential.
+
 API highlights: `GET /demo/canonical`, `POST /builds` (idempotent),
 `GET /builds/{id}/{diff,witnesses,patch,certificate,impact,guardrails,audit}`,
 rule review `POST .../rules/{rid}/{accept,edit,reject,escalate}`,

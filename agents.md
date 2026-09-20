@@ -124,6 +124,7 @@ Format: `T<id> | <title> | owner | paths | state (OPEN / CLAIMED / DONE / BLOCKE
 | T67 | Public verifier CLI: scripts/verify_bundle.py, zero deps, recomputes the seal | Buffy | `scripts/verify_bundle.py` (new), `tests/unit/test_verify_bundle.py` (new), `agents.md` | READY TO COMMIT |
 | T68 | N2 finding: ASL canonicalizes build_id to compile_key; describe_execution names IAM denials | Buffy | `infra/statemachine.asl.json`, `services/api/actions.py`, `tests/unit/test_build_identity.py` (new), `tests/unit/test_describe_execution_errors.py` (new), `agents.md` | READY TO COMMIT |
 | T69 | N2 finding: per-record primitives see legacy META records (archive 500'd on every live build) | Buffy | `services/storage.py`, `tests/unit/test_legacy_meta_reads.py` (new), `agents.md` | READY TO COMMIT |
+| T70 | Public judge demo login documentation | GitHub Copilot | `README.md`, `docs/auth.md`, `agents.md` | DONE |
 
 ```text
 T66 BRIEF (for opencode) — offline evidence + verifier callout
@@ -287,6 +288,8 @@ change (see T1 notes below); if opencode needs a backend change, it logs a
 - The human commits. Propose commit messages; never run git commit/push.
 
 ## 6. Activity log (append-only, newest first)
+
+- 2026-09-20 22:50 | GitHub Copilot | T70 public judge demo login | `README.md`, `docs/auth.md`, `agents.md` | DONE: created `judge@processpatch.demo` in Cognito pool `ap-south-1_82GMgNUG0`, set permanent public demo password `JudgePass2026!`, and verified the account is attached only to `pp-reviewers` (not `pp-admins`); README documents the credentials and reviewer-only boundary, auth guide no longer claims the admin is the sole login; `python scripts/verify.py` 178/178 PASS and `git diff --check` PASS | proposed commit: `T70: add reviewer-only public judge demo login`
 
 - 2026-09-20 05:30 | opencode | T59 console evidence surfaces (audit timeline, rule diff, archive affordance) | `frontend/lib/app.js` (+helpers auditActor/auditTone/auditTimeline/condText/diffPairs/pairCard/ruleDiffHtml/archiveBuild/toggleArchived + SHOW_ARCHIVED/PENDING_ARCHIVE flags; Approval audit mono-dump replaced by day-grouped timeline with event-tone tags, actor column, raw approvals retained; Patch tab gains read-only Rule-diff card from GET /diff with paired before→after, affected-rule marks, honest no-changes/unavailable states; Builds history rows gain Archive/Restore with inline confirm, archived row treatment, include-archived toggle driving ?include_archived=1) + `frontend/styles.css` (.tl timeline + tr.archived rules, existing tokens only) | DONE: no backend/tests/infra touched (services/storage.py modification in tree is another agent's — left alone); every string esc()'d, contract functions intact, no shell restructure; verified 28-check DOM-stub render harness ALL PASS + LIVE round-trip on scratch backend (audit 5 entries, diff COMPOUND, archive→hidden→shown→restored) + node --check PASS + verify 178/178 PASS + pytest 162/162 PASS; temp harness/data removed, ./data untouched | commit: 'T59: audit timeline, rule-diff view, and archive affordance (frontend-only)'
 
