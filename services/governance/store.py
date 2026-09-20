@@ -332,12 +332,22 @@ def resume_callback(build_id: str, gate: str, body: dict) -> dict:
         build = get_build(build_id) or {}
         _ = build  # loaded to confirm the build exists for the decision below
         approvals = [a for a in _load("approvals.json", []) if a.get("build_id") == build_id]
+        reviewer = body.get("reviewer") or {}
         if body.get("decision") == "APPROVE":
             if not any(a.get("decision") == "APPROVE_CANDIDATE" for a in approvals):
                 raise ValueError("Activation blocked: no APPROVE_CANDIDATE on record.")
-            output = {"decision": "APPROVE"}
+            # The ASL's ACTIVATE state resolves $.activation_decision.reviewer and
+            # .reason — this output IS that task payload. A decision without an
+            # identified reviewer must fail AT THE GATE (400 to the human), never
+            # as a States.Runtime one state later with the approval half-applied.
+            if not reviewer.get("reviewer_id"):
+                raise ValueError("Activation blocked: reviewer.reviewer_id is required "
+                                 "(ACTIVATE resolves $.activation_decision.reviewer).")
+            output = {"decision": "APPROVE", "reviewer": reviewer,
+                      "reason": body.get("reason", "")}
         else:
-            output = {"decision": "REJECT"}
+            output = {"decision": "REJECT", "reviewer": reviewer,
+                      "reason": body.get("reason", "")}
     else:
         raise ValueError(f"unknown gate {gate}")
 
